@@ -1,0 +1,50 @@
+// Bottom navigation for the ongoing app (post-onboarding).
+import { useLocation, useNavigate } from 'react-router-dom'
+import { useStore } from '../state/store.jsx'
+
+const TABS = [
+  { to: '/home', label: 'Home', icon: '🏠' },
+  { to: '/messages', label: 'Messages', icon: '💬' },
+  { to: '/dashboard', label: 'Support', icon: '🤝' },
+  { to: '/settings', label: 'Settings', icon: '⚙️' },
+]
+
+export default function TabBar() {
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
+  const { state } = useStore()
+  const unread = state.messages.filter((m) => !m.read).length
+
+  return (
+    <nav className="tabbar" aria-label="Primary">
+      {TABS.map((t) => {
+        const active = pathname.startsWith(t.to)
+        return (
+          <button
+            key={t.to}
+            className="tabbar__item"
+            aria-current={active ? 'page' : undefined}
+            onClick={() => navigate(t.to)}
+          >
+            <span className="tabbar__icon" aria-hidden="true" style={{ position: 'relative' }}>
+              {t.icon}
+              {t.to === '/messages' && unread > 0 && (
+                <span
+                  style={{
+                    position: 'absolute', top: -4, right: -8,
+                    background: 'var(--red)', color: '#fff', borderRadius: 999,
+                    fontSize: 10, minWidth: 16, height: 16, display: 'grid', placeItems: 'center',
+                    padding: '0 4px', fontFamily: 'var(--font-body)',
+                  }}
+                >
+                  {unread}
+                </span>
+              )}
+            </span>
+            {t.label}
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
