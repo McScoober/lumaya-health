@@ -146,8 +146,8 @@ function ruleENDO(answers) {
   return null
 }
 
-function rulePCOS(answers) {
-  // PCOS-01 (Tier 2). If on BC, suppress the cycle-length component (8.2).
+function rulePMOS(answers) {
+  // PMOS-01 (Tier 2). If on BC, suppress the cycle-length component (8.2).
   if (answers.started !== 'Yes') return null
   const bc = onBirthControl(answers)
   let score = 0
@@ -163,7 +163,7 @@ function rulePCOS(answers) {
   }
   if (score >= 2) {
     return {
-      id: 'PCOS-01',
+      id: 'PMOS-01',
       tier: 2,
       severity: SEVERITY.MODERATE,
       category: 'Hormonal pattern',
@@ -191,7 +191,7 @@ function ruleOLIG(answers) {
   return null
 }
 
-const RULES = [rulePRIM, ruleSTOP, ruleHMB, ruleENDO, rulePCOS, ruleOLIG]
+const RULES = [rulePRIM, ruleSTOP, ruleHMB, ruleENDO, rulePMOS, ruleOLIG]
 
 // --- result level logic (Section 8.3) ----------------------
 function levelFromFlags(flags) {

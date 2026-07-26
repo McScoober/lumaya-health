@@ -5,20 +5,12 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { phaseForDate, predictPeriod, monthMatrix, isInPeriodWindow, PHASE_META } from '../engine/cyclePredictor.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, monthMatrix, isInPeriodWindow, PHASE_META } from '../engine/cyclePredictor.js'
 import { buildTip, maisieMessage } from '../engine/tipEngine.js'
-import { Card, Button, Badge } from '../components/ui.jsx'
+import { Card, Button } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
-import { CheckCircle, SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank } from '@phosphor-icons/react'
-
-const VIBE_ICONS = [
-  { key: 'great', Icon: SmileyWink, color: '#A0C4A4' },
-  { key: 'good', Icon: Smiley, color: '#E8C86A' },
-  { key: 'okay', Icon: SmileyMeh, color: '#C4A8E0' },
-  { key: 'bad', Icon: SmileySad, color: '#E8A0B0' },
-  { key: 'awful', Icon: SmileyBlank, color: '#E0528A' },
-]
+import { CheckCircle } from '@phosphor-icons/react'
 
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
@@ -32,16 +24,23 @@ const MOCK_SIGNALS = {
 }
 export default function Home() {
   const navigate = useNavigate()
-  const { state, cycleModel } = useStore()
+  const { state, dispatch, cycleModel } = useStore()
   const now = new Date()
-  const todayKey = now.toISOString().slice(0, 10)
-  const loggedToday = state.dailyLogs[todayKey]
+  const todayKey = dateKeyLocal(now)
+  const todayLog = state.dailyLogs[todayKey] || {}
+  const todayPeriodLog = state.periodLogs[todayKey] || {}
+  const checkedInToday = todayLog.checkinCompleted === true
 
   const { phase, dayOfCycle } = phaseForDate(cycleModel, now)
   const cycleDay = dayOfCycle === null || dayOfCycle === undefined ? 1 : dayOfCycle + 1
   const meta = phase ? PHASE_META[phase] : null
   const prediction = predictPeriod(cycleModel, now)
   const inWindow = isInPeriodWindow(cycleModel, now)
+  const isPeriodAskWindow = prediction
+    ? diffDays(now, addDays(prediction.windowStart, -3)) >= 0 && diffDays(now, prediction.windowEnd) <= 0
+    : false
+  const periodStartedToday = todayPeriodLog.period === true
+  const shouldShowPeriodStartCard = isPeriodAskWindow && (!todayPeriodLog.periodPromptAnswered || periodStartedToday)
 
   const tip = useMemo(
     () => (phase ? buildTip(phase, { ...state.profile }) : null),
@@ -54,8 +53,8 @@ export default function Home() {
 
   const [calMonth, setCalMonth] = useState({ y: now.getFullYear(), m: now.getMonth() })
   const cells = useMemo(
-    () => monthMatrix(cycleModel, calMonth.y, calMonth.m, state.dailyLogs),
-    [cycleModel, calMonth, state.dailyLogs],
+    () => monthMatrix(cycleModel, calMonth.y, calMonth.m, state.dailyLogs, state.periodLogs),
+    [cycleModel, calMonth, state.dailyLogs, state.periodLogs],
   )
 
   // Phase tint variables for the screen (13.2.3)
@@ -112,68 +111,6 @@ export default function Home() {
         )}
       </Card>
 
-      {/* Daily check-in CTA */}
-      <Card style={{ marginTop: 14 }}>
-        {loggedToday ? (
-          <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-            <span
-              aria-hidden="true"
-              style={{
-                width: 42,
-                height: 42,
-                borderRadius: '50%',
-                background: '#F0F5F0',
-                color: '#A0C4A4',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-              }}
-            >
-              <CheckCircle size={24} weight="fill" />
-            </span>
-            <div>
-              <p style={{ margin: 0, fontWeight: 600 }}>You're checked in for today</p>
-              <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                {loggedToday.period ? 'Logged as a period day.' : 'See you tomorrow.'}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <p style={{ margin: '0 0 4px', fontWeight: 600 }}>
-              {inWindow ? 'Did you get your period today?' : 'How are you feeling today?'}
-            </p>
-            <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>
-              A quick tap keeps your predictions sharp.
-            </p>
-            <Button block onClick={() => navigate('/daily')}>Daily check-in</Button>
-          </>
-        )}
-      </Card>
-
-      {/* Phase header is currently just using the app-frame tint.
-          TRD says: "The header tints to match the current cycle phase!"
-          This is handled by `--phase-accent` applied to `.app-frame` via tintStyle. 
-          The text itself for the phase is already in meta.label.
-      */}
-
-      <div style={{ marginTop: 24 }} className="stack-16">
-        <MetabolicCard title="Energy" value={MOCK_SIGNALS.energy.val} color="var(--signal-energy)" description={MOCK_SIGNALS.energy.desc} trendPoints={MOCK_SIGNALS.energy.trend} />
-        <MetabolicCard title="Skin" value={MOCK_SIGNALS.skin.val} color="var(--signal-skin)" description={MOCK_SIGNALS.skin.desc} trendPoints={MOCK_SIGNALS.skin.trend} />
-        <MetabolicCard title="Sleep" value={MOCK_SIGNALS.sleep.val} color="var(--signal-sleep)" description={MOCK_SIGNALS.sleep.desc} trendPoints={MOCK_SIGNALS.sleep.trend} />
-        <MetabolicCard title="Mood" value={MOCK_SIGNALS.mood.val} color="var(--signal-mood)" description={MOCK_SIGNALS.mood.desc} trendPoints={MOCK_SIGNALS.mood.trend} />
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <Card accent>
-          <div className="card__label" style={{ color: 'var(--phase-accent)' }}>From Maisie Today</div>
-          <p style={{ margin: '4px 0 0', fontWeight: 500, fontSize: 14.5, lineHeight: 1.5 }}>
-            {todayMaisieMsg}
-          </p>
-        </Card>
-      </div>
-
       {tip && (
         <div style={{ marginTop: 14 }}>
           <Card>
@@ -210,34 +147,111 @@ export default function Home() {
         </div>
       )}
 
-      {/* Quick Vibe Check (TRD 6.6) */}
+      {/* Daily check-in CTA */}
       <Card style={{ marginTop: 14 }}>
-        <p className="eyebrow">Quick Vibe Check</p>
-        <div className="row" style={{ justifyContent: 'space-between', marginTop: 12, gap: 8 }}>
-          {VIBE_ICONS.map(({ key, Icon, color }) => (
-            <button
-              key={key}
-              onClick={() => navigate('/log/0')}
-              style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: '10px 0',
-                background: `color-mix(in srgb, ${color} 14%, transparent)`,
-                border: `1.5px solid color-mix(in srgb, ${color} 30%, transparent)`,
-                borderRadius: '16px',
-                cursor: 'pointer',
-                transition: 'transform 0.15s ease, background 0.15s ease',
-              }}
-              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.92)')}
-              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              <Icon size={28} weight="duotone" color={color} />
-            </button>
-          ))}
-        </div>
+        {checkedInToday ? (
+          <>
+            <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '50%',
+                  background: '#F0F5F0',
+                  color: '#A0C4A4',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                <CheckCircle size={24} weight="fill" />
+              </span>
+              <div>
+                <p style={{ margin: 0, fontWeight: 600 }}>You're checked in for today</p>
+                <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+                  See you tomorrow.
+                </p>
+              </div>
+            </div>
+
+          </>
+        ) : (
+          <>
+            <p style={{ margin: '0 0 4px', fontWeight: 600 }}>
+              How are you feeling today?
+            </p>
+            <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>
+              A quick tap keeps your predictions sharp.
+            </p>
+            <Button block onClick={() => navigate('/daily')}>Daily check-in</Button>
+          </>
+        )}
       </Card>
+
+      {shouldShowPeriodStartCard && (
+        <Card style={{ marginTop: 14, background: '#FDEEF4', borderColor: 'rgba(224,82,138,0.35)' }}>
+          {periodStartedToday ? (
+            <>
+              <p style={{ margin: '0 0 4px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
+                Got it, your period started today.
+              </p>
+              <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.45 }}>
+                I’ll use today as your new cycle start.
+              </p>
+            </>
+          ) : (
+            <>
+              <p style={{ margin: '0 0 10px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
+                Did you start your period today?
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <button
+                  type="button"
+                  onClick={() => dispatch({
+                    type: 'UPDATE_PERIOD_STATUS',
+                    dateKey: todayKey,
+                    period: true,
+                    periodPromptAnswered: true,
+                  })}
+                  style={{
+                    minHeight: 42,
+                    border: '1.5px solid #E0528A',
+                    borderRadius: 999,
+                    background: '#E0528A',
+                    color: '#fff',
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  Yes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => dispatch({
+                    type: 'UPDATE_PERIOD_STATUS',
+                    dateKey: todayKey,
+                    period: false,
+                    periodPromptAnswered: true,
+                  })}
+                  style={{
+                    minHeight: 42,
+                    border: '1px solid rgba(44,24,16,0.08)',
+                    borderRadius: 999,
+                    background: '#fff',
+                    color: '#2C1810',
+                    fontSize: 14,
+                    fontWeight: 700,
+                  }}
+                >
+                  Not today
+                </button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
 
       {/* Calendar */}
       <Card style={{ marginTop: 14 }}>
@@ -260,7 +274,7 @@ export default function Home() {
                   'cal__day',
                   cell.isToday ? 'cal__day--today' : '',
                   cell.actualPeriod ? 'cal__day--period' : cell.predictedPeriod ? 'cal__day--predicted' : '',
-                  state.dailyLogs[cell.key] ? 'cal__day--logged' : '',
+                  cell.isLogged ? 'cal__day--logged' : '',
                 ].join(' ')}
               >
                 {cell.day}
@@ -275,15 +289,21 @@ export default function Home() {
         </div>
       </Card>
 
-      {/* Last result reminder */}
-      {state.result && (
-        <Card style={{ marginTop: 14 }}>
-          <div className="row row--between">
-            <div className="card__label" style={{ margin: 0 }}>Your latest check-in</div>
-            <Badge level={state.result.level} />
-          </div>
+      <div style={{ marginTop: 24 }} className="stack-16">
+        <MetabolicCard title="Energy" value={MOCK_SIGNALS.energy.val} color="var(--signal-energy)" description={MOCK_SIGNALS.energy.desc} trendPoints={MOCK_SIGNALS.energy.trend} />
+        <MetabolicCard title="Skin" value={MOCK_SIGNALS.skin.val} color="var(--signal-skin)" description={MOCK_SIGNALS.skin.desc} trendPoints={MOCK_SIGNALS.skin.trend} />
+        <MetabolicCard title="Sleep" value={MOCK_SIGNALS.sleep.val} color="var(--signal-sleep)" description={MOCK_SIGNALS.sleep.desc} trendPoints={MOCK_SIGNALS.sleep.trend} />
+        <MetabolicCard title="Mood" value={MOCK_SIGNALS.mood.val} color="var(--signal-mood)" description={MOCK_SIGNALS.mood.desc} trendPoints={MOCK_SIGNALS.mood.trend} />
+      </div>
+
+      <div style={{ marginTop: 24 }}>
+        <Card accent>
+          <div className="card__label" style={{ color: 'var(--phase-accent)' }}>From Maisie Today</div>
+          <p style={{ margin: '4px 0 0', fontWeight: 500, fontSize: 14.5, lineHeight: 1.5 }}>
+            {todayMaisieMsg}
+          </p>
         </Card>
-      )}
+      </div>
     </div>
   )
 }

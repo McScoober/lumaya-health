@@ -37,6 +37,7 @@ function healthToRow(userId, state) {
       pendingTier2: state.pendingTier2,
       confirmedTier2: state.confirmedTier2,
       dailyLogs: state.dailyLogs,
+      periodLogs: state.periodLogs,
       lastCheckinDate: state.lastCheckinDate,
       messages: state.messages,
       advisorRequests: state.advisorRequests,

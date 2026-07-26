@@ -1,5 +1,5 @@
-// Screen 4 — Deep Symptom Check-In, Q1–18 (TRD Section 7)
-// One question per screen. Skip logic (7.1): if Q2 = "Not yet", skip Q3–15.
+// Screen 4, Deep Symptom Check-In, Q1 to 18 (TRD Section 7)
+// One question per screen. Skip logic (7.1): if Q2 = "Not yet", skip Q3 to 15.
 // Dates offer "I don't remember the exact date" (7.1). Pain sliders use the
 // anchors in Section 7.2. This is the onboarding baseline that seeds the tracker.
 import { useMemo, useState } from 'react'
@@ -8,14 +8,54 @@ import { useStore } from '../state/store.jsx'
 import { DEEP_QUESTIONS, activeQuestions, painLabel, PAIN_ANCHORS } from '../data/questions.js'
 import { Button, Chip, ChipGroup, ProgressBar, TopBar } from '../components/ui.jsx'
 import YourThingSelector from '../components/YourThingSelector.jsx'
+import { dateKeyLocal } from '../engine/cyclePredictor.js'
 
-const TODAY = new Date().toISOString().slice(0, 10)
+const TODAY = dateKeyLocal()
+
+function parseDate(value) {
+  if (!value || value === 'unknown') return null
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function daysBetween(a, b) {
+  const start = parseDate(a)
+  const end = parseDate(b)
+  if (!start || !end) return null
+  return Math.round((end - start) / 86400000)
+}
+
+function dateAnswerError(question, answers) {
+  if (question.type !== 'date') return ''
+  const value = answers[question.key]
+  if (!value || value === 'unknown') return ''
+  if (!parseDate(value)) return 'That date did not come through right. Pick it again or choose I don’t remember.'
+  if (value > TODAY) return 'That date is in the future. Pick a date from today or earlier.'
+
+  if (question.key === 'lastEnd') {
+    const periodLength = daysBetween(answers.lastStart, value)
+    if (periodLength === null) return ''
+    if (periodLength < 0) return 'Your period end date needs to be the same day as the start date or after it.'
+    if (periodLength > 10) return 'That would mean your period lasted more than 10 days. Check the end date, or choose I don’t remember.'
+  }
+
+  if (question.key === 'prevStart') {
+    const cycleLength = daysBetween(value, answers.lastStart)
+    if (cycleLength === null) return ''
+    if (cycleLength <= 0) return 'The period before that needs to start before your last period.'
+    if (cycleLength < 15) return 'Those two period starts are very close together. Check the date, or choose I don’t remember.'
+    if (cycleLength > 90) return 'That gap looks unusually long. Check the date, or choose I don’t remember.'
+  }
+
+  return ''
+}
 
 export default function CheckIn() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
   const [answers, setAnswers] = useState(() => ({ age: state.identity.ageBand, ...state.answers }))
   const [pos, setPos] = useState(1) // start after Q1 (age already captured); index into active list
+  const [error, setError] = useState('')
 
   const active = useMemo(() => activeQuestions(answers), [answers])
   const q = active[Math.min(pos, active.length - 1)]
@@ -25,10 +65,12 @@ export default function CheckIn() {
   const progress = 0.35 + 0.6 * (answeredCount / active.length)
 
   function set(key, value) {
+    setError('')
     setAnswers((a) => ({ ...a, [key]: value }))
   }
 
   function toggleMulti(key, opt, exclusive) {
+    setError('')
     setAnswers((a) => {
       const cur = a[key] || []
       if (opt === exclusive) return { ...a, [key]: [exclusive] }
@@ -49,14 +91,27 @@ export default function CheckIn() {
       : value !== undefined && value !== null && value !== ''
 
   function goNext() {
+    const currentError = dateAnswerError(q, answers)
+    if (currentError) {
+      setError(currentError)
+      return
+    }
+
     if (pos < active.length - 1) {
       setPos(pos + 1)
     } else {
+      const firstInvalidDateIndex = active.findIndex((question) => dateAnswerError(question, answers))
+      if (firstInvalidDateIndex >= 0) {
+        setPos(firstInvalidDateIndex)
+        setError(dateAnswerError(active[firstInvalidDateIndex], answers))
+        return
+      }
       dispatch({ type: 'SAVE_CHECKIN', answers })
       navigate('/result')
     }
   }
   function goBack() {
+    setError('')
     if (pos > 1) setPos(pos - 1)
     else navigate('/personalize')
   }
@@ -110,9 +165,14 @@ export default function CheckIn() {
             <Chip stack selected={value === 'unknown'} onClick={() => set(q.key, 'unknown')}>
               I don’t remember the exact date
             </Chip>
+            {error && (
+              <p style={{ margin: 0, color: '#B3265A', fontSize: 12.5, lineHeight: 1.4 }}>
+                {error}
+              </p>
+            )}
             {value === 'unknown' && (
               <p className="muted" style={{ fontSize: 12.5 }}>
-                No problem — your first couple of daily check-ins will fill this in for us.
+                No problem, your first couple of daily check-ins will fill this in for us.
               </p>
             )}
           </div>

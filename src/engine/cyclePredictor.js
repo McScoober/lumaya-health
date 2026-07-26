@@ -11,7 +11,7 @@ export const PHASE_META = {
   follicular: { label: 'building back up', accent: 'var(--phase-follicular)', soft: '#EFF6EA', mood: 'Rising energy' },
   ovulation:  { label: 'peak energy',  accent: 'var(--phase-ovulation)', soft: '#FCF3DC', mood: 'Peak energy' },
   luteal:     { label: 'winding down',     accent: 'var(--phase-luteal)', soft: '#F1ECF8', mood: 'Winding down' },
-  // BC track — neutral pink/berry tint
+  // BC track, neutral pink/berry tint
   bc_active:  { label: 'Steady',     accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Even keel' },
   bc_break:  { label: 'Break days',  accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Light week' },
   bc_generic: { label: 'This week',  accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Steady' },
@@ -21,11 +21,28 @@ const DEFAULT_CYCLE = 28
 const PERIOD_LEN = 5
 
 const MS_DAY = 86400000
+export function dateKeyLocal(d = new Date()) {
+  const x = startOfDay(d)
+  const y = x.getFullYear()
+  const m = String(x.getMonth() + 1).padStart(2, '0')
+  const day = String(x.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
 function startOfDay(d) {
   const x = new Date(d)
   x.setHours(0, 0, 0, 0)
   return x
 }
+
+function parseDateLocal(value) {
+  if (value instanceof Date) return value
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(`${value}T00:00:00`)
+  }
+  return new Date(value)
+}
+
 function addDays(d, n) {
   return new Date(startOfDay(d).getTime() + n * MS_DAY)
 }
@@ -43,7 +60,7 @@ function diffDays(a, b) {
 export function buildCycleModel(opts = {}) {
   const cycleLength = clamp(opts.cycleLength || DEFAULT_CYCLE, 21, 45)
   const periodLen = PERIOD_LEN
-  const lastStart = opts.lastStart ? startOfDay(new Date(opts.lastStart)) : null
+  const lastStart = opts.lastStart ? startOfDay(parseDateLocal(opts.lastStart)) : null
 
   return {
     cycleLength,
@@ -112,7 +129,7 @@ export function isInPeriodWindow(model, date = new Date()) {
 }
 
 // Calendar cells for a given month.
-export function monthMatrix(model, year, month, dailyLogs = {}) {
+export function monthMatrix(model, year, month, dailyLogs = {}, periodLogs = {}) {
   const first = new Date(year, month, 1)
   const startDow = first.getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -123,19 +140,31 @@ export function monthMatrix(model, year, month, dailyLogs = {}) {
   for (let d = 1; d <= daysInMonth; d++) {
     const date = new Date(year, month, d)
     const { phase } = phaseForDate(model, date)
-    const key = date.toISOString().slice(0, 10)
-    const logged = dailyLogs[key]
+    const key = dateKeyLocal(date)
+    const legacyKey = date.toISOString().slice(0, 10)
+    const logged = dailyLogs[key] || dailyLogs[legacyKey]
+    const periodEntry = periodLogs[key] || periodLogs[legacyKey]
     const inWindow = isInPeriodWindow(model, date)
     const isPast = diffDays(date, today) < 0
+    const isLogged = !!logged?.checkinCompleted ||
+      logged?.vibe !== undefined ||
+      logged?.mood !== undefined ||
+      logged?.symptoms !== undefined ||
+      logged?.pain !== undefined ||
+      logged?.impact !== undefined
+    const knownPeriodDay = model.lastStart &&
+      diffDays(date, model.lastStart) >= 0 &&
+      diffDays(date, model.lastStart) < model.periodLen
     cells.push({
       day: d,
       date,
       key,
       phase,
       isToday: diffDays(date, today) === 0,
-      loggedPeriod: logged?.period === true,
+      isLogged,
+      loggedPeriod: periodEntry?.period === true || logged?.period === true || knownPeriodDay,
       predictedPeriod: inWindow && !isPast,
-      actualPeriod: logged?.period === true,
+      actualPeriod: periodEntry?.period === true || logged?.period === true || knownPeriodDay,
     })
   }
   return cells

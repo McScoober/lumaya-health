@@ -1,5 +1,5 @@
 /* ============================================================
-   Lumaya Health — Design System (TRD Section 13.2)
+   Maisie Health, Design System
    ============================================================ */
 
 :root {
@@ -130,6 +130,34 @@ button {
   }
 }
 
+@media (min-width: 768px) {
+  .app-frame {
+    align-items: stretch;
+    padding: 0;
+  }
+
+  .phone {
+    width: 100%;
+    max-width: none;
+    min-height: 100dvh;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+  }
+
+  .card {
+    padding: 20px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .phone {
+    width: 100%;
+  }
+}
+
 .screen {
   flex: 1;
   display: flex;
@@ -139,6 +167,16 @@ button {
 }
 
 .screen--pad-bottom { padding-bottom: 80px; }
+
+@media (min-width: 768px) {
+  .screen {
+    padding: 34px 40px 36px;
+  }
+
+  .screen--pad-bottom {
+    padding-bottom: 92px;
+  }
+}
 
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
@@ -433,9 +471,14 @@ button {
 .cal__day--today { border-color: var(--accent); font-weight: 700; }
 .cal__day--period { background: var(--phase-soft); color: var(--phase-accent); font-weight: 600; }
 .cal__day--predicted { background: repeating-linear-gradient(45deg, var(--phase-soft), var(--phase-soft) 4px, transparent 4px, transparent 8px); }
+.cal__day--logged {
+  background: var(--pink-light);
+  border-color: color-mix(in srgb, var(--pink-accent) 55%, transparent);
+  font-weight: 700;
+}
 .cal__day--logged::after {
-  content: ''; position: absolute; bottom: 4px;
-  width: 5px; height: 5px; border-radius: 50%; background: var(--phase-accent);
+  content: ''; position: absolute; bottom: 5px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--pink-accent);
 }
 
 /* ---- Segmented control ---- */

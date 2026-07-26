@@ -1,21 +1,18 @@
-// Screen 3 — Personalization (TRD Section 5.2)
-// Student/athlete, theme, sleep schedule, sport. Asked after consent,
+// Screen 3, Personalization (TRD Section 5.2)
+// Student/athlete and sleep schedule. Asked after consent,
 // before the 18-question check-in. One question per screen (13.1).
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { PERSONALIZATION } from '../data/questions.js'
 import { Button, ChipGroup, ProgressBar, TopBar } from '../components/ui.jsx'
-import Mascot from '../components/Mascot.jsx'
 
 export default function Personalization() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
   const [answers, setAnswers] = useState({
     studentAthlete: state.profile.studentAthlete,
-    themeChoice: state.profile.themeChoice,
     sleep: state.profile.sleep,
-    sport: state.profile.sport,
   })
 
   // Filter out questions hidden by showIf (e.g. sport only for athletes).
@@ -30,8 +27,7 @@ export default function Personalization() {
   function setValue(v) {
     const next = { ...answers, [q.key]: v }
     setAnswers(next)
-    // live-apply theme so the user sees it change
-    dispatch({ type: 'SET_PROFILE', payload: { [q.key]: v, ...(q.key === 'themeChoice' ? { themeChoice: v } : {}) } })
+    dispatch({ type: 'SET_PROFILE', payload: { [q.key]: v } })
   }
 
   const canNext = q.optional || value
@@ -61,7 +57,7 @@ export default function Personalization() {
 
       <div style={{ marginTop: 12 }}>
         {q.type === 'chips' && (
-          <ChipGroup options={q.options} value={value} onChange={setValue} stack={q.id === 'theme'} />
+          <ChipGroup options={q.options} value={value} onChange={setValue} />
         )}
         {q.type === 'text' && (
           <input
@@ -72,15 +68,6 @@ export default function Personalization() {
           />
         )}
       </div>
-
-      {q.id === 'theme' && value && (
-        <div className="card card--accent center" style={{ marginTop: 18 }}>
-          <Mascot size={72} />
-          <p style={{ margin: '6px 0 0', fontWeight: 600, color: 'var(--accent-ink)' }}>
-            Looking good in {value.toLowerCase()}.
-          </p>
-        </div>
-      )}
 
       <div className="spacer" />
       <div className="row" style={{ marginTop: 20, gap: 10 }}>

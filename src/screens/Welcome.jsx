@@ -15,7 +15,7 @@ export default function Welcome() {
   }, [state.onboarded, navigate])
 
   return (
-    <div className="screen center" style={{ justifyContent: 'center' }}>
+    <div className="screen center" style={{ justifyContent: 'center', alignItems: 'center' }}>
       <div className="spacer" />
       <div style={{ display: 'grid', placeItems: 'center', gap: 16 }}>
         <MaisieLogo size={120} />
@@ -23,7 +23,7 @@ export default function Welcome() {
       </div>
       <div className="spacer" />
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, width: '100%', maxWidth: 380 }}>
         <Button className="btn--primary btn--block" onClick={() => navigate(state.onboarded ? '/home' : '/age')}>
           For you (Teen)
         </Button>
@@ -35,7 +35,7 @@ export default function Welcome() {
         </Button>
       </div>
 
-      <div className="card" style={{ textAlign: 'left', marginBottom: 12, padding: '14px' }}>
+      <div className="card" style={{ textAlign: 'left', marginBottom: 12, padding: '14px', width: '100%', maxWidth: 380 }}>
         <div className="row" style={{ alignItems: 'flex-start', gap: 10 }}>
           <span aria-hidden="true" style={{ fontSize: 18 }}>🔒</span>
           <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.4 }}>

@@ -1,15 +1,15 @@
 // ============================================================
-// App state + persistence (TRD Section 14.5 — identity/data separation)
+// App state + persistence (TRD Section 14.5, identity/data separation)
 //
 // Identity-linked data (name, email, contacts, consent) is stored under a
 // separate key from anonymized health-response data (answers, flags, scores,
-// daily logs), joined only by an opaque userId — never by name or email.
+// daily logs), joined only by an opaque userId, never by name or email.
 // This mirrors the Supabase two-schema design without a real backend.
 // ============================================================
 
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { scoreCheckIn } from '../engine/scoring.js'
-import { buildCycleModel } from '../engine/cyclePredictor.js'
+import { addDays, buildCycleModel, dateKeyLocal, diffDays } from '../engine/cyclePredictor.js'
 import { isSupabaseConfigured, ensureAuthUser } from '../lib/supabase.js'
 import { pullFromSupabase, pushToSupabase } from '../lib/sync.js'
 
@@ -59,13 +59,139 @@ function freshState() {
     result: null, // last scoring result
     pendingTier2: [], // stored Tier 2 rule ids awaiting confirmation (8.4)
     confirmedTier2: [],
-    dailyLogs: {}, // 'YYYY-MM-DD' -> { period, mood }
+    dailyLogs: {}, // 'YYYY-MM-DD' -> completed daily check-ins
+    periodLogs: {}, // 'YYYY-MM-DD' -> period-only tracking
     streak: 0,
     lastCheckinDate: null,
     messages: [], // inbox
     advisorRequests: [],
     checkinHistory: [], // [{ date, level }]
     notifyPrefs: { periodCheckin: true, phaseTips: true },
+  }
+}
+
+function parseCheckinDate(value) {
+  if (!value || value === 'unknown') return null
+  const date = new Date(`${value}T00:00:00`)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function seedPeriodLogsFromAnswers(periodLogs, answers) {
+  const lastStart = parseCheckinDate(answers.lastStart)
+  const lastEnd = parseCheckinDate(answers.lastEnd)
+  const prevStart = parseCheckinDate(answers.prevStart)
+  const next = { ...periodLogs }
+
+  function seedRange(start, span, source) {
+    if (!start) return
+    for (let i = 0; i <= span; i++) {
+      const key = dateKeyLocal(addDays(start, i))
+      const existing = next[key] || {}
+      const existingSource = String(existing.source || '')
+      next[key] = {
+        ...existing,
+        period: true,
+        periodStart: existing.periodStart === true || i === 0,
+        source: existingSource && !existingSource.startsWith('onboarding') ? existing.source : source,
+      }
+    }
+  }
+
+  if (!lastStart) return periodLogs
+
+  const safeLastEnd = lastEnd && diffDays(lastEnd, lastStart) >= 0 ? lastEnd : lastStart
+  const lastSpan = Math.min(diffDays(safeLastEnd, lastStart), 9)
+  seedRange(prevStart, lastSpan, 'onboarding-prev')
+  seedRange(lastStart, lastSpan, 'onboarding-last')
+
+  return next
+}
+
+function removeOnboardingPeriodLogs(periodLogs = {}) {
+  return Object.fromEntries(
+    Object.entries(periodLogs).filter(([, log]) => !String(log?.source || '').startsWith('onboarding')),
+  )
+}
+
+function latestPeriodStartFromLogs(periodLogs = {}) {
+  const periodKeys = Object.entries(periodLogs)
+    .filter(([, log]) => log?.period === true)
+    .map(([key]) => key)
+    .sort()
+
+  if (periodKeys.length === 0) return null
+
+  const periodSet = new Set(periodKeys)
+  const explicitStarts = Object.entries(periodLogs)
+    .filter(([, log]) => log?.period === true && log?.periodStart === true)
+    .map(([key]) => key)
+    .sort()
+
+  if (explicitStarts.length > 0) return explicitStarts[explicitStarts.length - 1]
+
+  const derivedStarts = periodKeys.filter((key) => {
+    const prevKey = dateKeyLocal(addDays(parseCheckinDate(key), -1))
+    return !periodSet.has(prevKey)
+  })
+
+  return derivedStarts[derivedStarts.length - 1] || periodKeys[0]
+}
+
+function normalizeFlagId(id) {
+  return id === `P${'COS'}-01` ? 'PMOS-01' : id
+}
+
+function extractPeriodLogsFromDailyLogs(dailyLogs = {}) {
+  return Object.fromEntries(
+    Object.entries(dailyLogs)
+      .filter(([, log]) => log?.period !== undefined || log?.periodStart !== undefined || log?.periodPromptAnswered !== undefined)
+      .map(([key, log]) => [
+        key,
+        {
+          ...(log.period !== undefined ? { period: log.period } : {}),
+          ...(log.periodStart !== undefined ? { periodStart: log.periodStart } : {}),
+          ...(log.periodPromptAnswered !== undefined ? { periodPromptAnswered: log.periodPromptAnswered } : {}),
+          ...(log.source ? { source: log.source } : {}),
+        },
+      ]),
+  )
+}
+
+function stripPeriodFieldsFromDailyLogs(dailyLogs = {}) {
+  return Object.fromEntries(
+    Object.entries(dailyLogs).flatMap(([key, log]) => {
+      const { period, periodStart, periodPromptAnswered, source, ...dailyLog } = log
+      return Object.keys(dailyLog).length > 0 ? [[key, dailyLog]] : []
+    }),
+  )
+}
+
+function normalizeResult(result) {
+  if (!result) return result
+  return {
+    ...result,
+    flags: (result.flags || []).map((flag) => ({ ...flag, id: normalizeFlagId(flag.id) })),
+    pendingTier2: (result.pendingTier2 || []).map(normalizeFlagId),
+  }
+}
+
+function normalizeSavedHealth(payload = {}) {
+  const answers = payload.answers || {}
+  let dailyLogs = stripPeriodFieldsFromDailyLogs(payload.dailyLogs || {})
+  let periodLogs = { ...(payload.periodLogs || {}), ...extractPeriodLogsFromDailyLogs(payload.dailyLogs || {}) }
+
+  if (answers.lastStart && answers.lastStart !== 'unknown') {
+    periodLogs = removeOnboardingPeriodLogs(periodLogs)
+    periodLogs = seedPeriodLogsFromAnswers(periodLogs, answers)
+  }
+
+  return {
+    ...payload,
+    result: normalizeResult(payload.result),
+    dailyLogs,
+    periodLogs,
+    pendingTier2: (payload.pendingTier2 || []).map(normalizeFlagId),
+    confirmedTier2: (payload.confirmedTier2 || []).map(normalizeFlagId),
   }
 }
 
@@ -82,7 +208,7 @@ const SURPRISE_POOL = ['calm', 'bold', 'minimal']
 function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
-      return { ...state, ...action.payload }
+      return { ...state, ...normalizeSavedHealth(action.payload) }
 
     case 'SET_STEP':
       return { ...state, step: action.step }
@@ -110,7 +236,7 @@ function reducer(state, action) {
 
     case 'SET_PROFILE': {
       const merged = { ...state.profile, ...action.payload }
-      // resolve theme (Surprise me -> pick one, deterministic per user)
+      // Resolve theme. Surprise me picks one deterministic theme per user.
       if (action.payload.themeChoice) {
         const mapped = THEME_MAP[action.payload.themeChoice]
         merged.theme =
@@ -128,13 +254,15 @@ function reducer(state, action) {
       const answers = action.answers
       const onBC = answers.birthControl === 'Yes'
       const result = scoreCheckIn(answers, { priorTier2Ids: state.confirmedTier2 })
-      const today = new Date().toISOString().slice(0, 10)
+      const today = dateKeyLocal()
       const history = [...state.checkinHistory, { date: today, level: result.level }]
+      const periodLogs = seedPeriodLogsFromAnswers(removeOnboardingPeriodLogs(state.periodLogs), answers)
       return {
         ...state,
         answers,
         profile: { ...state.profile, onBirthControl: onBC },
         result,
+        periodLogs,
         pendingTier2: Array.from(new Set([...state.pendingTier2, ...result.pendingTier2])),
         checkinHistory: history,
         onboarded: true,
@@ -143,25 +271,53 @@ function reducer(state, action) {
     }
 
     case 'LOG_DAILY': {
-      const { dateKey, period, mood } = action
+      const { dateKey, mood, vibe, vibeLabel, symptoms, pain, impact } = action
       const prev = state.dailyLogs[dateKey] || {}
-      const dailyLogs = { ...state.dailyLogs, [dateKey]: { ...prev, ...(period !== undefined ? { period } : {}), ...(mood !== undefined ? { mood } : {}) } }
+      const dailyLogs = {
+        ...state.dailyLogs,
+        [dateKey]: {
+          ...prev,
+          checkinCompleted: true,
+          ...(mood !== undefined ? { mood } : {}),
+          ...(vibe !== undefined ? { vibe } : {}),
+          ...(vibeLabel !== undefined ? { vibeLabel } : {}),
+          ...(symptoms !== undefined ? { symptoms } : {}),
+          ...(pain !== undefined ? { pain } : {}),
+          ...(impact !== undefined ? { impact } : {}),
+        },
+      }
 
       // streak: consecutive days with any completed check-in
       let streak = state.streak
       let lastCheckinDate = state.lastCheckinDate
       if (state.lastCheckinDate !== dateKey) {
-        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
+        const yesterday = dateKeyLocal(new Date(Date.now() - 86400000))
         streak = state.lastCheckinDate === yesterday ? state.streak + 1 : 1
         lastCheckinDate = dateKey
       }
 
       let next = { ...state, dailyLogs, streak, lastCheckinDate }
 
-      // Passive Tier 2 confirmation (Section 8.4): when a NEW period is logged
-      // on a later date than the onboarding check-in, re-run the relevant rules
-      // against the user's data (no re-survey). If a pending flag fires again,
-      // it's confirmed → escalate + trigger the advisor CTA.
+      return next
+    }
+
+    case 'UPDATE_PERIOD_STATUS': {
+      const { dateKey, period, periodPromptAnswered } = action
+      const prev = state.periodLogs[dateKey] || {}
+      const periodLogs = {
+        ...state.periodLogs,
+        [dateKey]: {
+          ...prev,
+          ...(period !== undefined ? { period } : {}),
+          ...(period === true ? { periodStart: true, source: 'manual' } : {}),
+          ...(periodPromptAnswered !== undefined ? { periodPromptAnswered } : {}),
+        },
+      }
+
+      let next = { ...state, periodLogs }
+
+      // Passive Tier 2 confirmation: when a new period is logged on a later
+      // date than onboarding, re-run the relevant rules against the user's data.
       const onboardDate = state.checkinHistory[0]?.date
       const startsNewCycle = period === true && onboardDate && dateKey > onboardDate
       if (startsNewCycle && state.pendingTier2.length > 0) {
@@ -183,7 +339,7 @@ function reducer(state, action) {
                 at: new Date().toISOString(),
                 channel: 'system',
                 title: 'We noticed the same pattern again',
-                body: 'A pattern we were quietly watching showed up again this cycle. It might be worth talking to a Lumaya advisor — no pressure, whenever you’re ready.',
+                body: "A pattern we were quietly watching showed up again this cycle. It might be worth talking to a Lumaya advisor, no pressure, whenever you're ready.",
                 read: false,
                 cta: '/advisor',
               },
@@ -241,11 +397,11 @@ function reducer(state, action) {
 // ---- persistence ------------------------------------------
 function persist(state) {
   try {
-    // Identity schema — includes join key (userId) only.
+    // Identity schema includes join key (userId) only.
     const identity = { userId: state.userId, ...state.identity }
     localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity))
 
-    // Health schema — keyed by userId, no name/email columns.
+    // Health schema is keyed by userId, with no name/email columns.
     const health = {
       onboarded: state.onboarded,
       step: state.step,
@@ -255,6 +411,7 @@ function persist(state) {
       pendingTier2: state.pendingTier2,
       confirmedTier2: state.confirmedTier2,
       dailyLogs: state.dailyLogs,
+      periodLogs: state.periodLogs,
       streak: state.streak,
       lastCheckinDate: state.lastCheckinDate,
       messages: state.messages,
@@ -264,7 +421,7 @@ function persist(state) {
     }
     localStorage.setItem(HEALTH_PREFIX + state.userId, JSON.stringify(health))
   } catch (e) {
-    /* storage full / disabled — non-fatal for the demo */
+    /* storage full / disabled, non-fatal for the demo */
   }
 }
 
@@ -293,7 +450,7 @@ const StoreCtx = createContext(null)
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, () => {
     const restored = hydrate()
-    return restored ? { ...freshState(), ...restored } : freshState()
+    return restored ? { ...freshState(), ...normalizeSavedHealth(restored) } : freshState()
   })
 
   // Track the Supabase user id + whether the initial pull has finished, so we
@@ -316,10 +473,10 @@ export function StoreProvider({ children }) {
       const remote = await pullFromSupabase(uidFromAuth)
       if (cancelled) return
       if (remote) {
-        // Server has data → adopt it (server is source of truth across devices).
+        // Server has data, so adopt it. Server is source of truth across devices.
         dispatch({ type: 'HYDRATE', payload: { ...remote, userId: uidFromAuth } })
       } else {
-        // No server row yet → key local state to the auth uid and push it up.
+        // No server row yet, so key local state to the auth uid and push it up.
         dispatch({ type: 'HYDRATE', payload: { userId: uidFromAuth } })
       }
       syncReady.current = true
@@ -346,18 +503,13 @@ export function StoreProvider({ children }) {
   }, [state.profile.theme])
 
   const cycleModel = useMemo(() => {
-    // lastStart: prefer the most recent logged period, else the check-in date.
-    const loggedStarts = Object.entries(state.dailyLogs)
-      .filter(([, v]) => v.period)
-      .map(([k]) => k)
-      .sort()
-    const lastStart = loggedStarts.length ? loggedStarts[loggedStarts.length - 1] : state.answers.lastStart
+    const lastStart = latestPeriodStartFromLogs(state.periodLogs) || state.answers.lastStart
     return buildCycleModel({
       lastStart: lastStart && lastStart !== 'unknown' ? lastStart : null,
       cycleLength: state.result?.cycleLength,
       onBirthControl: state.profile.onBirthControl,
     })
-  }, [state.dailyLogs, state.answers.lastStart, state.result, state.profile.onBirthControl])
+  }, [state.periodLogs, state.answers.lastStart, state.result, state.profile.onBirthControl])
 
   const value = useMemo(() => ({ state, dispatch, cycleModel }), [state, cycleModel])
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>

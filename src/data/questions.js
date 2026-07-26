@@ -37,7 +37,7 @@ export function painLabel(value) {
 // ---- Personalization (Section 5.2) ----
 // Note: the TRD numbers these P1–P5 but the scoring/prediction text ("P1 = Yes")
 // refers to the hormonal-birth-control answer collected inside the deep check-in.
-// We keep student/athlete, theme, sleep, sport here; birth control lives in the check-in.
+// We keep student/athlete and sleep here; birth control lives in the check-in.
 export const PERSONALIZATION = [
   {
     id: 'profile',
@@ -48,29 +48,11 @@ export const PERSONALIZATION = [
     options: ['Student', 'Athlete', 'Both', 'Neither'],
   },
   {
-    id: 'theme',
-    key: 'themeChoice',
-    text: 'Pick a vibe for your Lumaya theme.',
-    help: 'Changes accent colors only — never your layout or content.',
-    type: 'chips',
-    options: ['Calm pastels', 'Bold & bright', 'Minimal & clean', 'Surprise me'],
-  },
-  {
     id: 'sleep',
     key: 'sleep',
     text: 'What’s your sleep schedule usually like?',
     type: 'chips',
     options: ['Early to bed, early to rise', 'Night owl', 'All over the place'],
-  },
-  {
-    id: 'sport',
-    key: 'sport',
-    text: 'Do you play a specific sport?',
-    help: 'Optional — tap skip if not.',
-    type: 'text',
-    optional: true,
-    placeholder: 'e.g. swimming, soccer, track…',
-    showIf: (p) => p.studentAthlete === 'Athlete' || p.studentAthlete === 'Both',
   },
 ]
 
