@@ -218,6 +218,9 @@ function reducer(state, action) {
     case 'ACTIVATE_DASHBOARD':
       return { ...state, identity: { ...state.identity, dashboardActive: true, parentEmail: action.email ?? state.identity.parentEmail } }
 
+    case 'DEACTIVATE_DASHBOARD':
+      return { ...state, identity: { ...state.identity, dashboardActive: false } }
+
     case 'INVITE_SUPPORT':
       return { ...state, identity: { ...state.identity, supportContact: action.contact, dashboardActive: true } }
 

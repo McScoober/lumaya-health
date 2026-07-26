@@ -7,14 +7,14 @@
 export const PHASES = ['menstrual', 'follicular', 'ovulation', 'luteal']
 
 export const PHASE_META = {
-  menstrual:  { label: 'Menstrual',  accent: '#E08097', soft: '#FCEEF1', mood: 'Cozy and low-key' },
-  follicular: { label: 'Follicular', accent: '#7FB069', soft: '#EFF6EA', mood: 'Rising energy' },
-  ovulation:  { label: 'Ovulation',  accent: '#E8B84B', soft: '#FCF3DC', mood: 'Peak energy' },
-  luteal:     { label: 'Luteal',     accent: '#9B7FC2', soft: '#F1ECF8', mood: 'Winding down' },
-  // BC track — neutral pink/berry tint (6.1 / 13.2.3)
-  bc_active:  { label: 'Steady',     accent: '#C25070', soft: '#FBEAF0', mood: 'Even keel' },
-  bc_break:  { label: 'Break days',  accent: '#C25070', soft: '#FBEAF0', mood: 'Light week' },
-  bc_generic: { label: 'This week',  accent: '#C25070', soft: '#FBEAF0', mood: 'Steady' },
+  menstrual:  { label: 'your period',  accent: 'var(--phase-menstrual)', soft: '#FCEEF1', mood: 'Cozy and low-key' },
+  follicular: { label: 'building back up', accent: 'var(--phase-follicular)', soft: '#EFF6EA', mood: 'Rising energy' },
+  ovulation:  { label: 'peak energy',  accent: 'var(--phase-ovulation)', soft: '#FCF3DC', mood: 'Peak energy' },
+  luteal:     { label: 'winding down',     accent: 'var(--phase-luteal)', soft: '#F1ECF8', mood: 'Winding down' },
+  // BC track — neutral pink/berry tint
+  bc_active:  { label: 'Steady',     accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Even keel' },
+  bc_break:  { label: 'Break days',  accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Light week' },
+  bc_generic: { label: 'This week',  accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Steady' },
 }
 
 const DEFAULT_CYCLE = 28

@@ -110,6 +110,15 @@ function MinorDashboard({ state, dispatch, navigate }) {
           <Button variant="soft" block style={{ marginTop: 16 }} onClick={() => navigate('/parent')}>
             Preview what your parent sees
           </Button>
+
+          <Button 
+            variant="ghost" 
+            block 
+            style={{ marginTop: 8, color: 'var(--red)' }} 
+            onClick={() => dispatch({ type: 'DEACTIVATE_DASHBOARD' })}
+          >
+            Turn off parent dashboard
+          </Button>
         </>
       )}
     </div>

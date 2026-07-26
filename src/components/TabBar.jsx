@@ -1,12 +1,15 @@
 // Bottom navigation for the ongoing app (post-onboarding).
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
+import { House, Lightning, PencilLine, CalendarBlank, Handshake, Books } from '@phosphor-icons/react'
 
 const TABS = [
-  { to: '/home', label: 'Home', icon: '🏠' },
-  { to: '/messages', label: 'Messages', icon: '💬' },
-  { to: '/dashboard', label: 'Support', icon: '🤝' },
-  { to: '/settings', label: 'Settings', icon: '⚙️' },
+  { to: '/home', label: 'Home', Icon: House },
+  { to: '/signals', label: 'Signals', Icon: Lightning },
+  { to: '/log/0', label: 'Log', Icon: PencilLine },
+  { to: '/patterns', label: 'Patterns', Icon: CalendarBlank },
+  { to: '/support', label: 'Support', Icon: Handshake },
+  { to: '/library', label: 'Library', Icon: Books },
 ]
 
 export default function TabBar() {
@@ -19,6 +22,7 @@ export default function TabBar() {
     <nav className="tabbar" aria-label="Primary">
       {TABS.map((t) => {
         const active = pathname.startsWith(t.to)
+        const IconComponent = t.Icon
         return (
           <button
             key={t.to}
@@ -27,7 +31,11 @@ export default function TabBar() {
             onClick={() => navigate(t.to)}
           >
             <span className="tabbar__icon" aria-hidden="true" style={{ position: 'relative' }}>
-              {t.icon}
+              <IconComponent 
+                size={22} 
+                weight={active ? 'fill' : 'duotone'} 
+                color={active ? 'var(--pink-accent)' : 'var(--text-secondary)'} 
+              />
               {t.to === '/messages' && unread > 0 && (
                 <span
                   style={{

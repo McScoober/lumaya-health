@@ -18,7 +18,7 @@ export const supabase = isSupabaseConfigured
 
 /**
  * Ensure we have a user id to key data by. Uses Supabase anonymous auth so each
- * device gets a stable auth.uid() that RLS policies can scope rows to — no
+ * device gets a stable auth.uid() that RLS policies can scope rows to, no
  * password, no email required from the user.
  * Returns the uid, or null if Supabase isn't configured / sign-in fails.
  */
@@ -27,8 +27,16 @@ export function getCurrentUserId() {
   return currentUserId
 }
 
+function hasPendingEmailAuthCallback() {
+  if (typeof window === 'undefined') return false
+  return window.location.pathname === '/auth/callback' &&
+    (window.location.search.includes('code=') || window.location.hash.includes('access_token='))
+}
+
 export async function ensureAuthUser() {
   if (!supabase) return null
+  if (hasPendingEmailAuthCallback()) return null
+
   const { data: sessionData } = await supabase.auth.getSession()
   if (sessionData?.session?.user) {
     currentUserId = sessionData.session.user.id

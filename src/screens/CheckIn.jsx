@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { DEEP_QUESTIONS, activeQuestions, painLabel, PAIN_ANCHORS } from '../data/questions.js'
 import { Button, Chip, ChipGroup, ProgressBar, TopBar } from '../components/ui.jsx'
+import YourThingSelector from '../components/YourThingSelector.jsx'
 
 const TODAY = new Date().toISOString().slice(0, 10)
 
@@ -43,6 +44,8 @@ export default function CheckIn() {
       ? (value || []).length > 0
       : q.type === 'slider'
       ? typeof value === 'number'
+      : q.type === 'your_thing'
+      ? (value?.categories?.length > 0)
       : value !== undefined && value !== null && value !== ''
 
   function goNext() {
@@ -149,6 +152,13 @@ export default function CheckIn() {
               </p>
             </div>
           </div>
+        )}
+
+        {q.type === 'your_thing' && (
+          <YourThingSelector 
+            value={value || { categories: [], specifics: '', practiceDays: [] }} 
+            onChange={(v) => set(q.key, v)} 
+          />
         )}
       </div>
 

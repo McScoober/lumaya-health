@@ -1,15 +1,16 @@
 {
-  "name": "lumaya-health",
+  "name": "maisie-health",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "type": "module",
-  "description": "Lumaya Health, a period companion web app with symptom check-in and daily cycle tracking.",
+  "description": "Maisie, a period health app with a metabolic signal layer.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "@supabase/supabase-js": "^2.110.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

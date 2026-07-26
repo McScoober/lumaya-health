@@ -94,6 +94,13 @@ export const DEEP_QUESTIONS = [
     options: ['Yes', 'Not yet'],
   },
   {
+    id: 'ob3_your_thing',
+    key: 'yourThing',
+    section: 'Your Activity',
+    text: '', 
+    type: 'your_thing',
+  },
+  {
     id: 'q3',
     key: 'lastStart',
     section: 'Your cycle',

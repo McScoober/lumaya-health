@@ -21,7 +21,7 @@ const EDU_LIBRARY = [
 
 export default function ParentView() {
   const navigate = useNavigate()
-  const { state } = useStore()
+  const { state, dispatch } = useStore()
   const { identity, result, checkinHistory, advisorRequests } = state
   const mode = identity.transparencyMode
   const name = identity.name?.split(' ')[0] || 'her'
@@ -47,9 +47,13 @@ export default function ParentView() {
         <Mascot size={56} />
       </div>
 
-      <div className="seg" style={{ marginTop: 10 }} aria-hidden="true">
+      <div className="seg" style={{ marginTop: 10 }}>
         {['full', 'flags', 'digest'].map((m) => (
-          <button key={m} aria-pressed={mode === m}>
+          <button 
+            key={m} 
+            aria-pressed={mode === m}
+            onClick={() => dispatch({ type: 'SET_TRANSPARENCY', mode: m })}
+          >
             {m === 'full' ? 'Full' : m === 'flags' ? 'Flags only' : 'Digest'}
           </button>
         ))}

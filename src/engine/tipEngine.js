@@ -8,15 +8,63 @@
 
 import { PHASE_CARDS, MODIFIER_ACTIONS, sportAction } from '../data/tips.js'
 
-function modifierTagsFor(profile) {
+function modifierTagsFor(profile = {}) {
   const tags = []
   const sa = profile.studentAthlete
-  if (sa === 'Student' || sa === 'Both') tags.push('student')
+  if (sa === 'Student' || sa === 'Both' || profile.isStudent) tags.push('student')
   if (sa === 'Athlete' || sa === 'Both') tags.push('athlete')
+
+  const ATHLETE_ACTS = ['team-sport', 'solo-sport', 'dance', 'cheer-gym', 'martial-arts']
+  if (profile.activities && profile.activities.some(act => ATHLETE_ACTS.includes(act))) {
+    if (!tags.includes('athlete')) tags.push('athlete')
+  }
+
   if (profile.sleep === 'Night owl') tags.push('nightOwl')
   if (profile.sleep === 'Early to bed, early to rise') tags.push('earlyBird')
   if (profile.onBirthControl) tags.push('onBirthControl')
   return tags
+}
+
+export function maisieMessage(phase, cycleDay, profile = {}) {
+  const tags = modifierTagsFor(profile)
+  const isAthlete = tags.includes('athlete')
+  const isStudent = tags.includes('student')
+  const activity = profile.activityText || null
+  const bank = {
+    menstrual: [
+      isAthlete && activity
+        ? `Your ${activity} can wait this week. Rest is part of training.`
+        : 'This is your rest week. Your body is doing a lot right now.',
+      isStudent
+        ? 'Hard to focus during your period? Completely normal. Cut yourself some slack.'
+        : 'Lower your expectations this week. You do not have to be at full power.',
+    ],
+    follicular: [
+      'Energy is picking up this week. Good time to start things.',
+      'Your follicular phase is when your brain is sharpest. Use it.',
+    ],
+    ovulation: [
+      'Peak phase. You might feel more confident and switched on. Lean into it.',
+      'Best time in your cycle for hard workouts, big conversations, or anything that takes energy.',
+    ],
+    luteal: [
+      isAthlete && activity
+        ? `Dial back the intensity on ${activity} if your body asks for it. That is not weakness.`
+        : 'Things slow down in this phase. That is not a mood. That is just your cycle.',
+      'Cravings, tiredness, feeling off -- all normal in the luteal phase.',
+    ],
+    bc_active: [
+      'Steady hormone levels today. Notice how you feel compared to last week.',
+      'Your cycle on the pill looks different. That is expected.',
+    ],
+    bc_break: [
+      'Withdrawal week. You might feel more tired or emotional -- that is normal.',
+      'Rest this week if you need it. Your body is adjusting.',
+    ],
+  }
+  const msgs = bank[phase] || bank.follicular
+  const idx = ((cycleDay || 1) - 1) % msgs.length
+  return msgs[idx]
 }
 
 function pickActions(tag, phase) {
@@ -42,7 +90,7 @@ export function buildTip(phase, profile = {}) {
   const sport = sportAction(profile.sport)
   if (sport && (tags.includes('athlete'))) pool.push(sport)
 
-  // Merge + dedupe by text, keep the highest priority per unique text.
+  // Merge and dedupe by text, keep the highest priority per unique text.
   const byText = new Map()
   for (const a of pool) {
     const existing = byText.get(a.text)
@@ -65,6 +113,6 @@ export function tipSms(phase, profile = {}) {
   const tip = buildTip(phase, profile)
   const first = tip.actions[0] || ''
   let msg = `${tip.headline} Tap to see how to take care of yourself.`
-  if (msg.length > 155 && first) msg = `${tip.headline.split('—')[0].trim()}. Tap for a quick self-care tip.`
+  if (msg.length > 155 && first) msg = `${tip.headline.split('--')[0].trim()}. Tap for a quick self-care tip.`
   return msg.slice(0, 160)
 }
