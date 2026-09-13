@@ -10,7 +10,7 @@
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { scoreCheckIn } from '../engine/scoring.js'
 import { addDays, buildCycleModel, dateKeyLocal, diffDays } from '../engine/cyclePredictor.js'
-import { isSupabaseConfigured, ensureAuthUser } from '../lib/supabase.js'
+import { isSupabaseConfigured, ensureAuthUser, getExistingAuthUserId } from '../lib/supabase.js'
 import { pullFromSupabase, pushToSupabase } from '../lib/sync.js'
 
 const IDENTITY_KEY = 'lumaya.identity'
@@ -59,6 +59,7 @@ function freshState() {
     result: null, // last scoring result
     pendingTier2: [], // stored Tier 2 rule ids awaiting confirmation (8.4)
     confirmedTier2: [],
+    progressiveQIndex: 0, // how many deferred check-in Qs have been answered
     dailyLogs: {}, // 'YYYY-MM-DD' -> completed daily check-ins
     periodLogs: {}, // 'YYYY-MM-DD' -> period-only tracking
     streak: 0,
@@ -270,6 +271,21 @@ function reducer(state, action) {
       }
     }
 
+    case 'ANSWER_PROGRESSIVE': {
+      // Saves a single deferred onboarding answer and advances the progress index.
+      const updatedAnswers = { ...state.answers, [action.key]: action.value }
+      const onBC = updatedAnswers.birthControl === 'Yes'
+      // Re-score with the new answer so result stays current.
+      const updatedResult = scoreCheckIn(updatedAnswers, { priorTier2Ids: state.confirmedTier2 })
+      return {
+        ...state,
+        answers: updatedAnswers,
+        profile: { ...state.profile, onBirthControl: onBC },
+        result: updatedResult,
+        progressiveQIndex: state.progressiveQIndex + 1,
+      }
+    }
+
     case 'LOG_DAILY': {
       const { dateKey, mood, vibe, vibeLabel, symptoms, pain, impact } = action
       const prev = state.dailyLogs[dateKey] || {}
@@ -410,6 +426,7 @@ function persist(state) {
       result: state.result,
       pendingTier2: state.pendingTier2,
       confirmedTier2: state.confirmedTier2,
+      progressiveQIndex: state.progressiveQIndex,
       dailyLogs: state.dailyLogs,
       periodLogs: state.periodLogs,
       streak: state.streak,
@@ -423,6 +440,46 @@ function persist(state) {
   } catch (e) {
     /* storage full / disabled, non-fatal for the demo */
   }
+}
+
+function hasEntries(value) {
+  return Object.keys(value || {}).length > 0
+}
+
+function hasSupabaseSyncableData(state) {
+  const identity = state.identity || {}
+  const profile = state.profile || {}
+  return Boolean(
+    state.onboarded ||
+      identity.name?.trim() ||
+      identity.email?.trim() ||
+      identity.ageBand ||
+      identity.consentedAt ||
+      identity.privacyAckAt ||
+      identity.parentEmail?.trim() ||
+      identity.dashboardActive ||
+      identity.supportContact ||
+      profile.studentAthlete !== null ||
+      profile.themeChoice ||
+      profile.sleep !== null ||
+      profile.sport?.trim() ||
+      profile.cycleNickname?.trim() ||
+      profile.onBirthControl ||
+      hasEntries(state.answers) ||
+      state.result ||
+      state.pendingTier2?.length > 0 ||
+      state.confirmedTier2?.length > 0 ||
+      state.progressiveQIndex > 0 ||
+      hasEntries(state.dailyLogs) ||
+      hasEntries(state.periodLogs) ||
+      state.streak > 0 ||
+      state.lastCheckinDate ||
+      state.messages?.length > 0 ||
+      state.advisorRequests?.length > 0 ||
+      state.checkinHistory?.length > 0 ||
+      state.notifyPrefs?.periodCheckin === false ||
+      state.notifyPrefs?.phaseTips === false
+  )
 }
 
 function hydrate() {
@@ -459,12 +516,13 @@ export function StoreProvider({ children }) {
   const syncReady = useRef(!isSupabaseConfigured) // if unconfigured, "ready" immediately
   const pushTimer = useRef(null)
 
-  // On mount: sign in anonymously and pull this user's rows from Supabase.
+  // On mount: recover an existing Supabase session and pull its rows. Do not
+  // create anonymous auth users for visitors who only open the app.
   useEffect(() => {
     let cancelled = false
     if (!isSupabaseConfigured) return
     ;(async () => {
-      const uidFromAuth = await ensureAuthUser()
+      const uidFromAuth = await getExistingAuthUserId()
       if (cancelled || !uidFromAuth) {
         syncReady.current = true
         return
@@ -475,9 +533,6 @@ export function StoreProvider({ children }) {
       if (remote) {
         // Server has data, so adopt it. Server is source of truth across devices.
         dispatch({ type: 'HYDRATE', payload: { ...remote, userId: uidFromAuth } })
-      } else {
-        // No server row yet, so key local state to the auth uid and push it up.
-        dispatch({ type: 'HYDRATE', payload: { userId: uidFromAuth } })
       }
       syncReady.current = true
     })()
@@ -489,10 +544,13 @@ export function StoreProvider({ children }) {
   // Persist on every change: localStorage always; Supabase (debounced) when ready.
   useEffect(() => {
     persist(state)
-    if (isSupabaseConfigured && syncReady.current && authUserId.current) {
+    if (isSupabaseConfigured && syncReady.current && hasSupabaseSyncableData(state)) {
       clearTimeout(pushTimer.current)
-      pushTimer.current = setTimeout(() => {
-        pushToSupabase(authUserId.current, state)
+      pushTimer.current = setTimeout(async () => {
+        const uid = authUserId.current || await ensureAuthUser()
+        if (!uid) return
+        authUserId.current = uid
+        pushToSupabase(uid, { ...state, userId: uid })
       }, 700)
     }
   }, [state])
