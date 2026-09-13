@@ -1,278 +1,488 @@
+// Daily Micro-Logger — single screen, < 10 seconds to complete.
+// Maisie rebuild: collapses the former 6-screen (/log/0–5) flow into one panel.
+//
+// Layout (top → bottom):
+//   1. Mood row — 5 emoji faces, tap to select
+//   2. Pain dot-scale — 1–10 tappable dots (no dragging)
+//   3. Symptom bubbles — chip grid (existing set)
+//   4. Impact toggles — compact icon row
+//   5. "Log it" button
+//
+// After logging:
+//   - Instant tip card appears (phase tip or symptom-specific)
+//   - If pain ≥ 8 → RedFlagCard instead of/in addition to tip
 import { useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { dateKeyLocal } from '../engine/cyclePredictor.js'
-import { Button, TopBar, ProgressBar, Chip } from '../components/ui.jsx'
+import { dateKeyLocal, phaseForDate } from '../engine/cyclePredictor.js'
+import { buildTip } from '../engine/tipEngine.js'
+import { TopBar, Chip } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
-import { SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank } from '@phosphor-icons/react'
+import RedFlagCard from '../components/RedFlagCard.jsx'
+import {
+  SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank,
+  BookOpen, PersonSimpleRun, CalendarBlank, Moon, CheckCircle,
+} from '@phosphor-icons/react'
 
+// ── Data ──────────────────────────────────────────────────────────────────
 const SYMPTOMS = [
-  'Cramps', 'Headache', 'Bloating', 'Fatigue', 
-  'Back pain', 'Breast tenderness', 'Mood changes', 'Skin breakout', 
-  'Nausea', 'Spotting', 'Discharge changes', 'Sleep trouble'
-]
-
-const IMPACTS = [
-  { id: 'school', label: 'Missed school', icon: '🏫' },
-  { id: 'activity', label: 'Missed your thing', icon: '🏃‍♀️' },
-  { id: 'plans', label: 'Cancelled plans', icon: '📅' },
-  { id: 'sleep', label: 'Sleep affected', icon: '🌙' },
-  { id: 'fine', label: 'Managed fine', icon: '✅' },
+  'Cramps', 'Headache', 'Bloating', 'Fatigue',
+  'Back pain', 'Breast tenderness', 'Mood changes', 'Skin breakout',
+  'Nausea', 'Spotting', 'Discharge changes', 'Sleep trouble',
 ]
 
 const VIBE_OPTIONS = [
-  { key: 'great', label: 'Great', value: 5, Icon: SmileyWink, color: '#A0C4A4' },
-  { key: 'good', label: 'Good', value: 4, Icon: Smiley, color: '#E8C86A' },
-  { key: 'okay', label: 'Okay', value: 3, Icon: SmileyMeh, color: '#C4A8E0' },
-  { key: 'rough', label: 'Rough', value: 2, Icon: SmileySad, color: '#E8A0B0' },
-  { key: 'awful', label: 'Awful', value: 1, Icon: SmileyBlank, color: '#E0528A' },
+  { key: 'great', label: 'Great',  value: 5, Icon: SmileyWink,  color: '#4BAF6B' },
+  { key: 'good',  label: 'Good',   value: 4, Icon: Smiley,      color: '#C8920A' },
+  { key: 'okay',  label: 'Okay',   value: 3, Icon: SmileyMeh,   color: '#9B72CC' },
+  { key: 'rough', label: 'Rough',  value: 2, Icon: SmileySad,   color: '#E06B6B' },
+  { key: 'awful', label: 'Awful',  value: 1, Icon: SmileyBlank, color: '#E0528A' },
 ]
 
+const IMPACTS = [
+  { id: 'school',   label: 'School',   Icon: BookOpen,          color: '#7B9FD4' },
+  { id: 'activity', label: 'Activity', Icon: PersonSimpleRun,   color: '#4BAF6B' },
+  { id: 'plans',    label: 'Plans',    Icon: CalendarBlank,     color: '#C8920A' },
+  { id: 'sleep',    label: 'Sleep',    Icon: Moon,              color: '#9B72CC' },
+  { id: 'fine',     label: 'All good', Icon: CheckCircle,       color: '#4BAF6B' },
+]
+
+// ── Instant tip logic ─────────────────────────────────────────────────────
+function getInstantTip(symptoms, phase, profile) {
+  // Symptom-specific tips take priority
+  if (symptoms.includes('Cramps'))
+    return 'Try a heat pad on your lower back for 10 minutes — it actually works.'
+  if (symptoms.includes('Headache'))
+    return 'Drink a full glass of water now and rest in a dim space for 5 minutes.'
+  if (symptoms.includes('Fatigue'))
+    return 'An iron-rich snack (dark chocolate, spinach, nuts) can help restore energy.'
+  if (symptoms.includes('Bloating'))
+    return 'Light movement like a 10-min walk eases bloating faster than lying still.'
+  if (symptoms.includes('Nausea'))
+    return 'Ginger tea or small salty snacks can settle nausea quickly.'
+  if (symptoms.includes('Mood changes'))
+    return 'This is luteal-phase chemistry, not "you." Give yourself permission to feel it.'
+  if (symptoms.includes('Back pain'))
+    return 'A pillow under your knees while lying down takes pressure off your lower back.'
+  if (symptoms.includes('Skin breakout'))
+    return 'Hormone-driven breakouts usually peak right before your period — this will pass.'
+  // Fall back to phase tip
+  if (phase) {
+    const tip = buildTip(phase, profile)
+    return tip.actions[0] || tip.headline
+  }
+  return 'You showed up and logged today. That data is yours — and it matters.'
+}
+
+// ── Main component ────────────────────────────────────────────────────────
 export default function DailyLog() {
-  const { step } = useParams()
   const navigate = useNavigate()
-  const { state, dispatch } = useStore()
-  
-  const currentStep = parseInt(step) || 0
-  
-  const [logData, setLogData] = useState({
-    vibe: null,
-    symptoms: [],
-    pain: 1, // initialize to 1 so the slider matches the numeric visual and isn't stuck waiting for an interaction
-    impacts: []
-  })
+  const { state, dispatch, cycleModel } = useStore()
 
-  const updateLog = (key, val) => setLogData(d => ({ ...d, [key]: val }))
-  
-  const goNext = () => navigate(`/log/${currentStep + 1}`)
-  const goBack = () => {
-    if (currentStep > 0) navigate(`/log/${currentStep - 1}`)
-    else navigate('/home')
+  const todayKey   = dateKeyLocal()
+  const todayLog   = state.dailyLogs[todayKey] || {}
+  const alreadyDone = todayLog.checkinCompleted === true
+
+  const [vibe,    setVibe]    = useState(null)
+  const [pain,    setPain]    = useState(null)     // null = not yet touched
+  const [symptoms, setSymptoms] = useState([])
+  const [impacts,  setImpacts]  = useState([])
+  const [done,    setDone]    = useState(false)    // post-log confirmation state
+
+  // Phase for tip fallback (from cycleModel)
+  const { phase } = phaseForDate(cycleModel, new Date())
+  const profile = state.profile || {}
+
+  function toggleSymptom(s) {
+    setSymptoms((prev) =>
+      prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]
+    )
   }
 
-  const finish = () => {
-    // save logData to state
-    const todayKey = dateKeyLocal()
-    dispatch({ 
-      type: 'LOG_DAILY', 
-      dateKey: todayKey, 
-      vibe: logData.vibe?.value,
-      vibeLabel: logData.vibe?.key,
-      symptoms: logData.symptoms,
-      pain: logData.pain,
-      impact: logData.impacts,
+  function toggleImpact(id) {
+    setImpacts((prev) => {
+      if (id === 'fine') return prev.includes('fine') ? [] : ['fine']
+      const withoutFine = prev.filter((x) => x !== 'fine')
+      return withoutFine.includes(id) ? withoutFine.filter((x) => x !== id) : [...withoutFine, id]
     })
-    navigate('/home')
   }
 
-  const todayKey = dateKeyLocal()
-  const loggedToday = state.dailyLogs[todayKey]
+  function handleLogIt() {
+    dispatch({
+      type: 'LOG_DAILY',
+      dateKey: todayKey,
+      mood: vibe?.label,
+      vibe: vibe?.value,
+      vibeLabel: vibe?.key,
+      symptoms,
+      pain: pain ?? 0,
+      impact: impacts.filter((id) => id !== 'fine'),
+    })
+    setDone(true)
+  }
 
-  // If already logged today, skip the wizard and show a confirmed state
-  if (loggedToday?.checkinCompleted) {
+  const instantTip    = getInstantTip(symptoms, phase, profile)
+  const isHighPain    = (pain ?? 0) >= 8
+  const hasSpotting   = symptoms.includes('Spotting')
+  const showRedFlag   = isHighPain || (hasSpotting && (pain ?? 0) >= 6)
+
+  // ── Already logged today ─────────────────────────────────────────────
+  if (alreadyDone) {
     return (
       <div className="screen center">
         <TopBar onBack={() => navigate('/home')} />
         <div className="spacer" />
-        <MaisieLogo size={80} />
-        <div className="card" style={{ marginTop: 24, textAlign: 'left' }}>
+        <MaisieLogo size={72} />
+        <div className="card" style={{ marginTop: 24, textAlign: 'center' }}>
           <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5 }}>
-            you're all caught up for today! thanks for keeping your chart updated.
+            you're all caught up for today 🌸<br />
+            <span className="muted" style={{ fontSize: 13 }}>see you tomorrow.</span>
           </p>
         </div>
         <div className="spacer" />
-        <Button block onClick={() => navigate('/home')}>Back to dashboard</Button>
+        <button
+          id="already-logged-home"
+          className="btn btn--primary"
+          style={{ width: '100%' }}
+          onClick={() => navigate('/home')}
+        >
+          Back to home
+        </button>
       </div>
     )
   }
 
-  // lg-0: How are you feeling
-  if (currentStep === 0) {
-    return (
-      <div className="screen center">
-        <TopBar onBack={goBack} />
-        <div className="spacer" />
-        <MaisieLogo size={80} />
-        <h2 style={{ fontSize: 24, margin: '24px 0 12px', color: 'var(--text-primary)' }}>hey {state.identity?.name?.split(' ')[0] || 'there'}. how are you feeling today?</h2>
-        <Button block className="btn--primary" onClick={goNext} style={{ marginTop: 24 }}>Start logging</Button>
-        <div className="spacer" />
-      </div>
-    )
-  }
-
-  // lg-1: Symptoms
-  if (currentStep === 1) {
+  // ── Post-log confirmation + instant tip ──────────────────────────────
+  if (done) {
     return (
       <div className="screen">
-        <TopBar onBack={goBack} />
-        <ProgressBar value={0.2} />
-        <h2 style={{ fontSize: 24, margin: '24px 0 12px' }}>Any symptoms today?</h2>
-        <div className="chips" style={{ marginTop: 16 }}>
-          {SYMPTOMS.map(s => {
-            const isSelected = logData.symptoms.includes(s)
+        <TopBar onBack={() => navigate('/home')} />
+        <div style={{ marginTop: 28, textAlign: 'center' }}>
+          <MaisieLogo size={60} />
+          <h2 style={{ margin: '14px 0 4px', fontSize: 22 }}>logged ✓</h2>
+          <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+            {vibe ? `feeling ${vibe.label.toLowerCase()} · ` : ''}
+            {symptoms.length > 0 ? `${symptoms.length} symptom${symptoms.length > 1 ? 's' : ''}` : 'no symptoms'}
+          </p>
+        </div>
+
+        {/* Red flag takes priority */}
+        {showRedFlag ? (
+          <RedFlagCard onDismiss={() => navigate('/home')} />
+        ) : (
+          /* Instant tip payoff */
+          <div
+            style={{
+              background: 'linear-gradient(135deg, var(--pink-light, #FFF0F5) 0%, #F5F0FF 100%)',
+              border: '1.5px solid rgba(180, 80, 140, 0.15)',
+              borderRadius: 18,
+              padding: '18px 16px',
+              marginTop: 20,
+            }}
+          >
+            <p
+              style={{
+                margin: '0 0 6px',
+                fontSize: 11,
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+                color: 'var(--pink-accent, #E0528A)',
+              }}
+            >
+              Maisie's tip for right now
+            </p>
+            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55, color: '#2C1810' }}>
+              {instantTip}
+            </p>
+          </div>
+        )}
+
+        <div style={{ marginTop: 'auto', paddingTop: 24 }}>
+          <button
+            id="log-done-home"
+            type="button"
+            style={{
+              width: '100%',
+              padding: '15px',
+              border: 'none',
+              borderRadius: 14,
+              background: 'var(--pink-accent, #E0528A)',
+              color: '#fff',
+              fontSize: 15,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+            onClick={() => navigate('/home')}
+          >
+            Back to home
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main micro-logger panel ──────────────────────────────────────────
+  const canLog = vibe !== null  // mood is the only required field
+
+  return (
+    <div className="screen screen--pad-bottom" id="daily-log-screen">
+      <TopBar onBack={() => navigate('/home')} />
+
+      {/* ── 1. Mood row ───────────────────────────────────────────── */}
+      <div style={{ marginTop: 20 }}>
+        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
+          How are you feeling today?
+        </p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: 8,
+          }}
+        >
+          {VIBE_OPTIONS.map(({ key, label, Icon, color, value }) => {
+            const selected = vibe?.key === key
             return (
-              <Chip 
-                key={s} 
-                selected={isSelected}
-                onClick={() => {
-                  if (isSelected) {
-                    updateLog('symptoms', logData.symptoms.filter(x => x !== s))
-                  } else {
-                    updateLog('symptoms', [...logData.symptoms, s])
-                  }
+              <button
+                key={key}
+                id={`vibe-${key}`}
+                type="button"
+                aria-label={label}
+                aria-pressed={selected}
+                onClick={() => setVibe({ key, value })}
+                style={{
+                  aspectRatio: '1',
+                  minHeight: 56,
+                  border: `1.5px solid ${selected ? color : 'rgba(44,24,16,0.08)'}`,
+                  borderRadius: 14,
+                  background: selected
+                    ? `color-mix(in srgb, ${color} 14%, white)`
+                    : '#fff',
+                  color,
+                  display: 'grid',
+                  placeItems: 'center',
+                  cursor: 'pointer',
+                  transform: selected ? 'scale(0.95)' : 'scale(1)',
+                  transition: 'transform 0.12s ease, background 0.12s ease, border 0.12s ease',
                 }}
+              >
+                <Icon size={28} weight={selected ? 'fill' : 'duotone'} color={color} />
+              </button>
+            )
+          })}
+        </div>
+        {/* Label below selected */}
+        {vibe && (
+          <p
+            style={{
+              margin: '6px 0 0',
+              textAlign: 'center',
+              fontSize: 12,
+              color: VIBE_OPTIONS.find((v) => v.key === vibe.key)?.color,
+              fontWeight: 600,
+            }}
+          >
+            {vibe.label}
+          </p>
+        )}
+      </div>
+
+      {/* ── 2. Pain dot-scale ──────────────────────────────────────── */}
+      <div style={{ marginTop: 22 }}>
+        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
+          Pain level today{' '}
+          <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
+            (tap to set)
+          </span>
+        </p>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 5,
+          }}
+        >
+          {Array.from({ length: 10 }, (_, i) => {
+            const val = i + 1
+            const isSelected = pain === val
+            const isUnder    = pain !== null && val <= pain
+            // Color ramps: green → yellow → orange → red
+            const dotColor =
+              val <= 3 ? '#4BAF6B'
+              : val <= 6 ? '#C8920A'
+              : val <= 8 ? '#E06B6B'
+              : '#C01B50'
+            return (
+              <button
+                key={val}
+                id={`pain-dot-${val}`}
+                type="button"
+                aria-label={`Pain ${val}`}
+                onClick={() => setPain(isSelected ? null : val)}
+                style={{
+                  flex: 1,
+                  aspectRatio: '1',
+                  maxWidth: 30,
+                  borderRadius: '50%',
+                  border: isSelected
+                    ? `2px solid ${dotColor}`
+                    : isUnder
+                    ? 'none'
+                    : '1.5px solid rgba(44,24,16,0.1)',
+                  background: isUnder ? dotColor : 'transparent',
+                  opacity: isUnder ? (isSelected ? 1 : 0.55) : 0.3,
+                  cursor: 'pointer',
+                  transform: isSelected ? 'scale(1.25)' : 'scale(1)',
+                  transition: 'transform 0.1s ease, opacity 0.1s ease',
+                  padding: 0,
+                }}
+              />
+            )
+          })}
+        </div>
+        <div
+          className="row row--between muted"
+          style={{ fontSize: 11, marginTop: 5 }}
+        >
+          <span>1 · mild</span>
+          <span>10 · worst</span>
+        </div>
+        {pain !== null && (
+          <p
+            style={{
+              margin: '6px 0 0',
+              fontSize: 13,
+              fontWeight: 600,
+              color:
+                pain <= 3 ? '#4BAF6B'
+                : pain <= 6 ? '#C8920A'
+                : pain <= 8 ? '#E06B6B'
+                : '#C01B50',
+            }}
+          >
+            {pain <= 3 ? 'Mild' : pain <= 6 ? 'Moderate' : pain <= 8 ? 'Severe' : 'Extreme'} · {pain}/10
+          </p>
+        )}
+      </div>
+
+      {/* ── 3. Symptom bubbles ─────────────────────────────────────── */}
+      <div style={{ marginTop: 22 }}>
+        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
+          Any symptoms?{' '}
+          <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
+            tap all that apply
+          </span>
+        </p>
+        <div className="chips">
+          {SYMPTOMS.map((s) => {
+            const isSelected = symptoms.includes(s)
+            return (
+              <Chip
+                key={s}
+                selected={isSelected}
+                onClick={() => toggleSymptom(s)}
               >
                 {s}
               </Chip>
             )
           })}
         </div>
-        <div className="spacer" />
-        <Button block onClick={goNext}>Next</Button>
       </div>
-    )
-  }
 
-  // lg-2: Pain
-  if (currentStep === 2) {
-    return (
-      <div className="screen">
-        <TopBar onBack={goBack} />
-        <ProgressBar value={0.4} />
-        <h2 style={{ fontSize: 24, margin: '24px 0 12px' }}>Pain level</h2>
-        <p className="muted" style={{ marginBottom: 32 }}>1 to 5 scale.</p>
-        
-        <div className="stack-16">
-          <div className="center">
-            <span className="big-num" style={{ fontSize: 52, color: 'var(--pink-accent)' }}>
-              {logData.pain !== null ? logData.pain : '-'}
-            </span>
-          </div>
-          <input
-            className="slider"
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            value={logData.pain || 1}
-            onChange={(e) => updateLog('pain', Number(e.target.value))}
-          />
-        </div>
-        
-        <div className="spacer" />
-        <Button block disabled={logData.pain === null} onClick={goNext}>Next</Button>
-      </div>
-    )
-  }
-
-  // lg-3: Impact
-  if (currentStep === 3) {
-    return (
-      <div className="screen">
-        <TopBar onBack={goBack} />
-        <ProgressBar value={0.6} />
-        <h2 style={{ fontSize: 24, margin: '24px 0 12px' }}>Did it affect your day?</h2>
-        
-        <div className="stack-16" style={{ marginTop: 24 }}>
-          {IMPACTS.map(imp => {
-            const isSelected = logData.impacts.includes(imp.id)
-            return (
-              <button 
-                key={imp.id}
-                onClick={() => {
-                  if (isSelected) updateLog('impacts', logData.impacts.filter(x => x !== imp.id))
-                  else updateLog('impacts', [...logData.impacts, imp.id])
-                }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 12, padding: '16px',
-                  width: '100%',
-                  border: `1.5px solid ${isSelected ? 'var(--pink-accent)' : 'var(--border-light)'}`,
-                  borderRadius: 'var(--radius)',
-                  background: isSelected ? 'var(--pink-light)' : 'var(--surface)'
-                }}
-              >
-                <span style={{ fontSize: 24 }} aria-hidden="true">{imp.icon}</span>
-                <span style={{ fontSize: 16, fontWeight: 500 }}>{imp.label}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        <div className="card" style={{ marginTop: 24, background: 'var(--pink-light)', borderLeft: '3px solid var(--pink-accent)' }}>
-          <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.4 }}>
-            <strong>real talk:</strong> Logging impact isn't just for you. This is the evidence doctors take seriously.
-          </p>
-        </div>
-
-        <div className="spacer" />
-        <Button block disabled={logData.impacts.length === 0} onClick={goNext}>Next</Button>
-      </div>
-    )
-  }
-
-  // lg-4: Overall mood
-  if (currentStep === 4) {
-    return (
-      <div className="screen">
-        <TopBar onBack={goBack} />
-        <ProgressBar value={0.8} />
-        <h2 style={{ fontSize: 24, margin: '24px 0 12px' }}>How's your overall mood today?</h2>
-        <p className="muted" style={{ marginBottom: 24 }}>Pick the one that feels closest.</p>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginTop: 8 }}>
-          {VIBE_OPTIONS.map(({ key, label, Icon, color, value }) => {
-            const selected = logData.vibe?.key === key
+      {/* ── 4. Impact icon-row ─────────────────────────────────────── */}
+      <div style={{ marginTop: 22 }}>
+        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
+          Did it affect your day?
+        </p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(5, 1fr)',
+            gap: 7,
+          }}
+        >
+          {IMPACTS.map(({ id, label, Icon, color }) => {
+            const isSelected = impacts.includes(id)
             return (
               <button
-                key={key}
+                key={id}
+                id={`impact-${id}`}
                 type="button"
                 aria-label={label}
-                aria-pressed={selected}
-                onClick={() => updateLog('vibe', { key, value })}
+                aria-pressed={isSelected}
+                onClick={() => toggleImpact(id)}
                 style={{
-                  aspectRatio: '1',
-                  minHeight: 58,
-                  border: `1.5px solid ${selected ? color : 'rgba(44,24,16,0.08)'}`,
-                  borderRadius: 16,
-                  background: selected ? `color-mix(in srgb, ${color} 16%, white)` : '#fff',
-                  color,
-                  display: 'grid',
-                  placeItems: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 5,
+                  padding: '10px 4px',
+                  border: `1.5px solid ${isSelected ? color : 'rgba(44,24,16,0.08)'}`,
+                  borderRadius: 12,
+                  background: isSelected
+                    ? `color-mix(in srgb, ${color} 12%, white)`
+                    : '#fff',
                   cursor: 'pointer',
-                  transform: selected ? 'scale(0.97)' : 'scale(1)',
-                  transition: 'transform 0.15s ease, background 0.15s ease, border 0.15s ease',
+                  transition: 'border 0.12s ease, background 0.12s ease',
                 }}
               >
-                <Icon size={30} weight={selected ? 'fill' : 'duotone'} color={color} />
+                <Icon
+                  size={22}
+                  weight={isSelected ? 'fill' : 'regular'}
+                  color={isSelected ? color : 'rgba(44,24,16,0.35)'}
+                />
+                <span
+                  style={{
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: isSelected ? color : 'rgba(44,24,16,0.4)',
+                    textAlign: 'center',
+                    lineHeight: 1.2,
+                  }}
+                >
+                  {label}
+                </span>
               </button>
             )
           })}
         </div>
-        
-        <div className="spacer" />
-        <Button block disabled={!logData.vibe} onClick={goNext}>Next</Button>
       </div>
-    )
-  }
 
-  // lg-5: Maisie reaction
-  if (currentStep === 5) {
-    return (
-      <div className="screen center">
-        <TopBar onBack={goBack} />
-        <ProgressBar value={1.0} />
-        <div className="spacer" />
-        
-        <MaisieLogo size={80} />
-        <div className="card" style={{ marginTop: 24, textAlign: 'left' }}>
-          <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5 }}>
-            ok, I see you. You logged {logData.symptoms.length} symptoms, pain at a {logData.pain}, and your overall mood. thanks for updating your chart today.
+      {/* ── 5. Log it ──────────────────────────────────────────────── */}
+      <div style={{ marginTop: 28 }}>
+        {!canLog && (
+          <p
+            className="muted center"
+            style={{ fontSize: 12.5, marginBottom: 8 }}
+          >
+            Tap a mood face to continue
           </p>
-        </div>
-        
-        <div className="spacer" />
-        <Button block onClick={finish}>Finish</Button>
+        )}
+        <button
+          id="log-it-button"
+          type="button"
+          disabled={!canLog}
+          onClick={handleLogIt}
+          style={{
+            width: '100%',
+            padding: '16px',
+            border: 'none',
+            borderRadius: 14,
+            background: canLog ? 'var(--pink-accent, #E0528A)' : 'rgba(44,24,16,0.1)',
+            color: canLog ? '#fff' : 'rgba(44,24,16,0.35)',
+            fontSize: 16,
+            fontWeight: 700,
+            cursor: canLog ? 'pointer' : 'default',
+            transition: 'background 0.15s ease',
+          }}
+        >
+          Log it ✓
+        </button>
+        <p className="muted center" style={{ fontSize: 11.5, marginTop: 8 }}>
+          Takes less than 10 seconds · your data stays private
+        </p>
       </div>
-    )
-  }
+    </div>
+  )
 }

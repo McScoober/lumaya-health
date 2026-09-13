@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore, THEME_MAP } from '../state/store.jsx'
-import { Button, Card, ChipGroup } from '../components/ui.jsx'
+import { Button, Card, ChipGroup, TopBar } from '../components/ui.jsx'
 
 const THEME_OPTIONS = ['Calm pastels', 'Bold & bright', 'Minimal & clean', 'Surprise me']
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
@@ -40,7 +40,7 @@ export default function Settings() {
   return (
     <div className="screen screen--pad-bottom">
       {toast && <div className="toast">{toast}</div>}
-      <h1>Settings</h1>
+      <TopBar title="Settings" onBack={() => navigate('/home')} />
 
       <div className="card__label" style={{ marginTop: 8 }}>Cycle nickname</div>
       <Card>
@@ -82,7 +82,7 @@ export default function Settings() {
       </Card>
 
       <div className="card__label" style={{ marginTop: 18 }}>{identity.isMinor ? 'Parent dashboard' : 'Support contact'}</div>
-      <Card onClick={() => navigate('/dashboard')} role="button" tabIndex={0} style={{ cursor: 'pointer' }}>
+      <Card onClick={() => navigate('/support')} role="button" tabIndex={0} style={{ cursor: 'pointer' }}>
         <div className="row row--between">
           <span>{identity.isMinor ? 'Manage parent dashboard' : 'Manage support contact'}</span>
           <span className="muted">›</span>

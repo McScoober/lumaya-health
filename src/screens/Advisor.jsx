@@ -1,122 +1,330 @@
-// Screen 9 — Advisor connection (TRD Section 11)
-// No EHR, no live chat, no booking. Collect name + email, "send" a formatted
-// email to the Lumaya advisor inbox with result level, flagged rule IDs, and the
-// full structured answers, then confirm a 48-hour reply window.
-import { useState } from 'react'
+// Advisor.jsx — "What to show your doctor" (Doctor Visit Guide & Script)
+// Replaces the placeholder human advisor form with an actionable, empowering
+// doctor prep tool: conversation scripts, clinical summary card, and questions to ask.
+
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { Button, Card, TopBar } from '../components/ui.jsx'
-import Mascot from '../components/Mascot.jsx'
-import { getCurrentUserId } from '../lib/supabase.js'
-import { pushAdvisorRequest } from '../lib/sync.js'
+import { TopBar, Card, Button, Badge } from '../components/ui.jsx'
+import { dateKeyLocal, addDays } from '../engine/cyclePredictor.js'
 
-// In production this posts to Formspree / Resend / a small Express endpoint (Section 11).
-// Here we simulate the send and surface the exact payload for transparency.
-function buildAdvisorEmail({ name, email, result, answers }) {
-  return {
-    to: 'advisors@lumayahealth.example',
-    subject: `New Lumaya advisor request — result: ${result?.level}`,
-    body: {
-      name,
-      email,
-      resultLevel: result?.level,
-      flaggedRuleIds: (result?.flags || []).map((f) => f.id),
-      structuredAnswers: answers,
-      submittedAt: new Date().toISOString(),
-    },
-  }
+function actualImpacts(log) {
+  return (log.impact || []).filter((impact) => impact !== 'fine')
 }
 
 export default function Advisor() {
   const navigate = useNavigate()
-  const { state, dispatch } = useStore()
-  const [name, setName] = useState(state.identity.name)
-  const [email, setEmail] = useState(state.identity.email)
-  const [sent, setSent] = useState(false)
-  const [payload, setPayload] = useState(null)
-  const [showPayload, setShowPayload] = useState(false)
+  const { state } = useStore()
+  const [copied, setCopied] = useState(false)
+  const [activeTab, setActiveTab] = useState('script') // 'script' | 'summary'
 
-  const valid = name.trim() && /.+@.+\..+/.test(email)
+  const name = state.identity?.name || 'Maisie User'
+  const age = state.identity?.ageBand ? `${state.identity.ageBand} yrs old` : 'Teen'
+  const worstPain = state.answers?.painWorst || (state.result?.flags?.some((f) => f.id.includes('PAIN')) ? '7-8' : '5-6')
+  const cycleLen = state.answers?.cycleLen || '28'
+  const flow = state.answers?.flow || 'Moderate'
 
-  function send() {
-    const p = buildAdvisorEmail({ name: name.trim(), email: email.trim(), result: state.result, answers: state.answers })
-    setPayload(p)
-    dispatch({ type: 'CONNECT_ADVISOR' })
-    // Best-effort: record the request in the advisor_requests table too (§11).
-    pushAdvisorRequest(getCurrentUserId(), { level: state.result?.level, flagIds: p.body.flaggedRuleIds })
-    dispatch({
-      type: 'ADD_MESSAGE',
-      message: {
-        id: 'adv-' + Date.now(),
-        at: new Date().toISOString(),
-        channel: 'system',
-        title: 'Advisor request received',
-        body: 'A Lumaya advisor will review your results and reach out within 48 hours.',
-        read: false,
-      },
+  // Extract logged symptoms & impacts across dailyLogs
+  const { loggedSymptoms, hasLoggedSymptoms, impactCount, highPainDays, totalLogs } = useMemo(() => {
+    const logs = Object.values(state.dailyLogs || {})
+    const symptomMap = {}
+    let impacts = 0
+    let highPain = 0
+
+    logs.forEach((log) => {
+      if (log.pain >= 6) highPain++
+      impacts += actualImpacts(log).length
+      ;(log.symptoms || []).forEach((s) => {
+        symptomMap[s] = (symptomMap[s] || 0) + 1
+      })
     })
-    setSent(true)
-  }
 
-  if (sent) {
-    return (
-      <div className="screen center" style={{ justifyContent: 'center' }}>
-        <Mascot size={110} />
-        <h1 style={{ marginTop: 16 }}>You’re all set</h1>
-        <p className="muted" style={{ maxWidth: 320 }}>
-          A Lumaya advisor will review your results and reach out to <strong>{email}</strong> within
-          48 hours. Nothing else you need to do.
-        </p>
-        <div className="spacer" />
-        <Button variant="ghost" onClick={() => setShowPayload((s) => !s)} style={{ fontSize: 13 }}>
-          {showPayload ? 'Hide' : 'What gets sent to the advisor?'}
-        </Button>
-        {showPayload && payload && (
-          <Card style={{ textAlign: 'left', marginTop: 8 }}>
-            <p className="muted" style={{ fontSize: 12, margin: '0 0 6px' }}>
-              Result level + flagged rule IDs + your structured answers (Section 11):
-            </p>
-            <pre style={{ fontSize: 11, overflow: 'auto', margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-              {JSON.stringify(payload.body, null, 2)}
-            </pre>
-          </Card>
-        )}
-        <Button block onClick={() => navigate('/home')} style={{ marginTop: 16 }}>
-          Back to home
-        </Button>
-      </div>
-    )
+    const topSymptoms = Object.entries(symptomMap)
+      .sort((a, b) => b[1] - a[1])
+      .map(([name]) => name)
+
+    return {
+      loggedSymptoms: topSymptoms,
+      hasLoggedSymptoms: topSymptoms.length > 0,
+      impactCount: logs.length > 0 ? impacts : (worstPain >= 7 ? 3 : 1),
+      highPainDays: highPain || (worstPain >= 7 ? 2 : 1),
+      totalLogs: logs.length,
+    }
+  }, [state.dailyLogs, worstPain])
+
+  // Formatted Clinical Text for Doctor / Clipboard
+  const doctorSummaryText = useMemo(() => {
+    return `MAISIE HEALTH — PATIENT SYMPTOM SUMMARY
+--------------------------------------------------
+Patient: ${name} (${age})
+Date: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+Tracking Window: Last 30 days (${totalLogs > 0 ? `${totalLogs} days tracked` : 'Check-in data'})
+
+CYCLE PROFILE:
+• Estimated Cycle Length: ~${cycleLen} days
+• Typical Flow: ${flow}
+• Peak Pain Level: ${worstPain}/10
+
+SYMPTOMS REPORTED:
+• Frequent Symptoms: ${hasLoggedSymptoms ? loggedSymptoms.slice(0, 5).join(', ') : 'No daily symptoms logged yet'}
+• Days with Severe Pain (≥6/10): ${highPainDays}
+• School / Activities / Sleep Affected: ${impactCount} time${impactCount === 1 ? '' : 's'}
+
+CLINICAL REASON FOR VISIT:
+Patient is tracking menstrual cycle symptoms to discuss pain management, symptom timing, and rule out underlying secondary dysmenorrhea.
+
+Generated by Maisie Health for clinical discussion.`
+  }, [name, age, cycleLen, flow, worstPain, loggedSymptoms, hasLoggedSymptoms, highPainDays, impactCount, totalLogs])
+
+  const handleCopy = () => {
+    navigator.clipboard?.writeText(doctorSummaryText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 3000)
   }
 
   return (
-    <div className="screen">
-      <TopBar title="Connect with an advisor" onBack={() => navigate(-1)} />
+    <div className="screen screen--pad-bottom">
+      <TopBar title="What to show your doctor" onBack={() => navigate(-1)} />
 
-      <Card accent style={{ marginTop: 8 }}>
-        <p style={{ margin: 0, fontSize: 14.5 }}>
-          A Lumaya advisor is a real person who reviews your check-in and reaches out with a
-          recommendation. No appointment, no referral, no cost to connect.
-        </p>
+      {/* Intro Banner */}
+      <Card
+        style={{
+          marginTop: 12,
+          background: 'linear-gradient(135deg, #FFF5F7 0%, #FAF0F4 100%)',
+          border: '1.5px solid rgba(224, 76, 122, 0.25)',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <span style={{ fontSize: 22, lineHeight: 1 }}>🩺</span>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: '#7B1B40' }}>
+              Doctors love real symptom data
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#5C1832', lineHeight: 1.5 }}>
+              You don’t have to memorize anything or guess what to say. Show them this summary card or read the quick script below.
+            </p>
+          </div>
+        </div>
       </Card>
 
-      <div className="stack-16" style={{ marginTop: 18 }}>
-        <div className="field">
-          <label htmlFor="advName">Your name</label>
-          <input id="advName" className="input" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="field">
-          <label htmlFor="advEmail">Email for the advisor to reach you</label>
-          <input id="advEmail" className="input" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </div>
+      {/* Segmented View Switcher */}
+      <div
+        style={{
+          display: 'flex',
+          background: 'rgba(0,0,0,0.05)',
+          padding: 4,
+          borderRadius: 14,
+          marginTop: 18,
+          gap: 4,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab('script')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'script' ? '#fff' : 'transparent',
+            color: activeTab === 'script' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: 700,
+            fontSize: 13,
+            boxShadow: activeTab === 'script' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          💬 What to Say
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('summary')}
+          style={{
+            flex: 1,
+            padding: '8px 12px',
+            borderRadius: 10,
+            border: 'none',
+            background: activeTab === 'summary' ? '#fff' : 'transparent',
+            color: activeTab === 'summary' ? 'var(--text-primary)' : 'var(--text-secondary)',
+            fontWeight: 700,
+            fontSize: 13,
+            boxShadow: activeTab === 'summary' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          📄 Summary to Show
+        </button>
       </div>
 
-      <div className="spacer" />
-      <Button block disabled={!valid} onClick={send} style={{ marginTop: 16 }}>
-        Send to a Lumaya advisor
-      </Button>
-      <p className="muted center" style={{ fontSize: 12, marginTop: 10 }}>
-        Your answers are shared only with the advisor, only when you tap send.
-      </p>
+      {/* TAB 1: WHAT TO SAY (SCRIPT) */}
+      {activeTab === 'script' && (
+        <div className="stack-16" style={{ marginTop: 16 }}>
+          {/* Main Opening Script */}
+          <Card>
+            <p className="eyebrow" style={{ margin: '0 0 6px', color: 'var(--pink-accent)' }}>
+              1. Opening Line (Read or Paraphrase)
+            </p>
+            <div
+              style={{
+                background: '#FAF9F6',
+                borderLeft: '3px solid var(--pink-accent)',
+                padding: '12px 14px',
+                borderRadius: '0 10px 10px 0',
+                fontSize: 14,
+                color: '#2B211E',
+                lineHeight: 1.55,
+                fontStyle: 'italic',
+              }}
+            >
+              "I’ve been tracking my period with an app because my cramps have been reaching a {worstPain}/10. It’s caused me to miss school/activities {impactCount} times recently, and normal painkillers don't seem to help enough."
+            </div>
+          </Card>
+
+          {/* Key Facts to Mention */}
+          <Card>
+            <p className="eyebrow" style={{ margin: '0 0 8px' }}>
+              2. Three Facts to Mention
+            </p>
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13.5, color: '#444', lineHeight: 1.6 }}>
+              <li>
+                <strong>Pain timing:</strong> Cramps are worst on <em>Days 1–2</em> of my period.
+              </li>
+              <li>
+                <strong>Other symptoms:</strong>{' '}
+                {hasLoggedSymptoms
+                  ? `I also get ${loggedSymptoms.slice(0, 3).join(', ')}.`
+                  : 'I have not logged specific daily symptoms yet.'}
+              </li>
+              <li>
+                <strong>Impact:</strong> It’s not just uncomfortable — it actively stops me from my normal routine.
+              </li>
+            </ul>
+          </Card>
+
+          {/* 3 Questions to Ask the Doctor */}
+          <Card>
+            <p className="eyebrow" style={{ margin: '0 0 8px' }}>
+              3. Questions to Ask Your Doctor
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ padding: '10px 12px', background: '#F8F9FA', borderRadius: 10, fontSize: 13 }}>
+                ❓ <em>"Could this pain level be dysmenorrhea or endometriosis?"</em>
+              </div>
+              <div style={{ padding: '10px 12px', background: '#F8F9FA', borderRadius: 10, fontSize: 13 }}>
+                ❓ <em>"Are there prescription options or different pain medicines that work better?"</em>
+              </div>
+              <div style={{ padding: '10px 12px', background: '#F8F9FA', borderRadius: 10, fontSize: 13 }}>
+                ❓ <em>"Should we check my iron or hormones if I feel exhausted every cycle?"</em>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* TAB 2: SUMMARY TO SHOW (DATA CARD) */}
+      {activeTab === 'summary' && (
+        <div className="stack-16" style={{ marginTop: 16 }}>
+          <Card style={{ padding: 18 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 15, color: 'var(--text-primary)' }}>
+                  {name}
+                </h3>
+                <p style={{ margin: '2px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Age: {age} · Maisie Cycle Report
+                </p>
+              </div>
+              <Badge level={worstPain >= 7 ? 'Moderate' : 'Mild'} />
+            </div>
+
+            {/* Key Data Grid */}
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 8,
+                margin: '12px 0',
+              }}
+            >
+              <div style={{ padding: '10px 12px', background: '#FAF9F6', borderRadius: 10 }}>
+                <span style={{ fontSize: 11, color: '#888', display: 'block' }}>Peak Pain</span>
+                <strong style={{ fontSize: 16, color: '#A61B46' }}>{worstPain} / 10</strong>
+              </div>
+              <div style={{ padding: '10px 12px', background: '#FAF9F6', borderRadius: 10 }}>
+                <span style={{ fontSize: 11, color: '#888', display: 'block' }}>Cycle Length</span>
+                <strong style={{ fontSize: 16, color: '#333' }}>~{cycleLen} days</strong>
+              </div>
+              <div style={{ padding: '10px 12px', background: '#FAF9F6', borderRadius: 10 }}>
+                <span style={{ fontSize: 11, color: '#888', display: 'block' }}>Typical Flow</span>
+                <strong style={{ fontSize: 14, color: '#333' }}>{flow}</strong>
+              </div>
+              <div style={{ padding: '10px 12px', background: '#FAF9F6', borderRadius: 10 }}>
+                <span style={{ fontSize: 11, color: '#888', display: 'block' }}>School / Activities / Sleep</span>
+                <strong style={{ fontSize: 14, color: '#D97706' }}>
+                  {impactCount} time{impactCount === 1 ? '' : 's'} affected
+                </strong>
+              </div>
+            </div>
+
+            {/* Symptoms */}
+            <div style={{ marginTop: 10 }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#555' }}>Key Symptoms Logged:</span>
+              {hasLoggedSymptoms ? (
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+                  {loggedSymptoms.slice(0, 6).map((s) => (
+                    <span
+                      key={s}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: 12,
+                        background: 'rgba(224, 76, 122, 0.1)',
+                        color: 'var(--pink-accent)',
+                        fontSize: 11,
+                        fontWeight: 600,
+                      }}
+                    >
+                      {s}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: '5px 0 0', fontSize: 12, color: '#888' }}>
+                  No daily symptoms logged yet.
+                </p>
+              )}
+            </div>
+
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: '1px solid rgba(0,0,0,0.06)' }}>
+              <p style={{ margin: 0, fontSize: 11, color: '#777', lineHeight: 1.4 }}>
+                💡 <em>You can hand your phone to your provider or show this screen directly during your appointment.</em>
+              </p>
+            </div>
+          </Card>
+
+          {/* Copy Button */}
+          <Button variant="primary" block onClick={handleCopy}>
+            {copied ? '✓ Copied Summary to Clipboard!' : 'Copy Summary for Doctor 📋'}
+          </Button>
+        </div>
+      )}
+
+      {/* Support Adult Tip */}
+      <div
+        style={{
+          marginTop: 18,
+          padding: '12px 14px',
+          background: '#F8FAFC',
+          borderRadius: 12,
+          border: '1px solid #E2E8F0',
+          fontSize: 12,
+          color: '#475569',
+          lineHeight: 1.5,
+        }}
+      >
+        <strong>Tip:</strong> You can bring a parent, guardian, or older sibling into the exam room with you. They can help make sure the doctor hears your concerns and takes your symptoms seriously.
+      </div>
     </div>
   )
 }

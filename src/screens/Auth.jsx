@@ -1,7 +1,7 @@
 // Screen, Auth / Magic Link Login
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { supabase, isSupabaseConfigured } from '../lib/supabase.js'
+import { supabase, isSupabaseConfigured, getAuthRedirectUrl } from '../lib/supabase.js'
 import { Button, TopBar, Card } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import { EnvelopeSimple, CheckCircle, WarningCircle } from '@phosphor-icons/react'
@@ -35,7 +35,7 @@ export default function Auth() {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/home`,
+        emailRedirectTo: getAuthRedirectUrl('/home'),
       },
     })
 

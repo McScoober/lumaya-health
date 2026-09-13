@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { supabase, isSupabaseConfigured } from '../lib/supabase.js'
+import { supabase, isSupabaseConfigured, getAuthCallbackParams } from '../lib/supabase.js'
 import { pullFromSupabase } from '../lib/sync.js'
 import { useStore } from '../state/store.jsx'
 
@@ -19,11 +19,31 @@ export default function AuthCallback() {
         return
       }
 
-      const next = searchParams.get('next') || '/home'
-      const hasCode = window.location.search.includes('code=')
+      const callbackParams = getAuthCallbackParams()
+      const next = callbackParams.get('next') || searchParams.get('next') || '/home'
+      const errorDescription = callbackParams.get('error_description')
+      const errorCode = callbackParams.get('error_code')
+      const code = callbackParams.get('code')
+      const accessToken = callbackParams.get('access_token')
+      const refreshToken = callbackParams.get('refresh_token')
 
-      if (hasCode) {
-        const { error } = await supabase.auth.exchangeCodeForSession(window.location.href)
+      if (errorDescription) {
+        const suffix = errorCode ? ` (${errorCode})` : ''
+        if (!cancelled) setMessage(`${errorDescription}${suffix}`)
+        return
+      }
+
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code)
+        if (error) {
+          if (!cancelled) setMessage(error.message || 'This sign-in link did not work. Please request a new one.')
+          return
+        }
+      } else if (accessToken && refreshToken) {
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
         if (error) {
           if (!cancelled) setMessage(error.message || 'This sign-in link did not work. Please request a new one.')
           return

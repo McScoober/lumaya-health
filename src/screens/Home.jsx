@@ -5,15 +5,13 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, monthMatrix, isInPeriodWindow, PHASE_META } from '../engine/cyclePredictor.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, isInPeriodWindow, PHASE_META } from '../engine/cyclePredictor.js'
 import { buildTip, maisieMessage } from '../engine/tipEngine.js'
 import { Card, Button } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
-import { CheckCircle } from '@phosphor-icons/react'
-
-const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
-const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
+import ProgressiveCheckin from './ProgressiveCheckin.jsx'
+import { CheckCircle, Gear } from '@phosphor-icons/react'
 
 /* Mock data for placeholders since engine isn't connected yet */
 const MOCK_SIGNALS = {
@@ -51,11 +49,7 @@ export default function Home() {
     [phase, cycleDay, state.profile]
   )
 
-  const [calMonth, setCalMonth] = useState({ y: now.getFullYear(), m: now.getMonth() })
-  const cells = useMemo(
-    () => monthMatrix(cycleModel, calMonth.y, calMonth.m, state.dailyLogs, state.periodLogs),
-    [cycleModel, calMonth, state.dailyLogs, state.periodLogs],
-  )
+
 
   // Phase tint variables for the screen (13.2.3)
   const tintStyle = meta
@@ -190,6 +184,9 @@ export default function Home() {
         )}
       </Card>
 
+      {/* Progressive onboarding mini-cards (fast-start users only) */}
+      <ProgressiveCheckin />
+
       {shouldShowPeriodStartCard && (
         <Card style={{ marginTop: 14, background: '#FDEEF4', borderColor: 'rgba(224,82,138,0.35)' }}>
           {periodStartedToday ? (
@@ -253,41 +250,7 @@ export default function Home() {
         </Card>
       )}
 
-      {/* Calendar */}
-      <Card style={{ marginTop: 14 }}>
-        <div className="row row--between" style={{ marginBottom: 10 }}>
-          <button className="topbar__back" style={{ width: 34, height: 34 }} aria-label="Previous month"
-            onClick={() => setCalMonth((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))}>‹</button>
-          <strong style={{ fontFamily: 'var(--font-head)' }}>{MONTHS[calMonth.m]} {calMonth.y}</strong>
-          <button className="topbar__back" style={{ width: 34, height: 34 }} aria-label="Next month"
-            onClick={() => setCalMonth((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))}>›</button>
-        </div>
-        <div className="cal">
-          {DOW.map((d, i) => <div key={i} className="cal__dow">{d}</div>)}
-          {cells.map((cell, i) =>
-            cell === null ? (
-              <div key={i} />
-            ) : (
-              <div
-                key={i}
-                className={[
-                  'cal__day',
-                  cell.isToday ? 'cal__day--today' : '',
-                  cell.actualPeriod ? 'cal__day--period' : cell.predictedPeriod ? 'cal__day--predicted' : '',
-                  cell.isLogged ? 'cal__day--logged' : '',
-                ].join(' ')}
-              >
-                {cell.day}
-              </div>
-            ),
-          )}
-        </div>
-        <div className="row" style={{ marginTop: 12, gap: 16, flexWrap: 'wrap', fontSize: 11 }}>
-          <span className="row" style={{ gap: 6 }}><i style={{ width: 12, height: 12, borderRadius: 4, background: 'var(--phase-soft)', display: 'inline-block' }} /> Period</span>
-          <span className="row" style={{ gap: 6 }}><i style={{ width: 12, height: 12, borderRadius: 4, border: '1px solid var(--phase-accent)', display: 'inline-block' }} /> Predicted</span>
-          <span className="row" style={{ gap: 6 }}><i style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--phase-accent)', display: 'inline-block' }} /> Checked in</span>
-        </div>
-      </Card>
+
 
       <div style={{ marginTop: 24 }} className="stack-16">
         <MetabolicCard title="Energy" value={MOCK_SIGNALS.energy.val} color="var(--signal-energy)" description={MOCK_SIGNALS.energy.desc} trendPoints={MOCK_SIGNALS.energy.trend} />

@@ -126,7 +126,7 @@ export default function Result() {
         </div>
       </div>
 
-      <button onClick={() => navigate('/')}
+      <button onClick={() => navigate('/home')}
         style={{
           width: '100%',
           maxWidth: '340px',

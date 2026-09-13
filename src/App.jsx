@@ -18,7 +18,7 @@ import ParentView from './screens/ParentView.jsx'
 import Settings from './screens/Settings.jsx'
 import Messages from './screens/Messages.jsx'
 
-const APP_TABS = ['/home', '/signals', '/patterns', '/support', '/library']
+const APP_TABS = ['/home', '/patterns', '/library', '/profile']
 
 function RequireOnboarded({ children }) {
   const { state } = useStore()
@@ -27,17 +27,16 @@ function RequireOnboarded({ children }) {
 }
 
 import DailyLog from './screens/DailyLog.jsx'
-import Signals from './screens/Signals.jsx'
 import Patterns from './screens/Patterns.jsx'
 
-// Stubs for the new screens
-const Library = () => <div className="screen center"><p>Educational Library Placeholder</p></div>
+import Library from './screens/Library.jsx'
+import Profile from './screens/Profile.jsx'
 
 export default function App() {
   const { pathname } = useLocation()
   
-  // UX RULE: Nav hidden during all log screens.
-  const isLogScreen = pathname.startsWith('/log')
+  // UX RULE: Nav hidden during the log screen.
+  const isLogScreen = pathname === '/log'
   const showTabs = APP_TABS.some((t) => pathname.startsWith(t)) && !isLogScreen
 
   return (
@@ -55,18 +54,20 @@ export default function App() {
 
           {/* New Maisie App Routes */}
           <Route path="/home" element={<RequireOnboarded><Home /></RequireOnboarded>} />
-          <Route path="/signals" element={<RequireOnboarded><Signals /></RequireOnboarded>} />
+          <Route path="/signals" element={<Navigate to="/patterns?tab=signals" replace />} />
           <Route path="/patterns" element={<RequireOnboarded><Patterns /></RequireOnboarded>} />
-          <Route path="/support" element={<RequireOnboarded><Dashboard /></RequireOnboarded>} />
           <Route path="/library" element={<RequireOnboarded><Library /></RequireOnboarded>} />
+          <Route path="/profile" element={<RequireOnboarded><Profile /></RequireOnboarded>} />
+          <Route path="/support" element={<Navigate to="/profile" replace />} />
+          <Route path="/dashboard" element={<Navigate to="/profile" replace />} />
           
           {/* Ongoing app - existing but might need refactoring */}
-          <Route path="/log/:step" element={<RequireOnboarded><DailyLog /></RequireOnboarded>} />
-          <Route path="/daily" element={<Navigate to="/log/0" replace />} />
+          <Route path="/log" element={<RequireOnboarded><DailyLog /></RequireOnboarded>} />
+          <Route path="/daily" element={<Navigate to="/log" replace />} />
           <Route path="/tip/:phase" element={<RequireOnboarded><PhaseTip /></RequireOnboarded>} />
           <Route path="/advisor" element={<RequireOnboarded><Advisor /></RequireOnboarded>} />
           <Route path="/messages" element={<RequireOnboarded><Messages /></RequireOnboarded>} />
-          <Route path="/settings" element={<RequireOnboarded><Settings /></RequireOnboarded>} />
+          <Route path="/settings" element={<Navigate to="/profile" replace />} />
 
           {/* Standalone parent/support dashboard view (shared link) */}
           <Route path="/parent" element={<ParentView />} />

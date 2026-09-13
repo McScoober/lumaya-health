@@ -12,7 +12,12 @@ export const isSupabaseConfigured = Boolean(url && anonKey && !url.includes('YOU
 
 export const supabase = isSupabaseConfigured
   ? createClient(url, anonKey, {
-      auth: { persistSession: true, autoRefreshToken: true },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        flowType: 'pkce',
+      },
     })
   : null
 
@@ -29,11 +34,60 @@ export function getCurrentUserId() {
 
 function hasPendingEmailAuthCallback() {
   if (typeof window === 'undefined') return false
-  return window.location.pathname === '/auth/callback' &&
-    (window.location.search.includes('code=') || window.location.hash.includes('access_token='))
+  const isCallbackRoute = window.location.pathname === '/auth/callback' ||
+    window.location.hash.startsWith('#/auth/callback')
+  return isCallbackRoute &&
+    (window.location.search.includes('code=') ||
+      window.location.hash.includes('code=') ||
+      window.location.hash.includes('access_token='))
+}
+
+export function getAuthRedirectUrl(next = '/home') {
+  if (typeof window === 'undefined') return undefined
+
+  const nextParam = encodeURIComponent(next)
+  if (import.meta.env.VITE_ROUTER === 'hash') {
+    return `${window.location.origin}/#/auth/callback?next=${nextParam}`
+  }
+  return `${window.location.origin}/auth/callback?next=${nextParam}`
+}
+
+export function getAuthCallbackParams() {
+  if (typeof window === 'undefined') return new URLSearchParams()
+
+  const params = new URLSearchParams(window.location.search)
+  const hash = window.location.hash.startsWith('#')
+    ? window.location.hash.slice(1)
+    : window.location.hash
+
+  if (hash) {
+    const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : hash
+    const hashParams = new URLSearchParams(hashQuery)
+    hashParams.forEach((value, key) => {
+      if (!params.has(key)) params.set(key, value)
+    })
+  }
+
+  return params
 }
 
 export async function ensureAuthUser() {
+  if (!supabase) return null
+  if (hasPendingEmailAuthCallback()) return null
+
+  const existingUserId = await getExistingAuthUserId()
+  if (existingUserId) return existingUserId
+
+  const { data, error } = await supabase.auth.signInAnonymously()
+  if (error) {
+    console.warn('[lumaya] anonymous sign-in failed:', error.message)
+    return null
+  }
+  currentUserId = data?.user?.id ?? null
+  return currentUserId
+}
+
+export async function getExistingAuthUserId() {
   if (!supabase) return null
   if (hasPendingEmailAuthCallback()) return null
 
@@ -42,11 +96,5 @@ export async function ensureAuthUser() {
     currentUserId = sessionData.session.user.id
     return currentUserId
   }
-  const { data, error } = await supabase.auth.signInAnonymously()
-  if (error) {
-    console.warn('[lumaya] anonymous sign-in failed:', error.message)
-    return null
-  }
-  currentUserId = data?.user?.id ?? null
-  return currentUserId
+  return null
 }

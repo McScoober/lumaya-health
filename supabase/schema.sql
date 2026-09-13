@@ -82,3 +82,7 @@ create trigger profiles_touch before update on public.profiles
 drop trigger if exists health_touch on public.health_records;
 create trigger health_touch before update on public.health_records
   for each row execute function public.touch_updated_at();
+
+-- ---------- Grants for service_role (admin bypass / scripts) ----------
+grant all on all tables in schema public to postgres, service_role;
+grant all on all sequences in schema public to postgres, service_role;

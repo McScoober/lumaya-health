@@ -1,15 +1,13 @@
 // Bottom navigation for the ongoing app (post-onboarding).
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { House, Lightning, PencilLine, CalendarBlank, Handshake, Books } from '@phosphor-icons/react'
+import { House, CalendarBlank, Books, UserCircle } from '@phosphor-icons/react'
 
 const TABS = [
   { to: '/home', label: 'Home', Icon: House },
-  { to: '/signals', label: 'Signals', Icon: Lightning },
-  { to: '/log/0', label: 'Log', Icon: PencilLine },
   { to: '/patterns', label: 'Patterns', Icon: CalendarBlank },
-  { to: '/support', label: 'Support', Icon: Handshake },
   { to: '/library', label: 'Library', Icon: Books },
+  { to: '/profile', label: 'Profile', Icon: UserCircle },
 ]
 
 export default function TabBar() {

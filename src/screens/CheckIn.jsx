@@ -1,234 +1,259 @@
-// Screen 4, Deep Symptom Check-In, Q1 to 18 (TRD Section 7)
-// One question per screen. Skip logic (7.1): if Q2 = "Not yet", skip Q3 to 15.
-// Dates offer "I don't remember the exact date" (7.1). Pain sliders use the
-// anchors in Section 7.2. This is the onboarding baseline that seeds the tracker.
-import { useMemo, useState } from 'react'
+// Screen 4 — Fast-Start Seed Check-In (3 questions only)
+// Maisie rebuild: ask only the minimum needed to boot the cycle engine on day 1.
+// The remaining ~15 clinical questions surface as progressive mini-cards on Home
+// over the first week (2/day), so the data is still collected without upfront friction.
+//
+// Seed questions:
+//   1. Have you started your period? (gate — if No, skip 2 & 3)
+//   2. When did your last period start? (lastStart — date)
+//   3. How heavy is your heaviest day? (flow — chips)
+//   4. At its worst, how bad is your pain? (painWorst — 0–10 slider)
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { DEEP_QUESTIONS, activeQuestions, painLabel, PAIN_ANCHORS } from '../data/questions.js'
+import { PAIN_ANCHORS, painLabel } from '../data/questions.js'
 import { Button, Chip, ChipGroup, ProgressBar, TopBar } from '../components/ui.jsx'
-import YourThingSelector from '../components/YourThingSelector.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
 
 const TODAY = dateKeyLocal()
 
+const FLOW_OPTIONS = ['Very light', 'Light', 'Moderate', 'Heavy', 'Very heavy']
+
 function parseDate(value) {
   if (!value || value === 'unknown') return null
-  const date = new Date(`${value}T00:00:00`)
-  return Number.isNaN(date.getTime()) ? null : date
-}
-
-function daysBetween(a, b) {
-  const start = parseDate(a)
-  const end = parseDate(b)
-  if (!start || !end) return null
-  return Math.round((end - start) / 86400000)
-}
-
-function dateAnswerError(question, answers) {
-  if (question.type !== 'date') return ''
-  const value = answers[question.key]
-  if (!value || value === 'unknown') return ''
-  if (!parseDate(value)) return 'That date did not come through right. Pick it again or choose I don’t remember.'
-  if (value > TODAY) return 'That date is in the future. Pick a date from today or earlier.'
-
-  if (question.key === 'lastEnd') {
-    const periodLength = daysBetween(answers.lastStart, value)
-    if (periodLength === null) return ''
-    if (periodLength < 0) return 'Your period end date needs to be the same day as the start date or after it.'
-    if (periodLength > 10) return 'That would mean your period lasted more than 10 days. Check the end date, or choose I don’t remember.'
-  }
-
-  if (question.key === 'prevStart') {
-    const cycleLength = daysBetween(value, answers.lastStart)
-    if (cycleLength === null) return ''
-    if (cycleLength <= 0) return 'The period before that needs to start before your last period.'
-    if (cycleLength < 15) return 'Those two period starts are very close together. Check the date, or choose I don’t remember.'
-    if (cycleLength > 90) return 'That gap looks unusually long. Check the date, or choose I don’t remember.'
-  }
-
-  return ''
+  const d = new Date(`${value}T00:00:00`)
+  return Number.isNaN(d.getTime()) ? null : d
 }
 
 export default function CheckIn() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
-  const [answers, setAnswers] = useState(() => ({ age: state.identity.ageBand, ...state.answers }))
-  const [pos, setPos] = useState(1) // start after Q1 (age already captured); index into active list
-  const [error, setError] = useState('')
 
-  const active = useMemo(() => activeQuestions(answers), [answers])
-  const q = active[Math.min(pos, active.length - 1)]
-
-  const totalDeep = DEEP_QUESTIONS.length
-  const answeredCount = pos
-  const progress = 0.35 + 0.6 * (answeredCount / active.length)
-
-  function set(key, value) {
-    setError('')
-    setAnswers((a) => ({ ...a, [key]: value }))
-  }
-
-  function toggleMulti(key, opt, exclusive) {
-    setError('')
-    setAnswers((a) => {
-      const cur = a[key] || []
-      if (opt === exclusive) return { ...a, [key]: [exclusive] }
-      const without = cur.filter((x) => x !== exclusive)
-      const has = without.includes(opt)
-      return { ...a, [key]: has ? without.filter((x) => x !== opt) : [...without, opt] }
-    })
-  }
-
-  const value = answers[q.key]
-  const answered =
-    q.type === 'multi'
-      ? (value || []).length > 0
-      : q.type === 'slider'
-      ? typeof value === 'number'
-      : q.type === 'your_thing'
-      ? (value?.categories?.length > 0)
-      : value !== undefined && value !== null && value !== ''
-
-  function goNext() {
-    const currentError = dateAnswerError(q, answers)
-    if (currentError) {
-      setError(currentError)
-      return
-    }
-
-    if (pos < active.length - 1) {
-      setPos(pos + 1)
-    } else {
-      const firstInvalidDateIndex = active.findIndex((question) => dateAnswerError(question, answers))
-      if (firstInvalidDateIndex >= 0) {
-        setPos(firstInvalidDateIndex)
-        setError(dateAnswerError(active[firstInvalidDateIndex], answers))
-        return
-      }
-      dispatch({ type: 'SAVE_CHECKIN', answers })
-      navigate('/result')
-    }
-  }
-  function goBack() {
-    setError('')
-    if (pos > 1) setPos(pos - 1)
-    else navigate('/personalize')
-  }
-
-  return (
-    <div className="screen">
-      <TopBar onBack={goBack} />
-      <ProgressBar value={progress} />
-
-      <div style={{ marginTop: 24 }}>
-        <p className="eyebrow">{q.section}</p>
-        <h1 style={{ fontSize: 25 }}>{q.text}</h1>
-        {q.help && <p className="muted">{q.help}</p>}
-      </div>
-
-      <div style={{ marginTop: 14 }}>
-        {q.type === 'chips' && (
-          <ChipGroup
-            options={q.options}
-            value={value}
-            onChange={(v) => set(q.key, v)}
-            columns={q.options.length > 6 ? 2 : undefined}
-            stack={q.options.some((o) => o.length > 18)}
-          />
-        )}
-
-        {q.type === 'multi' && (
-          <div className="chips">
-            {q.options.map((opt) => (
-              <Chip
-                key={opt}
-                stack
-                selected={(value || []).includes(opt)}
-                onClick={() => toggleMulti(q.key, opt, q.exclusive)}
-              >
-                {opt}
-              </Chip>
-            ))}
-          </div>
-        )}
-
-        {q.type === 'date' && (
-          <div className="stack-12">
-            <input
-              className="input"
-              type="date"
-              max={TODAY}
-              value={value && value !== 'unknown' ? value : ''}
-              onChange={(e) => set(q.key, e.target.value)}
-            />
-            <Chip stack selected={value === 'unknown'} onClick={() => set(q.key, 'unknown')}>
-              I don’t remember the exact date
-            </Chip>
-            {error && (
-              <p style={{ margin: 0, color: '#B3265A', fontSize: 12.5, lineHeight: 1.4 }}>
-                {error}
-              </p>
-            )}
-            {value === 'unknown' && (
-              <p className="muted" style={{ fontSize: 12.5 }}>
-                No problem, your first couple of daily check-ins will fill this in for us.
-              </p>
-            )}
-          </div>
-        )}
-
-        {q.type === 'slider' && (
-          <div className="stack-16" style={{ marginTop: 8 }}>
-            <div className="center">
-              <span className="big-num" style={{ fontSize: 52, color: 'var(--accent-ink)' }}>
-                {typeof value === 'number' ? value : 0}
-              </span>
-              <div style={{ fontWeight: 600, color: 'var(--accent-ink)' }}>
-                {painLabel(typeof value === 'number' ? value : 0)}
-              </div>
-            </div>
-            <input
-              className="slider"
-              type="range"
-              min="0"
-              max="10"
-              step="1"
-              value={typeof value === 'number' ? value : 0}
-              onChange={(e) => set(q.key, Number(e.target.value))}
-              aria-label={q.text}
-            />
-            <div className="row row--between muted" style={{ fontSize: 12 }}>
-              <span>0 · No pain</span>
-              <span>10 · Worst imaginable</span>
-            </div>
-            <div className="card" style={{ padding: 14 }}>
-              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
-                {PAIN_ANCHORS.find(
-                  (x) =>
-                    (typeof value === 'number' ? value : 0) >= x.range[0] &&
-                    (typeof value === 'number' ? value : 0) <= x.range[1],
-                )?.desc}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {q.type === 'your_thing' && (
-          <YourThingSelector 
-            value={value || { categories: [], specifics: '', practiceDays: [] }} 
-            onChange={(v) => set(q.key, v)} 
-          />
-        )}
-      </div>
-
-      <div className="spacer" />
-      <Button block disabled={!answered} onClick={goNext} style={{ marginTop: 20 }}>
-        {pos < active.length - 1 ? 'Next' : 'See my results'}
-      </Button>
-      <p className="muted center" style={{ fontSize: 12, marginTop: 10 }}>
-        Question {pos + 1} of {active.length} · one at a time, no rush
-      </p>
-    </div>
+  // seed from existing answers in case user is returning mid-flow
+  const [started,   setStarted]   = useState(state.answers.started   || null)
+  const [lastStart, setLastStart] = useState(state.answers.lastStart  || '')
+  const [dateUnknown, setDateUnknown] = useState(state.answers.lastStart === 'unknown')
+  const [dateConfirmed, setDateConfirmed] = useState(Boolean(state.answers.lastStart))
+  const [flow,      setFlow]      = useState(state.answers.flow       || null)
+  const [painWorst, setPainWorst] = useState(
+    typeof state.answers.painWorst === 'number' ? state.answers.painWorst : 0
   )
+  const [dateError, setDateError] = useState('')
+
+  // Determine which step we're on (0 = started gate, 1 = date, 2 = flow, 3 = pain)
+  const notStarted = started === 'Not yet'
+  const step = started === null ? 0
+    : notStarted ? 4                       // skip directly to finish
+    : !dateConfirmed ? 1
+    : flow === null ? 2
+    : 3
+
+  const totalSteps = notStarted ? 1 : 4
+  const progress   = step / totalSteps
+
+  function validateDate(value) {
+    if (value === 'unknown') { setDateError(''); return true }
+    const d = parseDate(value)
+    if (!d) { setDateError("That date didn't come through right. Try again or choose \"I don't remember.\""); return false }
+    if (value > TODAY) { setDateError('Pick a date from today or earlier.'); return false }
+    setDateError('')
+    return true
+  }
+
+  function handleDateChange(value) {
+    setDateUnknown(false)
+    setLastStart(value)
+    setDateConfirmed(false)
+    setDateError('')
+  }
+
+  function handleDateUnknown() {
+    setDateUnknown(true)
+    setLastStart('unknown')
+    setDateConfirmed(false)
+    setDateError('')
+  }
+
+  function handleDateNext() {
+    const val = dateUnknown ? 'unknown' : lastStart
+    if (!val) { setDateError("Pick a date or choose \"I don't remember.\""); return }
+    if (!validateDate(val)) return
+    setLastStart(val)
+    setDateConfirmed(true)
+    // Advance: stay in this component, step logic will re-render to flow
+    setFlow(null) // ensure flow step shows next
+  }
+
+  function finish() {
+    const seedAnswers = {
+      ...state.answers,
+      started: started || 'Not yet',
+      // Only include period fields if they actually started
+      ...(notStarted ? {} : {
+        lastStart: dateUnknown ? 'unknown' : lastStart,
+        flow:      flow,
+        painWorst: painWorst,
+      }),
+      // Preserve age from identity (already set in AgeConsent)
+      age: state.identity.ageBand,
+      // Mark as fast-start so progressive cards know to show
+      fastStart: true,
+    }
+    dispatch({ type: 'SAVE_CHECKIN', answers: seedAnswers })
+    navigate('/result')
+  }
+
+  // ── Step 0: Have you started your period? ───────────────────────────────
+  if (step === 0) {
+    return (
+      <div className="screen">
+        <TopBar onBack={() => navigate('/personalize')} />
+        <ProgressBar value={0.05} />
+        <div style={{ marginTop: 24 }}>
+          <p className="eyebrow">Quick setup</p>
+          <h1 style={{ fontSize: 26 }}>Have you started your period?</h1>
+          <p className="muted">This helps us figure out what to track for you.</p>
+          <ChipGroup
+            options={['Yes', 'Not yet']}
+            value={started}
+            onChange={(v) => setStarted(v)}
+          />
+        </div>
+        <div className="spacer" />
+        {/* If "Not yet" is selected, allow them to proceed directly */}
+        {started === 'Not yet' && (
+          <Button block onClick={finish}>
+            Set up my tracker
+          </Button>
+        )}
+      </div>
+    )
+  }
+
+  // ── Step 1: Last period start date ─────────────────────────────────────
+  if (step === 1) {
+    return (
+      <div className="screen">
+        <TopBar onBack={() => setStarted(null)} />
+        <ProgressBar value={0.3} />
+        <div style={{ marginTop: 24 }}>
+          <p className="eyebrow">Quick setup · 1 of 3</p>
+          <h1 style={{ fontSize: 26 }}>When did your last period start?</h1>
+          <p className="muted">Your best guess is fine.</p>
+        </div>
+        <div className="stack-12" style={{ marginTop: 16 }}>
+          <input
+            className="input"
+            type="date"
+            max={TODAY}
+            value={!dateUnknown && lastStart !== 'unknown' ? lastStart : ''}
+            onChange={(e) => handleDateChange(e.target.value)}
+          />
+          <Chip
+            stack
+            selected={dateUnknown}
+            onClick={handleDateUnknown}
+          >
+            I don't remember the exact date
+          </Chip>
+          {dateError && (
+            <p style={{ margin: 0, color: '#B3265A', fontSize: 12.5, lineHeight: 1.4 }}>
+              {dateError}
+            </p>
+          )}
+          {dateUnknown && (
+            <p className="muted" style={{ fontSize: 12.5 }}>
+              No problem — your first few daily check-ins will help us figure this out.
+            </p>
+          )}
+        </div>
+        <div className="spacer" />
+        <Button
+          block
+          disabled={!dateUnknown && !lastStart}
+          onClick={handleDateNext}
+        >
+          Next
+        </Button>
+      </div>
+    )
+  }
+
+  // ── Step 2: Flow heaviness ──────────────────────────────────────────────
+  if (step === 2) {
+    return (
+      <div className="screen">
+        <TopBar onBack={() => setDateConfirmed(false)} />
+        <ProgressBar value={0.6} />
+        <div style={{ marginTop: 24 }}>
+          <p className="eyebrow">Quick setup · 2 of 3</p>
+          <h1 style={{ fontSize: 26 }}>How heavy is your flow on your heaviest day?</h1>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <ChipGroup
+            options={FLOW_OPTIONS}
+            value={flow}
+            onChange={(v) => setFlow(v)}
+          />
+        </div>
+        <div className="spacer" />
+        <Button block disabled={!flow} onClick={() => {/* step logic handles re-render */}}>
+          Next
+        </Button>
+      </div>
+    )
+  }
+
+  // ── Step 3: Pain level ──────────────────────────────────────────────────
+  if (step === 3) {
+    return (
+      <div className="screen">
+        <TopBar onBack={() => setFlow(null)} />
+        <ProgressBar value={0.85} />
+        <div style={{ marginTop: 24 }}>
+          <p className="eyebrow">Quick setup · 3 of 3</p>
+          <h1 style={{ fontSize: 26 }}>At its worst, how bad is your period pain?</h1>
+          <p className="muted">0 = none · 10 = worst imaginable</p>
+        </div>
+        <div className="stack-16" style={{ marginTop: 24 }}>
+          <div className="center">
+            <span className="big-num" style={{ fontSize: 56, color: 'var(--pink-accent)' }}>
+              {painWorst}
+            </span>
+            <div style={{ fontWeight: 600, color: 'var(--pink-accent)', marginTop: 2 }}>
+              {painLabel(painWorst)}
+            </div>
+          </div>
+          <input
+            className="slider"
+            type="range"
+            min="0"
+            max="10"
+            step="1"
+            value={painWorst}
+            onChange={(e) => setPainWorst(Number(e.target.value))}
+            aria-label="Pain level 0 to 10"
+          />
+          <div className="row row--between muted" style={{ fontSize: 12 }}>
+            <span>0 · No pain</span>
+            <span>10 · Worst imaginable</span>
+          </div>
+          <div className="card" style={{ padding: 14 }}>
+            <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
+              {PAIN_ANCHORS.find((x) => painWorst >= x.range[0] && painWorst <= x.range[1])?.desc}
+            </p>
+          </div>
+        </div>
+        <div className="spacer" />
+        <Button block onClick={finish}>
+          Set up my tracker
+        </Button>
+        <p className="muted center" style={{ fontSize: 12, marginTop: 10 }}>
+          That's it — Maisie will learn more about you as you go.
+        </p>
+      </div>
+    )
+  }
+
+  return null
 }
