@@ -8,7 +8,7 @@ import { Badge, Card, Button } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
 
 const CONVO_STARTERS = [
-  '“I saw your Lumaya check-in flagged something — want to talk about it, or would you rather I just know an advisor’s involved?”',
+  '“I saw your Maisie check-in flagged something — want to talk about it, or would you rather I just know an advisor’s involved?”',
   '“No pressure at all, but I’m here if your cycle’s been rough lately. Anything you want me to pick up for you?”',
   '“Would it help to book time with a doctor together, or do you want to handle it your way first?”',
 ]
@@ -42,7 +42,7 @@ export default function ParentView() {
       <div className="row row--between" style={{ marginBottom: 4 }}>
         <div>
           <p className="eyebrow">Support view</p>
-          <h1 style={{ margin: 0 }}>{name}’s Lumaya</h1>
+          <h1 style={{ margin: 0 }}>{name}’s Maisie</h1>
         </div>
         <Mascot size={56} />
       </div>
@@ -133,7 +133,7 @@ export default function ParentView() {
 
       <Card style={{ marginTop: 14, background: 'var(--sage-soft)', borderColor: 'transparent' }}>
         <p style={{ margin: 0, fontSize: 12.5 }}>
-          🔒 You’ll never see {name}’s individual answers, pain scores, or condition detail. That
+          🔒 You’ll never see {name}’s individual answers, pain scores, or private health details. That
           boundary is what keeps her answering honestly.
         </p>
       </Card>

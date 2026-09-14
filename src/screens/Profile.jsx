@@ -1,15 +1,14 @@
 // Profile.jsx — Unified Profile, Settings & Parent/Support Hub
-// Combines user identity, cycle personalization, app theme, parent/support connection,
+// Combines user identity, cycle personalization, parent/support connection,
 // notifications, and privacy controls under one cohesive tab.
 
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useStore, THEME_MAP } from '../state/store.jsx'
+import { useStore } from '../state/store.jsx'
 import { TopBar, Card, Button, ChipGroup, PillTag } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
-import { ShieldCheck, UserCheck, Bell, Sparkle, Heart, Palette } from '@phosphor-icons/react'
+import { ShieldCheck, UserCheck, Bell, Sparkle, Heart } from '@phosphor-icons/react'
 
-const THEME_OPTIONS = ['Calm pastels', 'Bold & bright', 'Minimal & clean', 'Surprise me']
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
 
@@ -26,13 +25,11 @@ export default function Profile() {
   const isMinor = identity.isMinor
 
   const [activeTab, setActiveTab] = useState('settings') // 'settings' | 'support'
-  const [nickname, setNickname] = useState(profile.cycleNickname || '')
   const [parentEmail, setParentEmail] = useState(identity.parentEmail || '')
   const [supportName, setSupportName] = useState('')
   const [supportEmail, setSupportEmail] = useState('')
   const [toast, setToast] = useState('')
 
-  const themeLabel = Object.keys(THEME_MAP).find((k) => THEME_MAP[k] === profile.theme) || 'Calm pastels'
   const firstName = identity.name?.split(' ')[0] || 'You'
   const ageDisplay = identity.ageBand ? `${identity.ageBand} yrs old` : 'Teen'
 
@@ -84,18 +81,6 @@ export default function Profile() {
               >
                 {state.streak}🔥 streak
               </span>
-              <span
-                style={{
-                  background: 'rgba(0,0,0,0.05)',
-                  color: 'var(--text-secondary)',
-                  padding: '3px 9px',
-                  borderRadius: 12,
-                  fontSize: 11,
-                  fontWeight: 600,
-                }}
-              >
-                {themeLabel}
-              </span>
             </div>
           </div>
         </div>
@@ -134,7 +119,7 @@ export default function Profile() {
             gap: 6,
           }}
         >
-          <span>⚙️</span> Preferences & Theme
+          <span>⚙️</span> Preferences
         </button>
 
         <button
@@ -162,47 +147,10 @@ export default function Profile() {
       </div>
 
       {/* ===================================================================== */}
-      {/* TAB 1: PREFERENCES, THEME, NOTIFICATIONS                              */}
+      {/* TAB 1: PREFERENCES AND NOTIFICATIONS                                  */}
       {/* ===================================================================== */}
       {activeTab === 'settings' && (
         <div className="stack-16" style={{ animation: 'fadeIn 0.2s ease' }}>
-          {/* Cycle Nickname */}
-          <Card>
-            <div className="card__label">Cycle Nickname</div>
-            <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
-              What do you call your period? (e.g. Shark Week, The Crimson Tide)
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                className="input"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                placeholder="Give it a fun nickname"
-                style={{ flex: 1 }}
-              />
-              <Button
-                variant="secondary"
-                onClick={() => updateProfile({ cycleNickname: nickname.trim() })}
-              >
-                Save
-              </Button>
-            </div>
-          </Card>
-
-          {/* Color Theme */}
-          <Card>
-            <div className="card__label">App Color Theme</div>
-            <p className="muted" style={{ margin: '0 0 10px', fontSize: 13 }}>
-              Personalize the tints and styling across your app.
-            </p>
-            <ChipGroup
-              options={THEME_OPTIONS}
-              value={themeLabel}
-              onChange={(t) => updateProfile({ themeChoice: t })}
-              stack
-            />
-          </Card>
-
           {/* Lifestyle Preferences */}
           <Card>
             <div className="card__label">Student & Athlete Status</div>
@@ -231,7 +179,7 @@ export default function Profile() {
             <div className="card__label">Notifications</div>
             <Toggle
               label="Period Check-ins"
-              desc="Gentle reminders during your predicted period window."
+              desc="Gentle reminders around your learned period window."
               on={notifyPrefs.periodCheckin}
               onChange={(v) => dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin: v } })}
             />
@@ -370,7 +318,7 @@ export default function Profile() {
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
                   <ShieldCheck size={24} color="#2B7A41" style={{ flexShrink: 0 }} />
                   <p style={{ margin: 0, fontSize: 12.5, color: '#1A5328', lineHeight: 1.5 }}>
-                    <strong>The Privacy Boundary:</strong> Parents only ever see your overall category level and check-in dates — <strong>never</strong> your private individual answers, pain ratings, or condition details.
+                    <strong>The Privacy Boundary:</strong> Parents only ever see your overall category level and check-in dates — <strong>never</strong> your private individual answers, pain ratings, or health details.
                   </p>
                 </div>
               </Card>

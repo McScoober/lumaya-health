@@ -92,7 +92,7 @@ export default function AgeConsent() {
                   onChange={(e) => setConsent(e.target.checked)}
                   style={{ width: 22, height: 22, marginTop: 2, accentColor: 'var(--accent)' }}
                 />
-                <span>I am at least 13 years old and have a parent or guardian's permission to use Lumaya.</span>
+                <span>I am at least 13 years old and have a parent or guardian's permission to use Maisie.</span>
               </label>
               {submitted && consentError && (
                 <p style={{ margin: '8px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
@@ -111,7 +111,7 @@ export default function AgeConsent() {
                   onChange={(e) => setAck(e.target.checked)}
                   style={{ width: 22, height: 22, marginTop: 2, accentColor: 'var(--accent)' }}
                 />
-                <span>I agree to Lumaya's privacy policy.</span>
+                <span>I agree to Maisie's privacy policy.</span>
               </label>
               {submitted && ackError && (
                 <p style={{ margin: '8px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>

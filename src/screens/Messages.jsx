@@ -35,7 +35,7 @@ export default function Messages() {
         <span className="pill-tag">via SMS</span>
       </div>
       <p className="muted" style={{ fontSize: 13 }}>
-        Lumaya texts you — daily during your period, about weekly the rest of the month.
+        Maisie texts you — daily during your period, about weekly the rest of the month.
       </p>
 
       {state.messages.length > 0 && (

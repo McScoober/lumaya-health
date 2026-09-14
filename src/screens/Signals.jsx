@@ -3,13 +3,7 @@ import MetabolicCard from '../components/MetabolicCard.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
 import { useStore } from '../state/store.jsx'
 import { phaseForDate, PHASE_META } from '../engine/cyclePredictor.js'
-
-const FULL_MOCK_SIGNALS = {
-  energy: { val: 'Trending up', desc: 'Higher energy on 18 of the last 30 days. Most common during days 6 to 14.', trend: Array.from({length: 30}, (_, i) => [3,3,2,3,4,4,5,5,5,5,5,5,5,5,4,4,4,3,3,3,2,2,2,2,3,3,3,3,3,3][i]) },
-  skin:   { val: '2 flare-ups', desc: 'Skin changes showed up most around days 20 to 25.', trend: Array.from({length: 30}, (_, i) => [4,5,5,5,5,5,5,5,5,5,5,5,5,4,4,4,3,3,3,2,2,2,3,3,3,3,4,4,4,5][i]) },
-  sleep:  { val: 'Solid',      desc: 'Solid sleep pattern holding for 21 days straight.', trend: Array.from({length: 30}, (_, i) => [3,4,4,4,5,5,5,5,5,5,5,5,4,4,4,4,3,3,3,2,2,2,2,3,3,3,3,4,4,4][i]) },
-  mood:   { val: 'Steadier',   desc: 'Steadier than last cycle.', trend: Array.from({length: 30}, (_, i) => [2,2,3,3,4,5,5,5,5,5,5,4,4,4,4,3,3,3,2,2,2,2,3,3,3,3,4,4,5,5][i]) }
-}
+import { deriveBodySignals } from '../engine/bodySignals.js'
 
 const PHASE_LABELS = {
   menstrual: 'period',
@@ -30,6 +24,13 @@ export default function Signals() {
   const cycleDay = phaseInfo.dayOfCycle === null || phaseInfo.dayOfCycle === undefined ? 14 : phaseInfo.dayOfCycle + 1
   const phaseMeta = PHASE_META[phase] || PHASE_META.follicular
   const phaseLabel = PHASE_LABELS[phase] || phaseMeta.label || 'building up'
+  const bodySignals = deriveBodySignals(state.dailyLogs, state.profile, {
+    days: 30,
+    energyColor: '#E8C86A',
+    skinColor: '#E8A0B0',
+    sleepColor: '#C4A8E0',
+    moodColor: '#A0C4A4',
+  })
 
   return (
     <div style={{
@@ -114,10 +115,10 @@ export default function Signals() {
 
       {view === 'all' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'rise 300ms ease' }}>
-          <MetabolicCard title="Energy" value={FULL_MOCK_SIGNALS.energy.val} color="#E8C86A" description={FULL_MOCK_SIGNALS.energy.desc} trendPoints={FULL_MOCK_SIGNALS.energy.trend} />
-          <MetabolicCard title="Skin" value={FULL_MOCK_SIGNALS.skin.val} color="#E8A0B0" description={FULL_MOCK_SIGNALS.skin.desc} trendPoints={FULL_MOCK_SIGNALS.skin.trend} />
-          <MetabolicCard title="Sleep" value={FULL_MOCK_SIGNALS.sleep.val} color="#C4A8E0" description={FULL_MOCK_SIGNALS.sleep.desc} trendPoints={FULL_MOCK_SIGNALS.sleep.trend} />
-          <MetabolicCard title="Mood" value={FULL_MOCK_SIGNALS.mood.val} color="#A0C4A4" description={FULL_MOCK_SIGNALS.mood.desc} trendPoints={FULL_MOCK_SIGNALS.mood.trend} />
+          <MetabolicCard title="Energy" value={bodySignals.energy.val} color="#E8C86A" description={bodySignals.energy.desc} trendPoints={bodySignals.energy.trend} />
+          <MetabolicCard title="Skin" value={bodySignals.skin.val} color="#E8A0B0" description={bodySignals.skin.desc} trendPoints={bodySignals.skin.trend} />
+          <MetabolicCard title="Sleep" value={bodySignals.sleep.val} color="#C4A8E0" description={bodySignals.sleep.desc} trendPoints={bodySignals.sleep.trend} />
+          <MetabolicCard title="Mood" value={bodySignals.mood.val} color="#A0C4A4" description={bodySignals.mood.desc} trendPoints={bodySignals.mood.trend} />
         </div>
       )}
 

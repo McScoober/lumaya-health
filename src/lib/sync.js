@@ -87,7 +87,7 @@ export async function pushToSupabase(userId, state) {
   ])
   for (const r of results) {
     if (r.status === 'rejected' || r.value?.error) {
-      console.warn('[lumaya] Supabase sync failed:', r.value?.error?.message || r.reason)
+      console.warn('[maisie] Supabase sync failed:', r.value?.error?.message || r.reason)
     }
   }
 }
@@ -101,5 +101,5 @@ export async function pushAdvisorRequest(userId, req) {
     flag_ids: req.flagIds || [],
     status: req.status || 'submitted',
   })
-  if (error) console.warn('[lumaya] advisor request sync failed:', error.message)
+  if (error) console.warn('[maisie] advisor request sync failed:', error.message)
 }

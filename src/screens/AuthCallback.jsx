@@ -4,6 +4,14 @@ import { supabase, isSupabaseConfigured, getAuthCallbackParams } from '../lib/su
 import { pullFromSupabase } from '../lib/sync.js'
 import { useStore } from '../state/store.jsx'
 
+function userFacingAuthError(error) {
+  const message = error?.message || ''
+  if (message.toLowerCase().includes('code verifier')) {
+    return 'This sign-in link was created with an older browser-bound login flow. Please request a fresh magic link and open the newest email.'
+  }
+  return message || 'This sign-in link did not work. Please request a new one.'
+}
+
 export default function AuthCallback() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -36,7 +44,7 @@ export default function AuthCallback() {
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code)
         if (error) {
-          if (!cancelled) setMessage(error.message || 'This sign-in link did not work. Please request a new one.')
+          if (!cancelled) setMessage(userFacingAuthError(error))
           return
         }
       } else if (accessToken && refreshToken) {
@@ -45,7 +53,7 @@ export default function AuthCallback() {
           refresh_token: refreshToken,
         })
         if (error) {
-          if (!cancelled) setMessage(error.message || 'This sign-in link did not work. Please request a new one.')
+          if (!cancelled) setMessage(userFacingAuthError(error))
           return
         }
       }

@@ -4,8 +4,9 @@
 // Runs entirely client-side (Section 14.4). No server call.
 //
 // Tier 1 rules  = valid from a single instance (full severity now).
-// Tier 2 rules  = pattern-dependent (capped SOFT on first occurrence 8.1),
-//                 escalated only when confirmed by a later cycle (8.4).
+// Tier 2 rules  = pattern-dependent. They stay hidden until there are at
+//                 least three cycle starts, then start as SOFT and escalate
+//                 only when confirmed by a later cycle (8.4).
 // ============================================================
 
 export const SEVERITY = { URGENT: 'URGENT', MODERATE: 'MODERATE', SOFT: 'SOFT' }
@@ -57,7 +58,7 @@ function rulePRIM(answers) {
 }
 
 function ruleSTOP(answers) {
-  // STOP-01 hypothalamic / STOP-02 secondary amenorrhea (Tier 1).
+  // STOP-01 / STOP-02 absent or paused periods (Tier 1).
   const cycle = computeCycleLength(answers)
   const last = parseDate(answers.lastStart)
   const gapFromLast = last ? daysBetween(new Date(), last) : null
@@ -72,7 +73,7 @@ function ruleSTOP(answers) {
       note: 'It’s been more than 90 days since the last period started.',
     }
   }
-  // Hypothalamic amenorrhea: intense exercise / under-eating + a long or absent cycle.
+  // Strain signal: intense exercise / under-eating + a long or absent cycle.
   const strain = ['Exercise intensely 5+ days/wk', 'Limit eating or count calories', 'Both'].includes(
     answers.lifestyle,
   )
@@ -119,8 +120,8 @@ function ruleHMB(answers) {
   return null
 }
 
-function ruleENDO(answers) {
-  // ENDO-01/02/03 pain patterns (Tier 2). Not affected by birth control (8.2).
+function rulePAIN(answers) {
+  // PAIN-01 pain and daily-life impact pattern (Tier 2).
   if (answers.started !== 'Yes') return null
   let score = 0
   const reasons = []
@@ -136,7 +137,7 @@ function ruleENDO(answers) {
 
   if (score >= 4) {
     return {
-      id: 'ENDO-01',
+      id: 'PAIN-01',
       tier: 2,
       severity: SEVERITY.MODERATE,
       category: 'Pain pattern',
@@ -146,8 +147,9 @@ function ruleENDO(answers) {
   return null
 }
 
-function rulePMOS(answers) {
-  // PMOS-01 (Tier 2). If on BC, suppress the cycle-length component (8.2).
+function ruleHORM(answers) {
+  // HORM-01 skin / hair / long-cycle signal (Tier 2). If on BC, suppress the
+  // cycle-length component (8.2).
   if (answers.started !== 'Yes') return null
   const bc = onBirthControl(answers)
   let score = 0
@@ -163,10 +165,10 @@ function rulePMOS(answers) {
   }
   if (score >= 2) {
     return {
-      id: 'PMOS-01',
+      id: 'HORM-01',
       tier: 2,
       severity: SEVERITY.MODERATE,
-      category: 'Hormonal pattern',
+      category: 'Hormone-related signal',
       note: reasons.slice(0, 3).join(', '),
       bcAdjusted: bc,
     }
@@ -191,7 +193,9 @@ function ruleOLIG(answers) {
   return null
 }
 
-const RULES = [rulePRIM, ruleSTOP, ruleHMB, ruleENDO, rulePMOS, ruleOLIG]
+const OBVIOUS_RULES = [rulePRIM, ruleSTOP, ruleHMB]
+const PATTERN_RULES = [rulePAIN, ruleHORM, ruleOLIG]
+const MIN_CYCLES_FOR_PATTERNS = 3
 
 // --- result level logic (Section 8.3) ----------------------
 function levelFromFlags(flags) {
@@ -214,11 +218,14 @@ function levelFromFlags(flags) {
  */
 export function scoreCheckIn(answers, opts = {}) {
   const priorTier2 = new Set(opts.priorTier2Ids || [])
-  const raw = RULES.map((r) => r(answers)).filter(Boolean)
+  const observedCycleCount = opts.observedCycleCount ?? 0
+  const patternsReady = observedCycleCount >= MIN_CYCLES_FOR_PATTERNS
+  const rules = patternsReady ? [...OBVIOUS_RULES, ...PATTERN_RULES] : OBVIOUS_RULES
+  const raw = rules.map((r) => r(answers)).filter(Boolean)
 
   const flags = raw.map((f) => {
     if (f.tier === 2) {
-      const baseId = f.id.split('-')[0] // ENDO-01 -> ENDO, family match
+      const baseId = f.id.split('-')[0] // PAIN-01 -> PAIN, family match
       const confirmed = priorTier2.has(f.id) || priorTier2.has(baseId)
       return { ...f, confirmed, displaySeverity: confirmed ? f.severity : SEVERITY.SOFT }
     }
@@ -242,6 +249,8 @@ export function scoreCheckIn(answers, opts = {}) {
     onBirthControl: onBirthControl(answers),
     needsAdvisor: needsAdvisor && level !== LEVEL.CLEAR && level !== LEVEL.MILD,
     pendingTier2,
+    patternsReady,
+    observedCycleCount,
   }
 }
 
@@ -253,14 +262,14 @@ export const LEVEL_COPY = {
   },
   [LEVEL.MILD]: {
     title: 'One thing to keep an eye on',
-    body: 'We noticed a small pattern. It’s not urgent — Lumaya will quietly watch for it over your next cycle before flagging anything more.',
+    body: 'Maisie noticed a repeat signal. It’s not urgent — keep logging so we can see whether it continues.',
   },
   [LEVEL.MODERATE]: {
-    title: 'A pattern worth a conversation',
-    body: 'Lumaya noticed something that’s worth talking to someone about. It doesn’t mean anything is wrong — a Lumaya advisor can help you make sense of it.',
+    title: 'A signal worth a conversation',
+    body: 'Maisie noticed something that may be worth talking through. It doesn’t mean anything is wrong — your logged details can help guide the conversation.',
   },
   [LEVEL.URGENT]: {
     title: 'Let’s get you support soon',
-    body: 'One of your answers is worth checking on sooner rather than later. A Lumaya advisor can review your results and point you in the right direction.',
+    body: 'One of your answers is worth checking on sooner rather than later. A Maisie advisor can review your results and point you in the right direction.',
   },
 }

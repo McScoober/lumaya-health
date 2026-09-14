@@ -32,7 +32,7 @@ function TrustNote() {
         <span aria-hidden="true" style={{ fontSize: 20 }}>🔒</span>
         <p style={{ margin: 0, fontSize: 13 }}>
           They only ever see your <strong>result level, advisor status, and check-in dates</strong> —
-          never your individual answers, pain scores, or any condition detail. That’s true in every mode.
+          never your individual answers, pain scores, or private health details. That’s true in every mode.
         </p>
       </div>
     </Card>
@@ -48,7 +48,7 @@ function MinorDashboard({ state, dispatch, navigate }) {
     <div className="screen screen--pad-bottom">
       <h1>Parent dashboard</h1>
       <p className="muted" style={{ fontSize: 13.5 }}>
-        Your parent consented so you could use Lumaya — but whether they get an ongoing view is
+        Your parent consented so you could use Maisie — but whether they get an ongoing view is
         entirely your choice. You can turn it on or off any time.
       </p>
 

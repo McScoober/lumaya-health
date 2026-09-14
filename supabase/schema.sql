@@ -1,5 +1,5 @@
 -- ============================================================
--- Lumaya Health — database schema (TRD §14.5 identity/data separation)
+-- Maisie Health — database schema (TRD §14.5 identity/data separation)
 -- Run this once in the Supabase dashboard: SQL Editor → New query → paste → Run.
 --
 -- Design:

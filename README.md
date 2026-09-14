@@ -1,4 +1,4 @@
-# Lumaya Health
+# Maisie Health
 
 A period companion web app for teens and young adults. Users complete a one-time
 symptom check-in when they sign up, then get daily cycle tracking, phase-based
@@ -6,7 +6,7 @@ self-care tips, and a gentle heads-up when a symptom pattern is worth talking to
 someone about. An optional parent or support-contact dashboard shows result levels
 only, never individual answers.
 
-Live at [lumaya-health.netlify.app](https://lumaya-health.netlify.app).
+Live deployment URL is managed by the hosting provider.
 
 ## Running it locally
 

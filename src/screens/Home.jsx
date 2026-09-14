@@ -5,24 +5,19 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, isInPeriodWindow, PHASE_META } from '../engine/cyclePredictor.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
 import { buildTip, maisieMessage } from '../engine/tipEngine.js'
+import { deriveBodySignals } from '../engine/bodySignals.js'
 import { Card, Button } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import ProgressiveCheckin from './ProgressiveCheckin.jsx'
 import { CheckCircle, Gear } from '@phosphor-icons/react'
 
-/* Mock data for placeholders since engine isn't connected yet */
-const MOCK_SIGNALS = {
-  energy: { val: 'Normal', desc: 'Energy is steady.', trend: [3, 3, 2, 3, 4, 3, 3, 3] },
-  skin: { val: 'Clear', desc: 'No flares this cycle.', trend: [5, 4, 5, 5, 5, 5] },
-  sleep: { val: 'Solid', desc: 'Consistent 8 hours.', trend: [4, 4, 3, 4, 4, 3, 5] },
-  mood: { val: 'Steadier', desc: 'Steadier than last cycle.', trend: [3, 4, 3, 3, 4, 4] }
-}
 export default function Home() {
   const navigate = useNavigate()
   const { state, dispatch, cycleModel } = useStore()
+  const [selectedSignal, setSelectedSignal] = useState(null)
   const now = new Date()
   const todayKey = dateKeyLocal(now)
   const todayLog = state.dailyLogs[todayKey] || {}
@@ -33,12 +28,32 @@ export default function Home() {
   const cycleDay = dayOfCycle === null || dayOfCycle === undefined ? 1 : dayOfCycle + 1
   const meta = phase ? PHASE_META[phase] : null
   const prediction = predictPeriod(cycleModel, now)
+  const periodStarts = periodStartKeys(state.periodLogs)
+  const observedCycleCount = periodStarts.length
+  const predictionsReady = observedCycleCount >= 3
   const inWindow = isInPeriodWindow(cycleModel, now)
   const isPeriodAskWindow = prediction
     ? diffDays(now, addDays(prediction.windowStart, -3)) >= 0 && diffDays(now, prediction.windowEnd) <= 0
     : false
   const periodStartedToday = todayPeriodLog.period === true
-  const shouldShowPeriodStartCard = isPeriodAskWindow && (!todayPeriodLog.periodPromptAnswered || periodStartedToday)
+  const shouldShowPeriodStartCard = predictionsReady && isPeriodAskWindow && (!todayPeriodLog.periodPromptAnswered || periodStartedToday)
+  const latestPeriodStartKey = periodStarts[periodStarts.length - 1]
+  const daysSinceLatestPeriod = latestPeriodStartKey
+    ? diffDays(now, new Date(`${latestPeriodStartKey}T00:00:00`))
+    : null
+  const baselineTitle = periodStartedToday
+    ? 'Period logged today'
+    : checkedInToday
+      ? 'Today is logged'
+      : latestPeriodStartKey
+        ? 'Building your baseline'
+        : 'Ready when you are'
+  const baselineBody = latestPeriodStartKey
+    ? `Last period start: ${new Date(`${latestPeriodStartKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${daysSinceLatestPeriod !== null ? ` (${Math.max(0, daysSinceLatestPeriod)} day${daysSinceLatestPeriod === 1 ? '' : 's'} ago)` : ''}. Keep logging to make Maisie more accurate.`
+    : 'Log your period start and quick daily check-ins. Maisie gets more accurate as it learns your rhythm.'
+  const phaseSubtitle = predictionsReady
+    ? meta?.mood
+    : `${meta?.mood || 'Early estimate'} · early estimate from what you’ve logged`
 
   const tip = useMemo(
     () => (phase ? buildTip(phase, { ...state.profile }) : null),
@@ -47,6 +62,10 @@ export default function Home() {
   const todayMaisieMsg = useMemo(
     () => (phase ? maisieMessage(phase, cycleDay, state.profile) : 'Your body is telling you something every day. Maisie helps you hear it.'),
     [phase, cycleDay, state.profile]
+  )
+  const signals = useMemo(
+    () => deriveBodySignals(state.dailyLogs, state.profile, { days: 8, today: now }),
+    [state.dailyLogs, state.profile, todayKey],
   )
 
 
@@ -83,13 +102,13 @@ export default function Home() {
             {meta ? (
               <>
                 <h2 style={{ margin: '2px 0 2px', color: 'var(--phase-accent)' }}>{meta.label} phase</h2>
-                <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>{meta.mood}</p>
+                <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>{phaseSubtitle}</p>
               </>
             ) : (
               <>
-                <h2 style={{ margin: '2px 0 2px' }}>Getting to know you</h2>
+                <h2 style={{ margin: '2px 0 2px' }}>{baselineTitle}</h2>
                 <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
-                  Log a couple of daily check-ins and we'll start predicting your phases.
+                  {baselineBody}
                 </p>
               </>
             )}
@@ -98,9 +117,11 @@ export default function Home() {
         </div>
         {prediction && (
           <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
-            {inWindow
-              ? "📍 You're in your predicted period window."
-              : `📅 Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}.`}
+            {predictionsReady
+              ? inWindow
+                ? "📍 You're in your predicted period window."
+                : `📅 Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}.`
+              : 'Tips are early estimates for now. Keep logging to make them more accurate.'}
           </p>
         )}
       </Card>
@@ -177,7 +198,7 @@ export default function Home() {
               How are you feeling today?
             </p>
             <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>
-              A quick tap keeps your predictions sharp.
+              A quick tap helps Maisie learn your real patterns.
             </p>
             <Button block onClick={() => navigate('/daily')}>Daily check-in</Button>
           </>
@@ -253,10 +274,10 @@ export default function Home() {
 
 
       <div style={{ marginTop: 24 }} className="stack-16">
-        <MetabolicCard title="Energy" value={MOCK_SIGNALS.energy.val} color="var(--signal-energy)" description={MOCK_SIGNALS.energy.desc} trendPoints={MOCK_SIGNALS.energy.trend} />
-        <MetabolicCard title="Skin" value={MOCK_SIGNALS.skin.val} color="var(--signal-skin)" description={MOCK_SIGNALS.skin.desc} trendPoints={MOCK_SIGNALS.skin.trend} />
-        <MetabolicCard title="Sleep" value={MOCK_SIGNALS.sleep.val} color="var(--signal-sleep)" description={MOCK_SIGNALS.sleep.desc} trendPoints={MOCK_SIGNALS.sleep.trend} />
-        <MetabolicCard title="Mood" value={MOCK_SIGNALS.mood.val} color="var(--signal-mood)" description={MOCK_SIGNALS.mood.desc} trendPoints={MOCK_SIGNALS.mood.trend} />
+        <MetabolicCard title="Energy" value={signals.energy.val} color="var(--signal-energy)" description={signals.energy.desc} trendPoints={signals.energy.trend} onClick={() => setSelectedSignal('energy')} />
+        <MetabolicCard title="Skin" value={signals.skin.val} color="var(--signal-skin)" description={signals.skin.desc} trendPoints={signals.skin.trend} onClick={() => setSelectedSignal('skin')} />
+        <MetabolicCard title="Sleep" value={signals.sleep.val} color="var(--signal-sleep)" description={signals.sleep.desc} trendPoints={signals.sleep.trend} onClick={() => setSelectedSignal('sleep')} />
+        <MetabolicCard title="Mood" value={signals.mood.val} color="var(--signal-mood)" description={signals.mood.desc} trendPoints={signals.mood.trend} onClick={() => setSelectedSignal('mood')} />
       </div>
 
       <div style={{ marginTop: 24 }}>
@@ -267,6 +288,97 @@ export default function Home() {
           </p>
         </Card>
       </div>
+
+      {selectedSignal && (
+          <SignalDetailSheet
+          signal={signals[selectedSignal].detail}
+          logCount={signals[selectedSignal].logCount}
+          onClose={() => setSelectedSignal(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function SignalDetailSheet({ signal, logCount, onClose }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${signal.title} details`}
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 80,
+        background: 'rgba(44,24,16,0.28)',
+        display: 'flex',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
+        padding: '12px 12px calc(86px + env(safe-area-inset-bottom, 0px))',
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: '100%',
+          maxWidth: 560,
+          background: '#fff',
+          borderRadius: '18px 18px 14px 14px',
+          padding: 18,
+          boxShadow: '0 -10px 30px rgba(44,24,16,0.16)',
+          maxHeight: 'calc(100vh - 130px)',
+          overflowY: 'auto',
+        }}
+      >
+        <div className="row row--between" style={{ alignItems: 'flex-start', gap: 12 }}>
+          <div>
+            <p className="eyebrow" style={{ margin: '0 0 4px', color: 'var(--pink-accent)' }}>
+              Body signal
+            </p>
+            <h2 style={{ margin: 0, fontSize: 22 }}>{signal.title}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{
+              border: '1px solid rgba(44,24,16,0.08)',
+              background: '#fff',
+              borderRadius: 999,
+              padding: '7px 12px',
+              color: '#5C3D2E',
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="stack-12" style={{ marginTop: 14 }}>
+          <DetailBlock label="What it means" text={signal.means} />
+          <DetailBlock label="How Maisie got this" text={signal.derived} />
+          <DetailBlock label="Inputs used" text={signal.uses} />
+          <DetailBlock label="What helps next" text={signal.next} />
+        </div>
+
+        <p className="muted" style={{ margin: '14px 0 0', fontSize: 12.5, lineHeight: 1.45 }}>
+          {logCount < 3
+            ? `Early estimate: you have ${logCount} daily log${logCount === 1 ? '' : 's'} so far.`
+            : `Based on ${logCount} daily logs so far.`}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function DetailBlock({ label, text }) {
+  return (
+    <div>
+      <div className="card__label" style={{ marginBottom: 3 }}>{label}</div>
+      <p style={{ margin: 0, color: '#3A2A24', fontSize: 13.5, lineHeight: 1.5 }}>
+        {text}
+      </p>
     </div>
   )
 }

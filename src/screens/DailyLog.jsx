@@ -115,7 +115,7 @@ export default function DailyLog() {
       vibe: vibe?.value,
       vibeLabel: vibe?.key,
       symptoms,
-      pain: pain ?? 0,
+      pain: pain ?? undefined,
       impact: impacts.filter((id) => id !== 'fine'),
     })
     setDone(true)

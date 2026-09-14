@@ -128,6 +128,28 @@ export function isInPeriodWindow(model, date = new Date()) {
   return diffDays(date, p.windowStart) >= 0 && diffDays(date, p.windowEnd) <= 0
 }
 
+export function periodStartKeys(periodLogs = {}) {
+  const periodKeys = Object.entries(periodLogs)
+    .filter(([, log]) => log?.period === true)
+    .map(([key]) => key)
+    .sort()
+
+  if (periodKeys.length === 0) return []
+
+  const periodSet = new Set(periodKeys)
+  const explicitStarts = Object.entries(periodLogs)
+    .filter(([, log]) => log?.period === true && log?.periodStart === true)
+    .map(([key]) => key)
+    .sort()
+
+  if (explicitStarts.length > 0) return explicitStarts
+
+  return periodKeys.filter((key) => {
+    const prevKey = dateKeyLocal(addDays(parseDateLocal(key), -1))
+    return !periodSet.has(prevKey)
+  })
+}
+
 // Calendar cells for a given month.
 export function monthMatrix(model, year, month, dailyLogs = {}, periodLogs = {}) {
   const first = new Date(year, month, 1)

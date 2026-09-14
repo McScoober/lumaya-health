@@ -9,12 +9,15 @@
 
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { scoreCheckIn } from '../engine/scoring.js'
-import { addDays, buildCycleModel, dateKeyLocal, diffDays } from '../engine/cyclePredictor.js'
+import { addDays, buildCycleModel, dateKeyLocal, diffDays, periodStartKeys } from '../engine/cyclePredictor.js'
 import { isSupabaseConfigured, ensureAuthUser, getExistingAuthUserId } from '../lib/supabase.js'
 import { pullFromSupabase, pushToSupabase } from '../lib/sync.js'
 
-const IDENTITY_KEY = 'lumaya.identity'
-const HEALTH_PREFIX = 'lumaya.health.' // + userId
+const IDENTITY_KEY = 'maisie.identity'
+const HEALTH_PREFIX = 'maisie.health.' // + userId
+const LEGACY_STORAGE_PREFIX = ['lu', 'maya'].join('')
+const LEGACY_IDENTITY_KEY = `${LEGACY_STORAGE_PREFIX}.identity`
+const LEGACY_HEALTH_PREFIX = `${LEGACY_STORAGE_PREFIX}.health.` // + userId
 
 function uid() {
   // Opaque internal user id (UUID-ish). Not derived from name/email.
@@ -48,11 +51,8 @@ function freshState() {
     // HEALTH schema (keyed by userId, no PII)
     profile: {
       studentAthlete: null,
-      theme: 'calm',
-      themeChoice: null,
       sleep: null,
       sport: '',
-      cycleNickname: '',
       onBirthControl: false,
     },
     answers: {},
@@ -139,7 +139,9 @@ function latestPeriodStartFromLogs(periodLogs = {}) {
 }
 
 function normalizeFlagId(id) {
-  return id === `P${'COS'}-01` ? 'PMOS-01' : id
+  if (id === ['P', 'COS-01'].join('') || id === 'PMOS-01') return 'HORM-01'
+  if (String(id).startsWith('ENDO-')) return String(id).replace('ENDO-', 'PAIN-')
+  return id
 }
 
 function extractPeriodLogsFromDailyLogs(dailyLogs = {}) {
@@ -178,6 +180,12 @@ function normalizeResult(result) {
 
 function normalizeSavedHealth(payload = {}) {
   const answers = payload.answers || {}
+  const {
+    theme: _savedTheme,
+    themeChoice: _savedThemeChoice,
+    cycleNickname: _savedCycleNickname,
+    ...profile
+  } = payload.profile || {}
   let dailyLogs = stripPeriodFieldsFromDailyLogs(payload.dailyLogs || {})
   let periodLogs = { ...(payload.periodLogs || {}), ...extractPeriodLogsFromDailyLogs(payload.dailyLogs || {}) }
 
@@ -188,6 +196,7 @@ function normalizeSavedHealth(payload = {}) {
 
   return {
     ...payload,
+    profile,
     result: normalizeResult(payload.result),
     dailyLogs,
     periodLogs,
@@ -195,15 +204,6 @@ function normalizeSavedHealth(payload = {}) {
     confirmedTier2: (payload.confirmedTier2 || []).map(normalizeFlagId),
   }
 }
-
-// ---- theme mapping ----------------------------------------
-export const THEME_MAP = {
-  'Calm pastels': 'calm',
-  'Bold & bright': 'bold',
-  'Minimal & clean': 'minimal',
-  'Surprise me': 'surprise',
-}
-const SURPRISE_POOL = ['calm', 'bold', 'minimal']
 
 // ---- reducer ----------------------------------------------
 function reducer(state, action) {
@@ -236,16 +236,13 @@ function reducer(state, action) {
       }
 
     case 'SET_PROFILE': {
-      const merged = { ...state.profile, ...action.payload }
-      // Resolve theme. Surprise me picks one deterministic theme per user.
-      if (action.payload.themeChoice) {
-        const mapped = THEME_MAP[action.payload.themeChoice]
-        merged.theme =
-          mapped === 'surprise'
-            ? SURPRISE_POOL[state.userId.charCodeAt(0) % SURPRISE_POOL.length]
-            : mapped
-      }
-      return { ...state, profile: merged }
+      const {
+        theme: _theme,
+        themeChoice: _themeChoice,
+        cycleNickname: _cycleNickname,
+        ...payload
+      } = action.payload || {}
+      return { ...state, profile: { ...state.profile, ...payload } }
     }
 
     case 'SET_IDENTITY':
@@ -254,10 +251,13 @@ function reducer(state, action) {
     case 'SAVE_CHECKIN': {
       const answers = action.answers
       const onBC = answers.birthControl === 'Yes'
-      const result = scoreCheckIn(answers, { priorTier2Ids: state.confirmedTier2 })
       const today = dateKeyLocal()
-      const history = [...state.checkinHistory, { date: today, level: result.level }]
       const periodLogs = seedPeriodLogsFromAnswers(removeOnboardingPeriodLogs(state.periodLogs), answers)
+      const result = scoreCheckIn(answers, {
+        priorTier2Ids: state.confirmedTier2,
+        observedCycleCount: periodStartKeys(periodLogs).length,
+      })
+      const history = [...state.checkinHistory, { date: today, level: result.level }]
       return {
         ...state,
         answers,
@@ -276,7 +276,10 @@ function reducer(state, action) {
       const updatedAnswers = { ...state.answers, [action.key]: action.value }
       const onBC = updatedAnswers.birthControl === 'Yes'
       // Re-score with the new answer so result stays current.
-      const updatedResult = scoreCheckIn(updatedAnswers, { priorTier2Ids: state.confirmedTier2 })
+      const updatedResult = scoreCheckIn(updatedAnswers, {
+        priorTier2Ids: state.confirmedTier2,
+        observedCycleCount: periodStartKeys(state.periodLogs).length,
+      })
       return {
         ...state,
         answers: updatedAnswers,
@@ -337,13 +340,20 @@ function reducer(state, action) {
       const onboardDate = state.checkinHistory[0]?.date
       const startsNewCycle = period === true && onboardDate && dateKey > onboardDate
       if (startsNewCycle && state.pendingTier2.length > 0) {
-        const rescored = scoreCheckIn(state.answers, { priorTier2Ids: state.pendingTier2 })
+        const observedCycleCount = periodStartKeys(periodLogs).length
+        const rescored = scoreCheckIn(state.answers, {
+          priorTier2Ids: state.pendingTier2,
+          observedCycleCount,
+        })
         const nowConfirmed = rescored.flags
           .filter((f) => f.tier === 2 && state.pendingTier2.includes(f.id))
           .map((f) => f.id)
         if (nowConfirmed.length > 0) {
           const confirmedTier2 = Array.from(new Set([...state.confirmedTier2, ...nowConfirmed]))
-          const result = scoreCheckIn(state.answers, { priorTier2Ids: confirmedTier2 })
+          const result = scoreCheckIn(state.answers, {
+            priorTier2Ids: confirmedTier2,
+            observedCycleCount,
+          })
           next = {
             ...next,
             confirmedTier2,
@@ -355,7 +365,7 @@ function reducer(state, action) {
                 at: new Date().toISOString(),
                 channel: 'system',
                 title: 'We noticed the same pattern again',
-                body: "A pattern we were quietly watching showed up again this cycle. It might be worth talking to a Lumaya advisor, no pressure, whenever you're ready.",
+                body: "A pattern we were quietly watching showed up again this cycle. It might be worth talking to a Maisie advisor, no pressure, whenever you're ready.",
                 read: false,
                 cta: '/advisor',
               },
@@ -460,10 +470,8 @@ function hasSupabaseSyncableData(state) {
       identity.dashboardActive ||
       identity.supportContact ||
       profile.studentAthlete !== null ||
-      profile.themeChoice ||
       profile.sleep !== null ||
       profile.sport?.trim() ||
-      profile.cycleNickname?.trim() ||
       profile.onBirthControl ||
       hasEntries(state.answers) ||
       state.result ||
@@ -484,11 +492,11 @@ function hasSupabaseSyncableData(state) {
 
 function hydrate() {
   try {
-    const idRaw = localStorage.getItem(IDENTITY_KEY)
+    const idRaw = localStorage.getItem(IDENTITY_KEY) || localStorage.getItem(LEGACY_IDENTITY_KEY)
     if (!idRaw) return null
     const identity = JSON.parse(idRaw)
     const userId = identity.userId
-    const healthRaw = localStorage.getItem(HEALTH_PREFIX + userId)
+    const healthRaw = localStorage.getItem(HEALTH_PREFIX + userId) || localStorage.getItem(LEGACY_HEALTH_PREFIX + userId)
     const health = healthRaw ? JSON.parse(healthRaw) : {}
     const { userId: _u, ...identityRest } = identity
     return {
@@ -554,11 +562,6 @@ export function StoreProvider({ children }) {
       }, 700)
     }
   }, [state])
-
-  // Apply theme to <html> so CSS variables cascade.
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', state.profile.theme || 'calm')
-  }, [state.profile.theme])
 
   const cycleModel = useMemo(() => {
     const lastStart = latestPeriodStartFromLogs(state.periodLogs) || state.answers.lastStart

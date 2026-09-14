@@ -16,7 +16,7 @@ export const supabase = isSupabaseConfigured
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
-        flowType: 'pkce',
+        flowType: 'implicit',
       },
     })
   : null
@@ -60,12 +60,25 @@ export function getAuthCallbackParams() {
     ? window.location.hash.slice(1)
     : window.location.hash
 
-  if (hash) {
-    const hashQuery = hash.includes('?') ? hash.slice(hash.indexOf('?') + 1) : hash
-    const hashParams = new URLSearchParams(hashQuery)
+  function mergeParams(searchLike) {
+    if (!searchLike) return
+    const normalized = searchLike.startsWith('?') || searchLike.startsWith('#')
+      ? searchLike.slice(1)
+      : searchLike
+    const hashParams = new URLSearchParams(normalized)
     hashParams.forEach((value, key) => {
       if (!params.has(key)) params.set(key, value)
     })
+  }
+
+  if (hash) {
+    const [hashBeforeNestedFragment, nestedFragment] = hash.split('#')
+    if (hashBeforeNestedFragment.includes('?')) {
+      mergeParams(hashBeforeNestedFragment.slice(hashBeforeNestedFragment.indexOf('?') + 1))
+    } else {
+      mergeParams(hashBeforeNestedFragment)
+    }
+    mergeParams(nestedFragment)
   }
 
   return params
@@ -80,7 +93,7 @@ export async function ensureAuthUser() {
 
   const { data, error } = await supabase.auth.signInAnonymously()
   if (error) {
-    console.warn('[lumaya] anonymous sign-in failed:', error.message)
+    console.warn('[maisie] anonymous sign-in failed:', error.message)
     return null
   }
   currentUserId = data?.user?.id ?? null

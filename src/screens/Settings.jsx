@@ -1,12 +1,11 @@
 // Screen 11 — Settings (TRD Section 4, 6.5, 9.2, 12.3)
 // Manage personalization answers, support contact, notification preferences,
-// cycle nickname, theme, and data deletion (PIPEDA).
+// and data deletion (PIPEDA).
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useStore, THEME_MAP } from '../state/store.jsx'
+import { useStore } from '../state/store.jsx'
 import { Button, Card, ChipGroup, TopBar } from '../components/ui.jsx'
 
-const THEME_OPTIONS = ['Calm pastels', 'Bold & bright', 'Minimal & clean', 'Surprise me']
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
 
@@ -14,10 +13,7 @@ export default function Settings() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
   const { profile, identity, notifyPrefs } = state
-  const [nickname, setNickname] = useState(profile.cycleNickname)
   const [toast, setToast] = useState('')
-
-  const themeLabel = Object.keys(THEME_MAP).find((k) => THEME_MAP[k] === profile.theme) || 'Calm pastels'
 
   function flash(msg) {
     setToast(msg)
@@ -30,7 +26,7 @@ export default function Settings() {
   }
 
   function deleteData() {
-    if (confirm('Delete all your Lumaya data from this device? This can’t be undone.')) {
+    if (confirm('Delete all your Maisie data from this device? This can’t be undone.')) {
       localStorage.clear()
       dispatch({ type: 'RESET' })
       navigate('/')
@@ -42,25 +38,7 @@ export default function Settings() {
       {toast && <div className="toast">{toast}</div>}
       <TopBar title="Settings" onBack={() => navigate('/home')} />
 
-      <div className="card__label" style={{ marginTop: 8 }}>Cycle nickname</div>
-      <Card>
-        <div className="row" style={{ gap: 10 }}>
-          <input className="input" value={nickname} placeholder="Name your tracker (optional)"
-            onChange={(e) => setNickname(e.target.value)} />
-          <Button variant="soft" onClick={() => updateProfile({ cycleNickname: nickname })}>Save</Button>
-        </div>
-        <p className="muted" style={{ fontSize: 12, margin: '8px 0 0' }}>
-          Just for you — visible nowhere outside your own account.
-        </p>
-      </Card>
-
-      <div className="card__label" style={{ marginTop: 18 }}>Theme</div>
-      <Card>
-        <ChipGroup options={THEME_OPTIONS} value={themeLabel}
-          onChange={(v) => updateProfile({ themeChoice: v })} stack />
-      </Card>
-
-      <div className="card__label" style={{ marginTop: 18 }}>About you</div>
+      <div className="card__label" style={{ marginTop: 8 }}>About you</div>
       <Card>
         <label style={{ fontWeight: 600, fontSize: 14 }}>Student / athlete</label>
         <div style={{ margin: '8px 0 14px' }}>
@@ -74,7 +52,7 @@ export default function Settings() {
 
       <div className="card__label" style={{ marginTop: 18 }}>Notifications</div>
       <Card>
-        <Toggle label="Period check-ins" desc="Daily during your predicted period window."
+        <Toggle label="Period check-ins" desc="Daily around your learned period window."
           on={notifyPrefs.periodCheckin} onChange={(v) => dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin: v } })} />
         <hr className="divider" />
         <Toggle label="Phase tips" desc="About once a week, tuned to your phase."
@@ -100,7 +78,7 @@ export default function Settings() {
       </Card>
 
       <p className="muted center" style={{ fontSize: 11, marginTop: 20 }}>
-        Lumaya · MVP · pattern-awareness tool, not a diagnostic device
+        Maisie · MVP · pattern-awareness tool, not a diagnostic device
       </p>
     </div>
   )

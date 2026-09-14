@@ -1,6 +1,6 @@
-export default function MetabolicCard({ title, value, color, description, trendPoints = [] }) {
-  const min = Math.min(...trendPoints)
-  const max = Math.max(...trendPoints)
+export default function MetabolicCard({ title, value, color, description, trendPoints = [], onClick }) {
+  const min = trendPoints.length > 0 ? Math.min(...trendPoints) : 0
+  const max = trendPoints.length > 0 ? Math.max(...trendPoints) : 0
   const range = max === min ? 1 : max - min
   
   const points = trendPoints.map((val, i) => {
@@ -9,16 +9,26 @@ export default function MetabolicCard({ title, value, color, description, trendP
     return `${x},${y}`
   }).join(' ')
 
+  const Wrapper = onClick ? 'button' : 'div'
+
   return (
-    <div style={{
+    <Wrapper
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      aria-label={onClick ? `Learn how ${title.toLowerCase()} is derived` : undefined}
+      style={{
       background: '#fff',
       border: '1px solid rgba(44,24,16,0.08)',
       borderRadius: 14,
       padding: 16,
+      width: '100%',
+      textAlign: 'left',
       display: 'flex',
       flexDirection: 'column',
       gap: 12,
       boxShadow: '0 10px 30px rgba(44,24,16,0.04)',
+      cursor: onClick ? 'pointer' : 'default',
+      font: 'inherit',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -46,6 +56,6 @@ export default function MetabolicCard({ title, value, color, description, trendP
       <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13, lineHeight: 1.4 }}>
         {description}
       </p>
-    </div>
+    </Wrapper>
   )
 }

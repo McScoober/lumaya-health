@@ -10,6 +10,7 @@ import { useStore } from '../state/store.jsx'
 import { TopBar, Card, Button, Badge } from '../components/ui.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
+import { deriveBodySignals } from '../engine/bodySignals.js'
 import {
   buildCycleModel,
   phaseForDate,
@@ -18,35 +19,8 @@ import {
   addDays,
   diffDays,
   startOfDay,
+  periodStartKeys,
 } from '../engine/cyclePredictor.js'
-
-// Mock Signal Trends for 30-Day Metabolic View
-const FULL_MOCK_SIGNALS = {
-  energy: {
-    val: 'Trending up',
-    desc: 'Higher energy on 18 of the last 30 days. Peaks during days 6 to 14.',
-    trend: Array.from({ length: 30 }, (_, i) => [3, 3, 2, 3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3][i]),
-    color: '#E8C86A',
-  },
-  skin: {
-    val: '2 flare-ups',
-    desc: 'Skin changes showed up most around days 20 to 25 (luteal phase).',
-    trend: Array.from({ length: 30 }, (_, i) => [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5][i]),
-    color: '#E8A0B0',
-  },
-  sleep: {
-    val: 'Solid',
-    desc: 'Consistent 8-hour sleep pattern holding for 21 days straight.',
-    trend: Array.from({ length: 30 }, (_, i) => [3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4][i]),
-    color: '#C4A8E0',
-  },
-  mood: {
-    val: 'Steadier',
-    desc: 'Steadier than last cycle. Wind-down week shows mild sensitivity.',
-    trend: Array.from({ length: 30 }, (_, i) => [2, 2, 3, 3, 4, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 5, 5][i]),
-    color: '#A0C4A4',
-  },
-}
 
 const PHASE_LABELS = {
   menstrual: 'Period',
@@ -60,37 +34,6 @@ const PHASE_LABELS = {
 
 function actualImpacts(log) {
   return (log?.impact || []).filter((impact) => impact !== 'fine')
-}
-
-// Realistic 30-day preview logs for new users (< 3 real logs)
-function buildPreviewLogs(today = new Date(), cycleModel) {
-  const logs = {}
-  for (let i = 0; i < 30; i++) {
-    const d = addDays(today, -i)
-    const key = dateKeyLocal(d)
-    const { phase, dayOfCycle } = phaseForDate(cycleModel, d)
-
-    if (phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < 4) {
-      const pain = dayOfCycle === 0 ? 7 : dayOfCycle === 1 ? 5 : 3
-      logs[key] = {
-        checkinCompleted: true,
-        mood: dayOfCycle === 0 ? 'Rough' : 'Okay',
-        pain,
-        symptoms: ['Cramps', dayOfCycle === 0 ? 'Fatigue' : 'Backache'],
-        impact: dayOfCycle === 0 ? ['Sports'] : [],
-        period: true,
-      }
-    } else if (phase === 'luteal' && dayOfCycle === 22) {
-      logs[key] = {
-        checkinCompleted: true,
-        mood: 'Okay',
-        pain: 3,
-        symptoms: ['Bloating', 'Mood Swings'],
-        impact: ['School'],
-      }
-    }
-  }
-  return logs
 }
 
 export default function Patterns({ initialTab }) {
@@ -121,17 +64,20 @@ export default function Patterns({ initialTab }) {
 
   // Compute Cycle Model
   const cycleModel = useMemo(() => {
+    const starts = periodStartKeys(state.periodLogs)
     return buildCycleModel({
-      lastStart: state.answers.lastStart || state.answers.periodStart,
+      lastStart: starts[starts.length - 1] || state.answers.lastStart || state.answers.periodStart,
       cycleLength: state.answers.cycleLen ? parseInt(state.answers.cycleLen, 10) : 28,
       onBirthControl: state.profile.onBirthControl,
     })
-  }, [state.answers, state.profile])
+  }, [state.answers, state.profile, state.periodLogs])
 
   // Current Phase Info for Signals View
   const now = new Date()
   const phaseInfo = phaseForDate(cycleModel, now)
-  const currentPhase = phaseInfo.phase || 'follicular'
+  const observedCycleCount = periodStartKeys(state.periodLogs).length
+  const predictionsReady = observedCycleCount >= 3
+  const currentPhase = predictionsReady ? (phaseInfo.phase || 'follicular') : 'follicular'
   const cycleDay = phaseInfo.dayOfCycle === null || phaseInfo.dayOfCycle === undefined ? 14 : phaseInfo.dayOfCycle + 1
   const phaseMeta = PHASE_META[currentPhase] || PHASE_META.follicular
   const phaseLabel = PHASE_LABELS[currentPhase] || phaseMeta.label || 'Building Up'
@@ -139,14 +85,21 @@ export default function Patterns({ initialTab }) {
   // Count real logs & check if today is logged
   const todayKey = dateKeyLocal(now)
   const isTodayLogged = !!state.dailyLogs[todayKey]
-  const realLogCount = Object.keys(state.dailyLogs || {}).length
-  const isPreviewMode = realLogCount < 3
+  const bodySignals = useMemo(
+    () => deriveBodySignals(state.dailyLogs, state.profile, {
+      days: 30,
+      today: now,
+      energyColor: '#E8C86A',
+      skinColor: '#E8A0B0',
+      sleepColor: '#C4A8E0',
+      moodColor: '#A0C4A4',
+    }),
+    [state.dailyLogs, state.profile, todayKey],
+  )
 
-  // Active logs (real or preview)
-  const activeLogs = useMemo(() => {
-    if (!isPreviewMode) return state.dailyLogs
-    return buildPreviewLogs(now, cycleModel)
-  }, [isPreviewMode, state.dailyLogs, cycleModel])
+  // Only show entries the user actually logged. Predicted phase/period shading
+  // can appear on the calendar, but symptoms, pain, and impacts must be real.
+  const activeLogs = state.dailyLogs || {}
 
   // Calendar cells for last 35 days
   const today = startOfDay(now)
@@ -156,13 +109,22 @@ export default function Patterns({ initialTab }) {
       const date = addDays(today, -i)
       const key = dateKeyLocal(date)
       const log = activeLogs[key]
-      const { phase, dayOfCycle } = phaseForDate(cycleModel, date)
+      const periodLog = state.periodLogs[key]
+      const phaseResult = predictionsReady ? phaseForDate(cycleModel, date) : { phase: null, dayOfCycle: null }
+      const { phase, dayOfCycle } = phaseResult
       const isToday = diffDays(date, today) === 0
 
-      // Pain score
-      const pain = log?.pain ?? (log?.vibe !== undefined ? 10 - log.vibe : 0)
+      // Pain is only shown when explicitly logged; mood/vibe is separate.
+      const pain = typeof log?.pain === 'number' ? log.pain : null
       const hasImpact = actualImpacts(log).length > 0
-      const isPeriodDay = log?.period || (phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < 5)
+      const isLogged = !!log?.checkinCompleted ||
+        log?.vibe !== undefined ||
+        log?.mood !== undefined ||
+        log?.symptoms !== undefined ||
+        log?.pain !== undefined ||
+        log?.impact !== undefined
+      const isPeriodDay = periodLog?.period === true || log?.period === true
+      const isPredictedPeriodDay = predictionsReady && phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < 5
 
       cells.push({
         date,
@@ -172,13 +134,16 @@ export default function Patterns({ initialTab }) {
         dayOfCycle,
         pain,
         hasImpact,
+        isLogged,
         isPeriodDay,
+        isPredictedPeriodDay,
         isToday,
         log,
+        periodLog,
       })
     }
     return cells
-  }, [today, activeLogs, cycleModel])
+  }, [today, activeLogs, state.periodLogs, cycleModel, predictionsReady])
 
   // Selected Day Details
   const selectedCell = calendarDays.find((c) => c.key === selectedDateKey) || calendarDays[calendarDays.length - 1]
@@ -188,7 +153,20 @@ export default function Patterns({ initialTab }) {
     const insights = []
     const logEntries = Object.entries(activeLogs)
 
-    // 1. Severe Pain in Menstrual Phase
+    if (!predictionsReady) {
+      insights.push({
+        id: 'baseline-tracking',
+        icon: '✨',
+        title: 'Building Your Baseline',
+        body: 'Keep logging period starts and daily check-ins to make Maisie more accurate. Obvious heavy bleeding, long gaps, or very high pain still get flagged right away.',
+        actionText: isTodayLogged ? null : 'Log Today < 10s ⏱️',
+        onAction: () => navigate('/log'),
+        badge: 'Clear',
+      })
+      return insights
+    }
+
+    // 1. Pain in Menstrual Phase
     const severeMenstrual = logEntries.filter(([k, log]) => {
       const d = new Date(`${k}T00:00:00`)
       const { phase } = phaseForDate(cycleModel, d)
@@ -199,8 +177,8 @@ export default function Patterns({ initialTab }) {
       insights.push({
         id: 'severe-cramps',
         icon: '🩸',
-        title: 'Recurrent Period Cramps (Pain ≥ 6)',
-        body: `Severe cramps logged on ${severeMenstrual.length} menstrual day(s). Pain at this level is worth tracking for a doctor.`,
+        title: 'Period Pain Signal (Pain ≥ 6)',
+        body: `Pain at this level was logged on ${severeMenstrual.length} period day(s). This is worth tracking for a doctor.`,
         actionText: 'What to say to doctor 💬',
         onAction: () => navigate('/advisor'),
         badge: 'Moderate',
@@ -231,7 +209,7 @@ export default function Patterns({ initialTab }) {
         id: 'steady-tracking',
         icon: '✨',
         title: 'Building Your Baseline',
-        body: 'Log your symptoms for 1 full cycle to unlock automatic symptom-phase pattern detection.',
+        body: 'Keep logging symptoms to make automatic pattern highlights more accurate.',
         actionText: isTodayLogged ? null : 'Log Today < 10s ⏱️',
         onAction: () => navigate('/log'),
         badge: 'Clear',
@@ -239,7 +217,7 @@ export default function Patterns({ initialTab }) {
     }
 
     return insights
-  }, [activeLogs, cycleModel, navigate, isTodayLogged])
+  }, [activeLogs, cycleModel, navigate, isTodayLogged, predictionsReady, observedCycleCount])
 
   // Doctor Summary Report Text
   const doctorReportText = useMemo(() => {
@@ -368,8 +346,8 @@ Note: Pattern awareness summary for medical appointments.`
       {/* ========================================================================= */}
       {activeTab === 'calendar' && (
         <div style={{ animation: 'fadeIn 0.2s ease' }}>
-          {/* Preview Banner */}
-          {isPreviewMode && (
+          {/* Empty-state nudge */}
+          {Object.keys(activeLogs).length === 0 && (
             <div
               style={{
                 marginBottom: 12,
@@ -385,7 +363,7 @@ Note: Pattern awareness summary for medical appointments.`
                 gap: 8,
               }}
             >
-              <span>✨ <strong>Sample Pattern Preview</strong> — Track daily for custom insights</span>
+              <span>✨ <strong>No daily logs yet</strong> — log a day to see real symptoms and impacts here</span>
               {!isTodayLogged ? (
                 <button
                   onClick={() => navigate('/log')}
@@ -446,12 +424,18 @@ Note: Pattern awareness summary for medical appointments.`
                 if (cell.isPeriodDay) {
                   cellBg = '#FDE8ED'
                   textColor = '#991B1B'
-                } else if (cell.pain >= 6) {
+                } else if (cell.isPredictedPeriodDay) {
+                  cellBg = '#FFF1F2'
+                  textColor = '#9F1239'
+                } else if (cell.pain !== null && cell.pain >= 6) {
                   cellBg = 'var(--pink-accent)'
                   textColor = '#FFF'
-                } else if (cell.pain >= 1) {
+                } else if (cell.pain !== null && cell.pain >= 1) {
                   cellBg = '#FCE7F3'
                   textColor = '#9D174D'
+                } else if (cell.isLogged) {
+                  cellBg = '#EFF8F0'
+                  textColor = '#2B7A41'
                 }
 
                 if (isSelected) {
@@ -472,7 +456,7 @@ Note: Pattern awareness summary for medical appointments.`
                       border: borderStyle,
                       color: textColor,
                       fontSize: 11,
-                      fontWeight: cell.isToday || isSelected || cell.isPeriodDay ? 700 : 500,
+                      fontWeight: cell.isToday || isSelected || cell.isPeriodDay || cell.isLogged ? 700 : 500,
                       position: 'relative',
                       padding: 0,
                       display: 'flex',
@@ -484,6 +468,21 @@ Note: Pattern awareness summary for medical appointments.`
                     }}
                   >
                     {cell.dayNum}
+
+                    {cell.isLogged && !cell.isPeriodDay && cell.pain === null && !cell.hasImpact && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: 4,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          background: '#2B7A41',
+                        }}
+                      />
+                    )}
 
                     {cell.hasImpact && (
                       <div
@@ -512,6 +511,7 @@ Note: Pattern awareness summary for medical appointments.`
                 borderTop: '1px solid rgba(0,0,0,0.06)',
                 display: 'flex',
                 justifyContent: 'center',
+                flexWrap: 'wrap',
                 gap: 16,
                 fontSize: 11,
                 color: 'var(--text-secondary)',
@@ -522,6 +522,9 @@ Note: Pattern awareness summary for medical appointments.`
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#FCE7F3', border: '1px solid #F472B6' }} /> Pain Logged
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#EFF8F0', border: '1px solid #2B7A41' }} /> Logged
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <i style={{ width: 6, height: 6, borderRadius: '50%', background: '#D97706' }} /> Impact
@@ -538,16 +541,31 @@ Note: Pattern awareness summary for medical appointments.`
                   {selectedCell.isToday && <span style={{ marginLeft: 6, color: 'var(--pink-accent)', fontSize: 12 }}>(Today)</span>}
                 </p>
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-                  {selectedCell.phase || 'General'} Phase
+                  {selectedCell.isPeriodDay
+                    ? 'Period logged'
+                    : predictionsReady && selectedCell.phase
+                      ? `${selectedCell.phase} phase`
+                      : selectedCell.isLogged
+                        ? 'Logged day'
+                        : 'No log'}
                 </span>
               </div>
 
               {selectedCell.log ? (
                 <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10 }}>
                   <div style={{ display: 'flex', gap: 16 }}>
-                    <span><strong>Mood:</strong> {selectedCell.log.mood || 'Normal'}</span>
-                    <span><strong>Pain:</strong> {selectedCell.pain > 0 ? `${selectedCell.pain}/10` : '0/10'}</span>
+                    <span><strong>Mood:</strong> {selectedCell.log.mood || selectedCell.log.vibe || 'Not logged'}</span>
+                    <span>
+                      <strong>Pain:</strong>{' '}
+                      {selectedCell.pain !== null ? `${selectedCell.pain}/10` : 'Not logged'}
+                    </span>
                   </div>
+                  {selectedCell.isPeriodDay && (
+                    <div>
+                      <strong style={{ fontSize: 12 }}>Period:</strong>{' '}
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Logged for this day</span>
+                    </div>
+                  )}
                   {selectedCell.log.symptoms && selectedCell.log.symptoms.length > 0 && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       <strong style={{ fontSize: 12 }}>Symptoms:</strong>
@@ -589,6 +607,10 @@ Note: Pattern awareness summary for medical appointments.`
                     </div>
                   )}
                 </div>
+              ) : selectedCell.isPeriodDay ? (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Period was logged for this day.
+                </p>
               ) : (
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                   No check-in recorded for this day.
@@ -763,31 +785,31 @@ Note: Pattern awareness summary for medical appointments.`
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <MetabolicCard
                 title="Energy"
-                value={FULL_MOCK_SIGNALS.energy.val}
-                color={FULL_MOCK_SIGNALS.energy.color}
-                description={FULL_MOCK_SIGNALS.energy.desc}
-                trendPoints={FULL_MOCK_SIGNALS.energy.trend}
+                value={bodySignals.energy.val}
+                color={bodySignals.energy.color}
+                description={bodySignals.energy.desc}
+                trendPoints={bodySignals.energy.trend}
               />
               <MetabolicCard
                 title="Skin"
-                value={FULL_MOCK_SIGNALS.skin.val}
-                color={FULL_MOCK_SIGNALS.skin.color}
-                description={FULL_MOCK_SIGNALS.skin.desc}
-                trendPoints={FULL_MOCK_SIGNALS.skin.trend}
+                value={bodySignals.skin.val}
+                color={bodySignals.skin.color}
+                description={bodySignals.skin.desc}
+                trendPoints={bodySignals.skin.trend}
               />
               <MetabolicCard
                 title="Sleep"
-                value={FULL_MOCK_SIGNALS.sleep.val}
-                color={FULL_MOCK_SIGNALS.sleep.color}
-                description={FULL_MOCK_SIGNALS.sleep.desc}
-                trendPoints={FULL_MOCK_SIGNALS.sleep.trend}
+                value={bodySignals.sleep.val}
+                color={bodySignals.sleep.color}
+                description={bodySignals.sleep.desc}
+                trendPoints={bodySignals.sleep.trend}
               />
               <MetabolicCard
                 title="Mood"
-                value={FULL_MOCK_SIGNALS.mood.val}
-                color={FULL_MOCK_SIGNALS.mood.color}
-                description={FULL_MOCK_SIGNALS.mood.desc}
-                trendPoints={FULL_MOCK_SIGNALS.mood.trend}
+                value={bodySignals.mood.val}
+                color={bodySignals.mood.color}
+                description={bodySignals.mood.desc}
+                trendPoints={bodySignals.mood.trend}
               />
             </div>
           )}
