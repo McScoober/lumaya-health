@@ -101,6 +101,16 @@ export default function Result() {
 
       {/* 3 feature tiles */}
       <div style={{ width: '100%', maxWidth: '340px', display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '32px' }}>
+        <div style={{ background: '#FFF8E8', border: '1px solid rgba(180, 83, 9, 0.18)', borderRadius: '14px', padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+          <span style={{ fontSize: '21px', lineHeight: 1 }}>ℹ️</span>
+          <div>
+            <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: '#2C1810' }}>Maisie does not diagnose</p>
+            <p style={{ margin: '3px 0 0', fontSize: 13, color: '#5C3D2E', lineHeight: 1.45 }}>
+              Maisie flags cycle signals from what you log. It cannot tell you that you have a medical condition.
+            </p>
+          </div>
+        </div>
+
         <div style={{ background: '#fff', border: '1px solid rgba(44,24,16,0.08)', borderRadius: '14px', padding: '14px 16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '22px' }}>🌸</span>
           <div>

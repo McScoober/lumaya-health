@@ -2,7 +2,7 @@ import { useState } from 'react'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
 import { useStore } from '../state/store.jsx'
-import { phaseForDate, PHASE_META } from '../engine/cyclePredictor.js'
+import { phaseForDate, PHASE_META, hasThreeFullCycles } from '../engine/cyclePredictor.js'
 import { deriveBodySignals } from '../engine/bodySignals.js'
 
 const PHASE_LABELS = {
@@ -19,7 +19,8 @@ export default function Signals() {
   const [view, setView] = useState('all')
   const { state, cycleModel } = useStore()
 
-  const phaseInfo = phaseForDate(cycleModel, new Date())
+  const predictionsReady = hasThreeFullCycles(state.periodLogs)
+  const phaseInfo = predictionsReady ? phaseForDate(cycleModel, new Date()) : { phase: null, dayOfCycle: null }
   const phase = phaseInfo.phase || 'follicular'
   const cycleDay = phaseInfo.dayOfCycle === null || phaseInfo.dayOfCycle === undefined ? 14 : phaseInfo.dayOfCycle + 1
   const phaseMeta = PHASE_META[phase] || PHASE_META.follicular
@@ -72,7 +73,7 @@ export default function Signals() {
           padding: '7px 10px',
           borderRadius: 99,
         }}>
-          day {cycleDay}
+          {predictionsReady ? `day ${cycleDay}` : 'baseline'}
         </span>
       </header>
       
@@ -91,7 +92,7 @@ export default function Signals() {
       }}>
         {[
           ['all', 'last 30 days'],
-          ['cycle', 'through your cycle'],
+          ['cycle', predictionsReady ? 'through your cycle' : 'baseline'],
         ].map(([key, label]) => (
           <button
             key={key}
@@ -131,30 +132,43 @@ export default function Signals() {
             padding: 13,
             boxShadow: '0 10px 30px rgba(44,24,16,0.04)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
-              <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#2C1810' }}>
-                how you feel through your cycle
-              </h2>
-              <span style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: phaseMeta?.accent || '#E0528A',
-                background: phaseMeta?.soft || '#FDEEF4',
-                padding: '5px 10px',
-                borderRadius: 99,
-                whiteSpace: 'nowrap',
-              }}>
-                {phaseLabel}
-              </span>
-            </div>
+            {predictionsReady ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
+                  <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#2C1810' }}>
+                    how you feel through your cycle
+                  </h2>
+                  <span style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: phaseMeta?.accent || '#E0528A',
+                    background: phaseMeta?.soft || '#FDEEF4',
+                    padding: '5px 10px',
+                    borderRadius: 99,
+                    whiteSpace: 'nowrap',
+                  }}>
+                    {phaseLabel}
+                  </span>
+                </div>
 
-            <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-              <CycleOverlayChart cycleDay={cycleDay} dailyLogs={state.dailyLogs} />
-            </div>
+                <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+                  <CycleOverlayChart cycleDay={cycleDay} dailyLogs={state.dailyLogs} />
+                </div>
 
-            <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>
-              <strong style={{ color: '#2C1810' }}>Maisie says:</strong> this view is here to spot timing. If something keeps showing up during the same part of your cycle, it's worth tracking for one more month.
-            </p>
+                <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>
+                  <strong style={{ color: '#2C1810' }}>Maisie says:</strong> this view is here to spot timing from your own cycle history.
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#2C1810' }}>
+                  building your baseline
+                </h2>
+                <p style={{ margin: '10px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>
+                  Keep logging period starts and daily check-ins. Maisie will show timing-based views once there are enough full cycles to make them useful.
+                </p>
+              </>
+            )}
           </section>
         </div>
       )}

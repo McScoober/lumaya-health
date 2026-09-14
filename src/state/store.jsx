@@ -9,7 +9,7 @@
 
 import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
 import { scoreCheckIn } from '../engine/scoring.js'
-import { addDays, buildCycleModel, dateKeyLocal, diffDays, periodStartKeys } from '../engine/cyclePredictor.js'
+import { addDays, buildCycleModel, dateKeyLocal, diffDays, fullCycleCount, hasThreeFullCycles } from '../engine/cyclePredictor.js'
 import { isSupabaseConfigured, ensureAuthUser, getExistingAuthUserId } from '../lib/supabase.js'
 import { pullFromSupabase, pushToSupabase } from '../lib/sync.js'
 
@@ -93,6 +93,7 @@ function seedPeriodLogsFromAnswers(periodLogs, answers) {
         ...existing,
         period: true,
         periodStart: existing.periodStart === true || i === 0,
+        status: 'confirmed',
         source: existingSource && !existingSource.startsWith('onboarding') ? existing.source : source,
       }
     }
@@ -138,9 +139,75 @@ function latestPeriodStartFromLogs(periodLogs = {}) {
   return derivedStarts[derivedStarts.length - 1] || periodKeys[0]
 }
 
+function estimatedPeriodLength(periodLogs = {}) {
+  const periodKeys = Object.entries(periodLogs)
+    .filter(([, log]) => log?.period === true)
+    .map(([key]) => key)
+    .sort()
+
+  if (periodKeys.length === 0) return 5
+
+  const runs = []
+  let currentRun = [periodKeys[0]]
+
+  for (let i = 1; i < periodKeys.length; i++) {
+    const prev = parseCheckinDate(periodKeys[i - 1])
+    const current = parseCheckinDate(periodKeys[i])
+    if (prev && current && diffDays(current, prev) === 1) {
+      currentRun.push(periodKeys[i])
+    } else {
+      runs.push(currentRun)
+      currentRun = [periodKeys[i]]
+    }
+  }
+  runs.push(currentRun)
+
+  const average = runs.reduce((sum, run) => sum + run.length, 0) / runs.length
+  return Math.max(3, Math.min(7, Math.round(average || 5)))
+}
+
+function hasMeaningfulPeriodFields(log = {}) {
+  const { period, periodStart, periodPromptAnswered, source, status, estimatedFrom, ...rest } = log
+  return Object.keys(rest).length > 0
+}
+
+function clearPossibleDaysFromStart(periodLogs = {}, startKey) {
+  const next = { ...periodLogs }
+  Object.entries(next).forEach(([key, log]) => {
+    if (log?.status !== 'possible' || log?.estimatedFrom !== startKey) return
+    if (hasMeaningfulPeriodFields(log)) {
+      const { period, periodStart, source, status, estimatedFrom, ...rest } = log
+      next[key] = rest
+    } else {
+      delete next[key]
+    }
+  })
+  return next
+}
+
+function addPossiblePeriodDays(periodLogs = {}, startKey) {
+  const startDate = parseCheckinDate(startKey)
+  if (!startDate) return periodLogs
+
+  const next = { ...periodLogs }
+  const possibleLength = estimatedPeriodLength(next)
+  for (let i = 1; i < possibleLength; i++) {
+    const key = dateKeyLocal(addDays(startDate, i))
+    const existing = next[key] || {}
+    if (existing.period === true || existing.status === 'not_period') continue
+    next[key] = {
+      ...existing,
+      period: false,
+      periodStart: false,
+      status: 'possible',
+      source: 'estimated',
+      estimatedFrom: startKey,
+    }
+  }
+  return next
+}
+
 function normalizeFlagId(id) {
-  if (id === ['P', 'COS-01'].join('') || id === 'PMOS-01') return 'HORM-01'
-  if (String(id).startsWith('ENDO-')) return String(id).replace('ENDO-', 'PAIN-')
   return id
 }
 
@@ -255,7 +322,7 @@ function reducer(state, action) {
       const periodLogs = seedPeriodLogsFromAnswers(removeOnboardingPeriodLogs(state.periodLogs), answers)
       const result = scoreCheckIn(answers, {
         priorTier2Ids: state.confirmedTier2,
-        observedCycleCount: periodStartKeys(periodLogs).length,
+        observedFullCycleCount: fullCycleCount(periodLogs),
       })
       const history = [...state.checkinHistory, { date: today, level: result.level }]
       return {
@@ -278,7 +345,7 @@ function reducer(state, action) {
       // Re-score with the new answer so result stays current.
       const updatedResult = scoreCheckIn(updatedAnswers, {
         priorTier2Ids: state.confirmedTier2,
-        observedCycleCount: periodStartKeys(state.periodLogs).length,
+        observedFullCycleCount: fullCycleCount(state.periodLogs),
       })
       return {
         ...state,
@@ -323,14 +390,33 @@ function reducer(state, action) {
     case 'UPDATE_PERIOD_STATUS': {
       const { dateKey, period, periodPromptAnswered } = action
       const prev = state.periodLogs[dateKey] || {}
-      const periodLogs = {
-        ...state.periodLogs,
+      const { status: _status, estimatedFrom: _estimatedFrom, ...cleanPrev } = prev
+      const source = action.source || 'manual'
+      let periodLogs = clearPossibleDaysFromStart(state.periodLogs, dateKey)
+      const prevKey = dateKeyLocal(addDays(parseCheckinDate(dateKey), -1))
+      const prevConfirmed = periodLogs[prevKey]?.period === true
+
+      periodLogs = {
+        ...periodLogs,
         [dateKey]: {
-          ...prev,
+          ...(period === undefined ? prev : cleanPrev),
           ...(period !== undefined ? { period } : {}),
-          ...(period === true ? { periodStart: true, source: 'manual' } : {}),
+          ...(period === true ? {
+            periodStart: !prevConfirmed,
+            source,
+            status: 'confirmed',
+          } : {}),
+          ...(period === false ? {
+            periodStart: false,
+            source,
+            status: 'not_period',
+          } : {}),
           ...(periodPromptAnswered !== undefined ? { periodPromptAnswered } : {}),
         },
+      }
+
+      if (period === true) {
+        periodLogs = addPossiblePeriodDays(periodLogs, dateKey)
       }
 
       let next = { ...state, periodLogs }
@@ -340,10 +426,10 @@ function reducer(state, action) {
       const onboardDate = state.checkinHistory[0]?.date
       const startsNewCycle = period === true && onboardDate && dateKey > onboardDate
       if (startsNewCycle && state.pendingTier2.length > 0) {
-        const observedCycleCount = periodStartKeys(periodLogs).length
+        const observedFullCycleCount = fullCycleCount(periodLogs)
         const rescored = scoreCheckIn(state.answers, {
           priorTier2Ids: state.pendingTier2,
-          observedCycleCount,
+          observedFullCycleCount,
         })
         const nowConfirmed = rescored.flags
           .filter((f) => f.tier === 2 && state.pendingTier2.includes(f.id))
@@ -352,7 +438,7 @@ function reducer(state, action) {
           const confirmedTier2 = Array.from(new Set([...state.confirmedTier2, ...nowConfirmed]))
           const result = scoreCheckIn(state.answers, {
             priorTier2Ids: confirmedTier2,
-            observedCycleCount,
+            observedFullCycleCount,
           })
           next = {
             ...next,
@@ -569,6 +655,7 @@ export function StoreProvider({ children }) {
       lastStart: lastStart && lastStart !== 'unknown' ? lastStart : null,
       cycleLength: state.result?.cycleLength,
       onBirthControl: state.profile.onBirthControl,
+      predictionsReady: hasThreeFullCycles(state.periodLogs),
     })
   }, [state.periodLogs, state.answers.lastStart, state.result, state.profile.onBirthControl])
 

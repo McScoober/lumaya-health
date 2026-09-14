@@ -9,13 +9,12 @@
 //   5. "Log it" button
 //
 // After logging:
-//   - Instant tip card appears (phase tip or symptom-specific)
+//   - Short sisterly advice card appears based on the just-saved log
 //   - If pain ≥ 8 → RedFlagCard instead of/in addition to tip
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { dateKeyLocal, phaseForDate } from '../engine/cyclePredictor.js'
-import { buildTip } from '../engine/tipEngine.js'
+import { dateKeyLocal } from '../engine/cyclePredictor.js'
 import { TopBar, Chip } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
@@ -47,37 +46,48 @@ const IMPACTS = [
   { id: 'fine',     label: 'All good', Icon: CheckCircle,       color: '#4BAF6B' },
 ]
 
-// ── Instant tip logic ─────────────────────────────────────────────────────
-function getInstantTip(symptoms, phase, profile) {
-  // Symptom-specific tips take priority
-  if (symptoms.includes('Cramps'))
-    return 'Try a heat pad on your lower back for 10 minutes — it actually works.'
-  if (symptoms.includes('Headache'))
-    return 'Drink a full glass of water now and rest in a dim space for 5 minutes.'
-  if (symptoms.includes('Fatigue'))
-    return 'An iron-rich snack (dark chocolate, spinach, nuts) can help restore energy.'
-  if (symptoms.includes('Bloating'))
-    return 'Light movement like a 10-min walk eases bloating faster than lying still.'
-  if (symptoms.includes('Nausea'))
-    return 'Ginger tea or small salty snacks can settle nausea quickly.'
-  if (symptoms.includes('Mood changes'))
-    return 'This is luteal-phase chemistry, not "you." Give yourself permission to feel it.'
-  if (symptoms.includes('Back pain'))
-    return 'A pillow under your knees while lying down takes pressure off your lower back.'
-  if (symptoms.includes('Skin breakout'))
-    return 'Hormone-driven breakouts usually peak right before your period — this will pass.'
-  // Fall back to phase tip
-  if (phase) {
-    const tip = buildTip(phase, profile)
-    return tip.actions[0] || tip.headline
+// ── Sisterly post-log advice ──────────────────────────────────────────────
+function getSisterlyTip({ symptoms, pain, impacts, vibe }) {
+  if (symptoms.includes('Cramps') || pain >= 4) {
+    return 'Big-sis move: heat on your lower belly or lower back for 10 minutes. If you can, sip water and give your body a quiet minute.'
   }
-  return 'You showed up and logged today. That data is yours — and it matters.'
+  if (symptoms.includes('Headache')) {
+    return 'Tiny reset: drink a full glass of water and dim your screen for a few minutes. Headaches hate the dramatic lighting.'
+  }
+  if (symptoms.includes('Nausea')) {
+    return 'Try small sips and something plain or salty. No need for a full meal if your stomach is already negotiating.'
+  }
+  if (symptoms.includes('Bloating')) {
+    return 'A slow walk or gentle stretch can help more than curling into a ball forever. Annoying, but true.'
+  }
+  if (symptoms.includes('Back pain')) {
+    return 'Pillow-under-the-knees trick: lie down, prop your knees, and let your lower back unclench for a bit.'
+  }
+  if (symptoms.includes('Fatigue')) {
+    return 'Low battery day. Pick the smallest next thing, not the whole mountain. A snack with iron or protein can help.'
+  }
+  if (symptoms.includes('Sleep trouble') || impacts.includes('sleep')) {
+    return 'Tonight, aim for boring on purpose: low lights, cozy clothes, phone down a little earlier. Future-you deserves the assist.'
+  }
+  if (symptoms.includes('Mood changes') || vibe?.value <= 2) {
+    return 'Be extra gentle with yourself today. Feelings can be loud without being the whole truth.'
+  }
+  if (symptoms.includes('Skin breakout')) {
+    return 'Hands off the breakout if you can. Wash, moisturize, and let it be boring. Your skin is not a report card.'
+  }
+  if (impacts.includes('school') || impacts.includes('activity') || impacts.includes('plans')) {
+    return 'If today got interrupted, that counts as data, not failure. One honest log helps you explain the pattern later.'
+  }
+  if (vibe?.value >= 4) {
+    return 'Love this for you. Make a tiny note of what helped today, even if it was just sleep, snacks, or less chaos.'
+  }
+  return 'You logged it. That is enough for today. Maisie gets smarter from honest check-ins, not perfect ones.'
 }
 
 // ── Main component ────────────────────────────────────────────────────────
 export default function DailyLog() {
   const navigate = useNavigate()
-  const { state, dispatch, cycleModel } = useStore()
+  const { state, dispatch } = useStore()
 
   const todayKey   = dateKeyLocal()
   const todayLog   = state.dailyLogs[todayKey] || {}
@@ -88,10 +98,6 @@ export default function DailyLog() {
   const [symptoms, setSymptoms] = useState([])
   const [impacts,  setImpacts]  = useState([])
   const [done,    setDone]    = useState(false)    // post-log confirmation state
-
-  // Phase for tip fallback (from cycleModel)
-  const { phase } = phaseForDate(cycleModel, new Date())
-  const profile = state.profile || {}
 
   function toggleSymptom(s) {
     setSymptoms((prev) =>
@@ -121,7 +127,7 @@ export default function DailyLog() {
     setDone(true)
   }
 
-  const instantTip    = getInstantTip(symptoms, phase, profile)
+  const sisterlyTip   = getSisterlyTip({ symptoms, pain: pain ?? 0, impacts, vibe })
   const isHighPain    = (pain ?? 0) >= 8
   const hasSpotting   = symptoms.includes('Spotting')
   const showRedFlag   = isHighPain || (hasSpotting && (pain ?? 0) >= 6)
@@ -190,10 +196,10 @@ export default function DailyLog() {
                 color: 'var(--pink-accent, #E0528A)',
               }}
             >
-              Maisie's tip for right now
+              Maisie's sisterly tip
             </p>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55, color: '#2C1810' }}>
-              {instantTip}
+              {sisterlyTip}
             </p>
           </div>
         )}

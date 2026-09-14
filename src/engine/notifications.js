@@ -1,7 +1,7 @@
 // ============================================================
 // Notification scheduler (TRD Section 6.2 + 9)
-// Cadence is intentionally non-uniform:
-//  - Period check-in: DAILY, but only inside the predicted period window.
+// Prediction-based cadence starts only after enough full cycles exist:
+//  - Period check-in: DAILY, but only inside the learned period window.
 //  - Weekly phase check-in: ~once a week, near each new phase's start.
 //  - Mid-luteal nudge: one extra touch partway through the luteal phase.
 // In production these go out over SMS (Twilio, 9.1). Here they populate an
@@ -15,6 +15,7 @@ import { tipSms } from './tipEngine.js'
 export function buildSchedule(model, profile, { days = 30, from = new Date() } = {}) {
   const out = []
   if (!model.hasData) return out
+  if (!model.predictionsReady) return out
   const today = startOfDay(from)
 
   let lastPhaseSeen = null
@@ -23,7 +24,7 @@ export function buildSchedule(model, profile, { days = 30, from = new Date() } =
     const p = predictPeriod(model, date)
     const { phase, dayOfCycle } = phaseForDate(model, date)
 
-    // 1. Period check-in — daily, only inside the predicted window.
+    // 1. Period check-in — daily, only inside the learned window.
     if (p && diffDays(date, p.windowStart) >= 0 && diffDays(date, p.windowEnd) <= 0) {
       out.push({
         date,

@@ -4,9 +4,9 @@
 // Runs entirely client-side (Section 14.4). No server call.
 //
 // Tier 1 rules  = valid from a single instance (full severity now).
-// Tier 2 rules  = pattern-dependent. They stay hidden until there are at
-//                 least three cycle starts, then start as SOFT and escalate
-//                 only when confirmed by a later cycle (8.4).
+// Tier 2 rules  = pattern-dependent. They are not evaluated until at least
+//                 three full cycles of real period data exist, then start as
+//                 SOFT and escalate only when confirmed by later tracking.
 // ============================================================
 
 export const SEVERITY = { URGENT: 'URGENT', MODERATE: 'MODERATE', SOFT: 'SOFT' }
@@ -195,7 +195,7 @@ function ruleOLIG(answers) {
 
 const OBVIOUS_RULES = [rulePRIM, ruleSTOP, ruleHMB]
 const PATTERN_RULES = [rulePAIN, ruleHORM, ruleOLIG]
-const MIN_CYCLES_FOR_PATTERNS = 3
+const MIN_FULL_CYCLES_FOR_PATTERNS = 3
 
 // --- result level logic (Section 8.3) ----------------------
 function levelFromFlags(flags) {
@@ -214,12 +214,13 @@ function levelFromFlags(flags) {
  * @param answers  merged answers object (deep check-in keys)
  * @param opts.priorTier2Ids  rule IDs already stored from a previous cycle (8.4).
  *                            A Tier 2 rule that fires AND is in this set is "confirmed".
+ * @param opts.observedFullCycleCount number of complete cycles from real period starts.
  * @returns { level, flags, cycleLength, onBirthControl, needsAdvisor, pendingTier2 }
  */
 export function scoreCheckIn(answers, opts = {}) {
   const priorTier2 = new Set(opts.priorTier2Ids || [])
-  const observedCycleCount = opts.observedCycleCount ?? 0
-  const patternsReady = observedCycleCount >= MIN_CYCLES_FOR_PATTERNS
+  const observedFullCycleCount = opts.observedFullCycleCount ?? 0
+  const patternsReady = observedFullCycleCount >= MIN_FULL_CYCLES_FOR_PATTERNS
   const rules = patternsReady ? [...OBVIOUS_RULES, ...PATTERN_RULES] : OBVIOUS_RULES
   const raw = rules.map((r) => r(answers)).filter(Boolean)
 
@@ -250,7 +251,7 @@ export function scoreCheckIn(answers, opts = {}) {
     needsAdvisor: needsAdvisor && level !== LEVEL.CLEAR && level !== LEVEL.MILD,
     pendingTier2,
     patternsReady,
-    observedCycleCount,
+    observedFullCycleCount,
   }
 }
 

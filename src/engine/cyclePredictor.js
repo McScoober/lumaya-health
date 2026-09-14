@@ -55,6 +55,7 @@ function diffDays(a, b) {
  * @param opts.lastStart  ISO date of most recent period start (from check-in or daily logs)
  * @param opts.cycleLength computed cycle length in days (may be null)
  * @param opts.onBirthControl boolean
+ * @param opts.predictionsReady boolean true only after enough full cycles exist
  * @param opts.bcSchedule { activeDays, breakDays } optional for BC users
  */
 export function buildCycleModel(opts = {}) {
@@ -68,6 +69,7 @@ export function buildCycleModel(opts = {}) {
     lastStart,
     onBirthControl: !!opts.onBirthControl,
     bcSchedule: opts.bcSchedule || null,
+    predictionsReady: !!opts.predictionsReady,
     hasData: !!lastStart,
   }
 }
@@ -148,6 +150,14 @@ export function periodStartKeys(periodLogs = {}) {
     const prevKey = dateKeyLocal(addDays(parseDateLocal(key), -1))
     return !periodSet.has(prevKey)
   })
+}
+
+export function fullCycleCount(periodLogs = {}) {
+  return Math.max(0, periodStartKeys(periodLogs).length - 1)
+}
+
+export function hasThreeFullCycles(periodLogs = {}) {
+  return fullCycleCount(periodLogs) >= 3
 }
 
 // Calendar cells for a given month.

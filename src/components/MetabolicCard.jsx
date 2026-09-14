@@ -2,12 +2,14 @@ export default function MetabolicCard({ title, value, color, description, trendP
   const min = trendPoints.length > 0 ? Math.min(...trendPoints) : 0
   const max = trendPoints.length > 0 ? Math.max(...trendPoints) : 0
   const range = max === min ? 1 : max - min
-  
-  const points = trendPoints.map((val, i) => {
-    const x = (i / (trendPoints.length - 1 || 1)) * 100
-    const y = 100 - ((val - min) / range) * 100
-    return `${x},${y}`
-  }).join(' ')
+
+  const points = trendPoints.length === 1
+    ? '0,50 100,50'
+    : trendPoints.map((val, i) => {
+      const x = (i / (trendPoints.length - 1 || 1)) * 100
+      const y = max === min ? 50 : 100 - ((val - min) / range) * 100
+      return `${x},${y}`
+    }).join(' ')
 
   const Wrapper = onClick ? 'button' : 'div'
 
@@ -40,7 +42,7 @@ export default function MetabolicCard({ title, value, color, description, trendP
       
       {trendPoints.length > 0 && (
         <div style={{ height: 40, width: '100%', padding: '4px 0' }}>
-          <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 -5 100 110">
+          <svg width="100%" height="100%" preserveAspectRatio="none" viewBox="0 -5 100 110" style={{ display: 'block', overflow: 'visible' }}>
             <polyline 
               points={points} 
               fill="none" 
@@ -49,6 +51,9 @@ export default function MetabolicCard({ title, value, color, description, trendP
               strokeLinecap="round" 
               strokeLinejoin="round" 
             />
+            {trendPoints.length === 1 && (
+              <circle cx="50" cy="50" r="3" fill={color} />
+            )}
           </svg>
         </div>
       )}

@@ -1,15 +1,13 @@
 // Screen 7 — Daily check-in (TRD Section 6.2 + 6.5)
 // "Did you get your period today?" yes/no + optional one-tap mood emoji.
-// No performance, no streak-shaming (13.2.1). Milestone confetti (13.2.5).
+// No performance, no streak-shaming (13.2.1).
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { isInPeriodWindow } from '../engine/cyclePredictor.js'
 import { Button, Card, TopBar } from '../components/ui.jsx'
-import Confetti from '../components/Confetti.jsx'
 
 const MOODS = ['😄', '🙂', '😐', '😣', '😢', '😴']
-const MILESTONES = [7, 30, 100]
 
 export default function DailyCheckIn() {
   const navigate = useNavigate()
@@ -20,7 +18,6 @@ export default function DailyCheckIn() {
 
   const [period, setPeriod] = useState(null) // true / false
   const [mood, setMood] = useState(null)
-  const [celebrate, setCelebrate] = useState(false)
 
   function haptic() {
     if (navigator.vibrate) navigator.vibrate(12) // 13.2.5 tactile confirm
@@ -29,23 +26,11 @@ export default function DailyCheckIn() {
   function submit() {
     haptic()
     dispatch({ type: 'LOG_DAILY', dateKey, period: period === true, mood: mood || undefined })
-    const newStreak = state.lastCheckinDate === dateKey ? state.streak : state.streak + (isConsecutive() ? 1 : 0) || 1
-    if (MILESTONES.includes(newStreak)) {
-      setCelebrate(true)
-      setTimeout(() => navigate('/home'), 1700)
-    } else {
-      navigate('/home')
-    }
-  }
-
-  function isConsecutive() {
-    const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10)
-    return state.lastCheckinDate === yesterday
+    navigate('/home')
   }
 
   return (
     <div className="screen">
-      <Confetti show={celebrate} onDone={() => setCelebrate(false)} />
       <TopBar title="Daily check-in" onBack={() => navigate('/home')} />
 
       <Card accent style={{ marginTop: 8 }}>

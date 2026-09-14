@@ -20,6 +20,7 @@ import {
   diffDays,
   startOfDay,
   periodStartKeys,
+  hasThreeFullCycles,
 } from '../engine/cyclePredictor.js'
 
 const PHASE_LABELS = {
@@ -39,7 +40,7 @@ function actualImpacts(log) {
 export default function Patterns({ initialTab }) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { state } = useStore()
+  const { state, dispatch } = useStore()
 
   // Tab State: 'calendar' | 'signals'
   const tabFromUrl = searchParams.get('tab')
@@ -74,10 +75,9 @@ export default function Patterns({ initialTab }) {
 
   // Current Phase Info for Signals View
   const now = new Date()
+  const predictionsReady = hasThreeFullCycles(state.periodLogs)
   const phaseInfo = phaseForDate(cycleModel, now)
-  const observedCycleCount = periodStartKeys(state.periodLogs).length
-  const predictionsReady = observedCycleCount >= 3
-  const currentPhase = predictionsReady ? (phaseInfo.phase || 'follicular') : 'follicular'
+  const currentPhase = phaseInfo.phase || 'follicular'
   const cycleDay = phaseInfo.dayOfCycle === null || phaseInfo.dayOfCycle === undefined ? 14 : phaseInfo.dayOfCycle + 1
   const phaseMeta = PHASE_META[currentPhase] || PHASE_META.follicular
   const phaseLabel = PHASE_LABELS[currentPhase] || phaseMeta.label || 'Building Up'
@@ -114,7 +114,8 @@ export default function Patterns({ initialTab }) {
       const { phase, dayOfCycle } = phaseResult
       const isToday = diffDays(date, today) === 0
 
-      // Pain is only shown when explicitly logged; mood/vibe is separate.
+      // Pain and impact stay in the day detail; the calendar grid only marks
+      // whether something was logged.
       const pain = typeof log?.pain === 'number' ? log.pain : null
       const hasImpact = actualImpacts(log).length > 0
       const isLogged = !!log?.checkinCompleted ||
@@ -124,6 +125,7 @@ export default function Patterns({ initialTab }) {
         log?.pain !== undefined ||
         log?.impact !== undefined
       const isPeriodDay = periodLog?.period === true || log?.period === true
+      const isPossiblePeriodDay = !isPeriodDay && periodLog?.status === 'possible'
       const isPredictedPeriodDay = predictionsReady && phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < 5
 
       cells.push({
@@ -136,6 +138,7 @@ export default function Patterns({ initialTab }) {
         hasImpact,
         isLogged,
         isPeriodDay,
+        isPossiblePeriodDay,
         isPredictedPeriodDay,
         isToday,
         log,
@@ -217,7 +220,7 @@ export default function Patterns({ initialTab }) {
     }
 
     return insights
-  }, [activeLogs, cycleModel, navigate, isTodayLogged, predictionsReady, observedCycleCount])
+  }, [activeLogs, cycleModel, navigate, isTodayLogged, predictionsReady])
 
   // Doctor Summary Report Text
   const doctorReportText = useMemo(() => {
@@ -424,15 +427,10 @@ Note: Pattern awareness summary for medical appointments.`
                 if (cell.isPeriodDay) {
                   cellBg = '#FDE8ED'
                   textColor = '#991B1B'
-                } else if (cell.isPredictedPeriodDay) {
-                  cellBg = '#FFF1F2'
+                } else if (cell.isPossiblePeriodDay) {
+                  cellBg = '#FFF7FA'
                   textColor = '#9F1239'
-                } else if (cell.pain !== null && cell.pain >= 6) {
-                  cellBg = 'var(--pink-accent)'
-                  textColor = '#FFF'
-                } else if (cell.pain !== null && cell.pain >= 1) {
-                  cellBg = '#FCE7F3'
-                  textColor = '#9D174D'
+                  borderStyle = '1.5px dashed #F43F5E'
                 } else if (cell.isLogged) {
                   cellBg = '#EFF8F0'
                   textColor = '#2B7A41'
@@ -469,7 +467,7 @@ Note: Pattern awareness summary for medical appointments.`
                   >
                     {cell.dayNum}
 
-                    {cell.isLogged && !cell.isPeriodDay && cell.pain === null && !cell.hasImpact && (
+                    {cell.isLogged && !cell.isPeriodDay && (
                       <div
                         style={{
                           position: 'absolute',
@@ -484,20 +482,6 @@ Note: Pattern awareness summary for medical appointments.`
                       />
                     )}
 
-                    {cell.hasImpact && (
-                      <div
-                        style={{
-                          position: 'absolute',
-                          top: 1,
-                          right: 1,
-                          width: 6,
-                          height: 6,
-                          borderRadius: '50%',
-                          background: '#D97706',
-                          border: '1px solid #fff',
-                        }}
-                      />
-                    )}
                   </button>
                 )
               })}
@@ -521,13 +505,10 @@ Note: Pattern awareness summary for medical appointments.`
                 <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#FDE8ED', border: '1px solid #F43F5E' }} /> Period
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#FCE7F3', border: '1px solid #F472B6' }} /> Pain Logged
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFF7FA', border: '1px dashed #F43F5E' }} /> Possible period
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#EFF8F0', border: '1px solid #2B7A41' }} /> Logged
-              </span>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <i style={{ width: 6, height: 6, borderRadius: '50%', background: '#D97706' }} /> Impact
               </span>
             </div>
           </Card>
@@ -543,6 +524,8 @@ Note: Pattern awareness summary for medical appointments.`
                 <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                   {selectedCell.isPeriodDay
                     ? 'Period logged'
+                    : selectedCell.isPossiblePeriodDay
+                      ? 'Possible period'
                     : predictionsReady && selectedCell.phase
                       ? `${selectedCell.phase} phase`
                       : selectedCell.isLogged
@@ -564,6 +547,12 @@ Note: Pattern awareness summary for medical appointments.`
                     <div>
                       <strong style={{ fontSize: 12 }}>Period:</strong>{' '}
                       <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Logged for this day</span>
+                    </div>
+                  )}
+                  {selectedCell.isPossiblePeriodDay && (
+                    <div>
+                      <strong style={{ fontSize: 12 }}>Period:</strong>{' '}
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>Possible day based on your recent period start</span>
                     </div>
                   )}
                   {selectedCell.log.symptoms && selectedCell.log.symptoms.length > 0 && (
@@ -611,10 +600,85 @@ Note: Pattern awareness summary for medical appointments.`
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                   Period was logged for this day.
                 </p>
+              ) : selectedCell.isPossiblePeriodDay ? (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  This is marked as a possible period day until you confirm it.
+                </p>
               ) : (
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                   No check-in recorded for this day.
                 </p>
+              )}
+
+              {selectedCell.isPossiblePeriodDay ? (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
+                  <button
+                    type="button"
+                    onClick={() => dispatch({
+                      type: 'UPDATE_PERIOD_STATUS',
+                      dateKey: selectedCell.key,
+                      period: true,
+                      periodPromptAnswered: true,
+                    })}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 999,
+                      border: '1.5px solid #F43F5E',
+                      background: '#FDE8ED',
+                      color: '#991B1B',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Confirm period
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => dispatch({
+                      type: 'UPDATE_PERIOD_STATUS',
+                      dateKey: selectedCell.key,
+                      period: false,
+                      periodPromptAnswered: true,
+                    })}
+                    style={{
+                      minHeight: 38,
+                      borderRadius: 999,
+                      border: '1px solid rgba(0,0,0,0.1)',
+                      background: '#fff',
+                      color: '#5C3D2E',
+                      fontSize: 12.5,
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Not today
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => dispatch({
+                    type: 'UPDATE_PERIOD_STATUS',
+                    dateKey: selectedCell.key,
+                    period: !selectedCell.isPeriodDay,
+                    periodPromptAnswered: true,
+                  })}
+                  style={{
+                    marginTop: 12,
+                    minHeight: 38,
+                    width: '100%',
+                    borderRadius: 999,
+                    border: selectedCell.isPeriodDay ? '1px solid rgba(153, 27, 27, 0.22)' : '1.5px solid #F43F5E',
+                    background: selectedCell.isPeriodDay ? '#fff' : '#FDE8ED',
+                    color: '#991B1B',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {selectedCell.isPeriodDay ? 'Remove period from this day' : 'Mark as period day'}
+                </button>
               )}
             </Card>
           )}
@@ -714,7 +778,7 @@ Note: Pattern awareness summary for medical appointments.`
                 borderRadius: 99,
               }}
             >
-              Day {cycleDay} · {phaseLabel}
+              {predictionsReady ? `Day ${cycleDay} · ${phaseLabel}` : 'Early cycle view'}
             </span>
           </div>
 
@@ -775,7 +839,10 @@ Note: Pattern awareness summary for medical appointments.`
               </div>
 
               <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13, lineHeight: 1.5 }}>
-                <strong style={{ color: '#2C1810' }}>Maisie says:</strong> This view is here to spot timing. Notice how your energy naturally rises mid-cycle and softens in your wind-down phase.
+                <strong style={{ color: '#2C1810' }}>Maisie says:</strong>{' '}
+                {predictionsReady
+                  ? 'This view is here to spot timing from your own cycle history.'
+                  : 'This is an early orientation based on your latest period start. Keep logging so it becomes more personal.'}
               </p>
             </Card>
           )}

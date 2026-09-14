@@ -1,11 +1,11 @@
 // Screen 6, Home / daily dashboard (TRD Section 6, 13.2)
-// Calendar view, current phase, today's tip card, one-tap check-in CTA, streak.
+// Calendar view, current phase, today's tip card, one-tap check-in CTA, recent activity.
 // The background + card accents tint to the current predicted phase (13.2.3);
 // BC users get a neutral pink/berry tint (no phase prediction).
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys, hasThreeFullCycles } from '../engine/cyclePredictor.js'
 import { buildTip, maisieMessage } from '../engine/tipEngine.js'
 import { deriveBodySignals } from '../engine/bodySignals.js'
 import { Card, Button } from '../components/ui.jsx'
@@ -13,6 +13,18 @@ import Mascot from '../components/Mascot.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import ProgressiveCheckin from './ProgressiveCheckin.jsx'
 import { CheckCircle, Gear } from '@phosphor-icons/react'
+
+function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
+  let count = 0
+  for (let i = 0; i < days; i++) {
+    const key = dateKeyLocal(addDays(today, -i))
+    const log = dailyLogs[key]
+    if (log?.checkinCompleted || log?.mood || log?.vibe !== undefined || log?.symptoms?.length || log?.pain !== undefined || log?.impact !== undefined) {
+      count += 1
+    }
+  }
+  return count
+}
 
 export default function Home() {
   const navigate = useNavigate()
@@ -24,23 +36,34 @@ export default function Home() {
   const todayPeriodLog = state.periodLogs[todayKey] || {}
   const checkedInToday = todayLog.checkinCompleted === true
 
-  const { phase, dayOfCycle } = phaseForDate(cycleModel, now)
-  const cycleDay = dayOfCycle === null || dayOfCycle === undefined ? 1 : dayOfCycle + 1
-  const meta = phase ? PHASE_META[phase] : null
-  const prediction = predictPeriod(cycleModel, now)
   const periodStarts = periodStartKeys(state.periodLogs)
-  const observedCycleCount = periodStarts.length
-  const predictionsReady = observedCycleCount >= 3
-  const inWindow = isInPeriodWindow(cycleModel, now)
-  const isPeriodAskWindow = prediction
-    ? diffDays(now, addDays(prediction.windowStart, -3)) >= 0 && diffDays(now, prediction.windowEnd) <= 0
-    : false
-  const periodStartedToday = todayPeriodLog.period === true
-  const shouldShowPeriodStartCard = predictionsReady && isPeriodAskWindow && (!todayPeriodLog.periodPromptAnswered || periodStartedToday)
+  const predictionsReady = hasThreeFullCycles(state.periodLogs)
+  const supportPhaseInfo = phaseForDate(cycleModel, now)
+  const supportPhase = supportPhaseInfo.phase
+  const supportCycleDay = supportPhaseInfo.dayOfCycle === null || supportPhaseInfo.dayOfCycle === undefined
+    ? 1
+    : supportPhaseInfo.dayOfCycle + 1
+  const { phase, dayOfCycle } = predictionsReady
+    ? phaseForDate(cycleModel, now)
+    : { phase: null, dayOfCycle: null }
+  const meta = phase ? PHASE_META[phase] : null
+  const prediction = predictionsReady ? predictPeriod(cycleModel, now) : null
+  const inWindow = predictionsReady ? isInPeriodWindow(cycleModel, now) : false
   const latestPeriodStartKey = periodStarts[periodStarts.length - 1]
   const daysSinceLatestPeriod = latestPeriodStartKey
     ? diffDays(now, new Date(`${latestPeriodStartKey}T00:00:00`))
     : null
+  const isPeriodAskWindow = predictionsReady && prediction
+    ? diffDays(now, addDays(prediction.windowStart, -3)) >= 0 && diffDays(now, prediction.windowEnd) <= 0
+    : false
+  const isEarlyPeriodAskWindow = !predictionsReady &&
+    daysSinceLatestPeriod !== null &&
+    daysSinceLatestPeriod >= 21 &&
+    daysSinceLatestPeriod <= 38
+  const periodStartedToday = todayPeriodLog.period === true
+  const possiblePeriodToday = todayPeriodLog.status === 'possible' && todayPeriodLog.period !== true
+  const shouldShowPeriodStartCard = (possiblePeriodToday || isPeriodAskWindow || isEarlyPeriodAskWindow) &&
+    (!todayPeriodLog.periodPromptAnswered || periodStartedToday || possiblePeriodToday)
   const baselineTitle = periodStartedToday
     ? 'Period logged today'
     : checkedInToday
@@ -51,17 +74,21 @@ export default function Home() {
   const baselineBody = latestPeriodStartKey
     ? `Last period start: ${new Date(`${latestPeriodStartKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${daysSinceLatestPeriod !== null ? ` (${Math.max(0, daysSinceLatestPeriod)} day${daysSinceLatestPeriod === 1 ? '' : 's'} ago)` : ''}. Keep logging to make Maisie more accurate.`
     : 'Log your period start and quick daily check-ins. Maisie gets more accurate as it learns your rhythm.'
-  const phaseSubtitle = predictionsReady
-    ? meta?.mood
-    : `${meta?.mood || 'Early estimate'} · early estimate from what you’ve logged`
+  const phaseSubtitle = meta?.mood
 
   const tip = useMemo(
-    () => (phase ? buildTip(phase, { ...state.profile }) : null),
-    [phase, state.profile],
+    () => (supportPhase
+      ? buildTip(supportPhase, { ...state.profile })
+      : {
+        headline: 'A tiny reset counts.',
+        why: 'Maisie needs more cycle history before timing-based predictions, but you can still support your body today.',
+        actions: ['Drink some water, eat something steady, and log what you notice.'],
+      }),
+    [supportPhase, state.profile],
   )
   const todayMaisieMsg = useMemo(
-    () => (phase ? maisieMessage(phase, cycleDay, state.profile) : 'Your body is telling you something every day. Maisie helps you hear it.'),
-    [phase, cycleDay, state.profile]
+    () => (supportPhase ? maisieMessage(supportPhase, supportCycleDay, state.profile) : 'Your body is telling you something every day. Maisie helps you hear it.'),
+    [supportPhase, supportCycleDay, state.profile]
   )
   const signals = useMemo(
     () => deriveBodySignals(state.dailyLogs, state.profile, { days: 8, today: now }),
@@ -77,6 +104,7 @@ export default function Home() {
 
   const firstName = state.identity.name?.split(' ')[0] || 'there'
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
+  const recentLogs = recentCheckInCount(state.dailyLogs, now)
 
   return (
     <div className="screen screen--pad-bottom" style={tintStyle}>
@@ -88,9 +116,9 @@ export default function Home() {
         </div>
         <div className="center">
           <div className="big-num" style={{ fontSize: 26, color: 'var(--phase-accent)' }}>
-            {state.streak}🔥
+            {recentLogs}
           </div>
-          <div className="muted" style={{ fontSize: 11 }}>day streak</div>
+          <div className="muted" style={{ fontSize: 11 }}>days logged this week</div>
         </div>
       </div>
 
@@ -117,11 +145,9 @@ export default function Home() {
         </div>
         {prediction && (
           <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
-            {predictionsReady
-              ? inWindow
-                ? "📍 You're in your predicted period window."
-                : `📅 Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}.`
-              : 'Tips are early estimates for now. Keep logging to make them more accurate.'}
+            {inWindow
+              ? "📍 You're in your predicted period window."
+              : `📅 Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}.`}
           </p>
         )}
       </Card>
@@ -222,7 +248,11 @@ export default function Home() {
           ) : (
             <>
               <p style={{ margin: '0 0 10px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
-                Did you start your period today?
+                {possiblePeriodToday
+                  ? 'Still on your period today?'
+                  : predictionsReady
+                    ? 'Did your period start today?'
+                    : 'Any period or spotting today?'}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <button

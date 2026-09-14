@@ -8,9 +8,22 @@ import { useStore } from '../state/store.jsx'
 import { TopBar, Card, Button, ChipGroup, PillTag } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
 import { ShieldCheck, UserCheck, Bell, Sparkle, Heart } from '@phosphor-icons/react'
+import { addDays, dateKeyLocal } from '../engine/cyclePredictor.js'
 
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
+
+function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
+  let count = 0
+  for (let i = 0; i < days; i++) {
+    const key = dateKeyLocal(addDays(today, -i))
+    const log = dailyLogs[key]
+    if (log?.checkinCompleted || log?.mood || log?.vibe !== undefined || log?.symptoms?.length || log?.pain !== undefined || log?.impact !== undefined) {
+      count += 1
+    }
+  }
+  return count
+}
 
 const TRANSPARENCY_MODES = [
   { id: 'full', label: 'Full visibility', desc: 'Sees every check-in, result updates, and monthly overview.' },
@@ -32,6 +45,7 @@ export default function Profile() {
 
   const firstName = identity.name?.split(' ')[0] || 'You'
   const ageDisplay = identity.ageBand ? `${identity.ageBand} yrs old` : 'Teen'
+  const recentLogs = recentCheckInCount(state.dailyLogs)
 
   function flash(msg) {
     setToast(msg)
@@ -79,7 +93,7 @@ export default function Profile() {
                   fontWeight: 700,
                 }}
               >
-                {state.streak}🔥 streak
+                {recentLogs} days logged this week
               </span>
             </div>
           </div>
