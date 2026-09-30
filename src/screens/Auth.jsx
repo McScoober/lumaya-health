@@ -1,17 +1,38 @@
 // Screen, Auth / Magic Link Login
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { supabase, isSupabaseConfigured, getAuthRedirectUrl } from '../lib/supabase.js'
-import { Button, TopBar, Card } from '../components/ui.jsx'
+import { useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { supabase, isSupabaseConfigured, getAuthRedirectUrl, safeAuthNext } from '../lib/supabase.js'
+import { useStore } from '../state/store.jsx'
+import { Button, TopBar } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
-import { EnvelopeSimple, CheckCircle, WarningCircle } from '@phosphor-icons/react'
+import { EnvelopeSimple, WarningCircle } from '@phosphor-icons/react'
 
 export default function Auth() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
+  const [code, setCode] = useState('')
+  const { state, authLoading } = useStore()
+  const source = searchParams.get('source')
+  const next = safeAuthNext(searchParams.get('next'))
+  const isPostOnboarding = source === 'post-onboarding'
+
+  useEffect(() => {
+    if (state.accountId && !authLoading) navigate(next === '/parent' || next.startsWith('/parent?') || state.onboarded ? next : '/age', { replace: true })
+  }, [state.accountId, state.onboarded, authLoading, next, navigate])
+
+  async function verifyCode(event) {
+    event.preventDefault()
+    setLoading(true); setErrorMsg(null)
+    try {
+      const { error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type: 'email' })
+      if (error) setErrorMsg('That code did not work. Check the newest email or request a new code.')
+    } catch { setErrorMsg('Could not verify the code. Please try again.') }
+    finally { setLoading(false) }
+  }
 
   async function handleSendMagicLink(e) {
     e.preventDefault()
@@ -24,18 +45,15 @@ export default function Auth() {
     setErrorMsg(null)
 
     if (!isSupabaseConfigured) {
-      // Demo mode fallback
-      setTimeout(() => {
-        setLoading(false)
-        setSent(true)
-      }, 800)
+      setLoading(false)
+      setErrorMsg('Saving accounts is not configured in this preview.')
       return
     }
 
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: getAuthRedirectUrl('/home'),
+        emailRedirectTo: getAuthRedirectUrl(next),
       },
     })
 
@@ -49,78 +67,78 @@ export default function Auth() {
   }
 
   return (
-    <div className="screen center">
+    <div className="screen auth-screen">
       <TopBar onBack={() => navigate(-1)} />
-      <div className="spacer" />
+      <main className="auth-screen__main">
+        <MaisieLogo size={88} />
 
-      <MaisieLogo size={88} />
+        <h1 style={{ fontSize: 28, margin: '20px 0 8px', textAlign: 'center' }}>
+          {sent ? 'Check your email' : isPostOnboarding ? 'Save your tracker' : 'Sign in'}
+        </h1>
 
-      <h1 style={{ fontSize: 28, margin: '20px 0 8px', textAlign: 'center' }}>
-        {sent ? 'Check your email' : 'Sign in with Magic Link'}
-      </h1>
+        <p className="muted center" style={{ maxWidth: 320, fontSize: 14, marginBottom: 24 }}>
+          {sent
+            ? `Enter the code sent to ${email} here. Keep this page open to save your answers.`
+            : isPostOnboarding
+              ? 'Add your email so your Maisie tracker can come with you across devices. No password needed.'
+            : 'Enter your email to receive a sign-in code.'}
+        </p>
 
-      <p className="muted center" style={{ maxWidth: 320, fontSize: 14, marginBottom: 24 }}>
-        {sent
-          ? `We sent a magic link to ${email}. Tap the link in your email to instantly log in!`
-          : 'No passwords needed. Enter your email and we will send you a 1-click magic login link.'}
-      </p>
+        {sent ? (
+          <form onSubmit={verifyCode} style={{ width: '100%', maxWidth: 340 }}>
+            <label>Sign-in code<input className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" maxLength={10} required value={code} onChange={(event) => setCode(event.target.value)} /></label>
+            {errorMsg && <p role="alert">{errorMsg}</p>}
+            <Button block disabled={loading || authLoading} style={{ marginTop: 12 }}>{loading || authLoading ? 'Signing in...' : 'Verify code'}</Button>
+            <button type="button" className="btn btn--ghost" onClick={() => { setSent(false); setCode('') }}>Change email or resend</button>
+          </form>
+        ) : (
+          <form onSubmit={handleSendMagicLink} style={{ width: '100%', maxWidth: 340 }}>
+            {errorMsg && (
+              <div style={{
+                background: 'var(--red-soft)',
+                color: 'var(--red)',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                fontSize: 13,
+                marginBottom: 14,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8
+              }}>
+                <WarningCircle size={18} />
+                <span>{errorMsg}</span>
+              </div>
+            )}
 
-      {sent ? (
-        <Card accent style={{ width: '100%', maxWidth: 340, textAlign: 'center', padding: '24px 16px' }}>
-          <CheckCircle size={48} weight="duotone" color="var(--pink-accent)" style={{ margin: '0 auto 12px' }} />
-          <p style={{ margin: 0, fontWeight: 500, fontSize: 14 }}>
-            Link sent! You can close this window and open the email on your phone.
-          </p>
-        </Card>
-      ) : (
-        <form onSubmit={handleSendMagicLink} style={{ width: '100%', maxWidth: 340 }}>
-          {errorMsg && (
-            <div style={{
-              background: 'var(--red-soft)',
-              color: 'var(--red)',
-              padding: '10px 14px',
-              borderRadius: '12px',
-              fontSize: 13,
-              marginBottom: 14,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8
-            }}>
-              <WarningCircle size={18} />
-              <span>{errorMsg}</span>
+            <div style={{ position: 'relative', marginBottom: 16 }}>
+              <EnvelopeSimple
+                size={20}
+                weight="duotone"
+                color="var(--text-secondary)"
+                style={{ position: 'absolute', left: 14, top: 16 }}
+              />
+              <input
+                type="email"
+                className="input"
+                placeholder="your.email@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                style={{ paddingLeft: 44 }}
+                autoCapitalize="none"
+                autoComplete="email"
+                required
+              />
             </div>
-          )}
 
-          <div style={{ position: 'relative', marginBottom: 16 }}>
-            <EnvelopeSimple
-              size={20}
-              weight="duotone"
-              color="var(--text-secondary)"
-              style={{ position: 'absolute', left: 14, top: 16 }}
-            />
-            <input
-              type="email"
-              className="input"
-              placeholder="your.email@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              style={{ paddingLeft: 44 }}
-              autoCapitalize="none"
-              autoComplete="email"
-              required
-            />
-          </div>
-
-          <Button block disabled={loading} style={{ background: 'var(--pink-accent)', color: '#fff' }}>
-            {loading ? 'Sending link...' : 'Send Magic Link ✨'}
-          </Button>
-        </form>
-      )}
-
-      <div className="spacer" />
+            <Button block disabled={loading} style={{ background: 'var(--pink-accent)', color: '#fff' }}>
+              {loading ? 'Sending...' : 'Send sign-in code'}
+            </Button>
+          </form>
+        )}
+      </main>
 
       <button
-        onClick={() => navigate('/home')}
+        onClick={() => navigate(next)}
         style={{ background: 'none', border: 'none', color: 'var(--text-secondary)', fontSize: 13, cursor: 'pointer', marginBottom: 12 }}
       >
         Skip for now

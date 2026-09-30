@@ -1,105 +1,83 @@
-// ============================================================
-// Sync layer between the app store and Supabase.
-// Maps app state <-> the profiles (identity) + health_records (health) tables,
-// preserving the §14.5 separation. All functions no-op if Supabase isn't set up.
-// ============================================================
-import { supabase } from './supabase.js'
+import { getAuthRedirectUrl, supabase } from './supabase.js'
+import { diffRecords, trackerRecords } from './trackerRecords.js'
 
-// App identity -> profiles row
-function identityToRow(userId, identity) {
-  return {
-    user_id: userId,
-    name: identity.name || null,
-    email: identity.email || null,
-    age_band: identity.ageBand || null,
-    is_minor: !!identity.isMinor,
-    consented_at: identity.consentedAt || null,
-    privacy_ack_at: identity.privacyAckAt || null,
-    parent_email: identity.parentEmail || null,
-    dashboard_active: !!identity.dashboardActive,
-    transparency_mode: identity.transparencyMode || 'full',
-    support_contact: identity.supportContact || null,
-  }
+const snapshots = new Map()
+export function clearSyncCache() { snapshots.clear() }
+
+function requireClient() {
+  if (!supabase) throw new Error('Account services are not configured.')
+}
+async function rpc(name, args = {}) {
+  requireClient()
+  const { data, error } = await supabase.rpc(name, args)
+  if (error) throw new Error(error.message)
+  return data
+}
+async function ownRows(table, userId) {
+  const { data, error } = await supabase.from(table).select('*').eq('user_id', userId)
+  if (error) throw new Error(`Could not load ${table}. ${error.message}`)
+  return data || []
 }
 
-// App health slice -> health_records row (NO name/email here)
-function healthToRow(userId, state) {
-  return {
-    user_id: userId,
-    onboarded: !!state.onboarded,
-    result_level: state.result?.level || null,
-    streak: state.streak || 0,
-    data: {
-      step: state.step,
-      profile: state.profile,
-      answers: state.answers,
-      result: state.result,
-      pendingTier2: state.pendingTier2,
-      confirmedTier2: state.confirmedTier2,
-      dailyLogs: state.dailyLogs,
-      periodLogs: state.periodLogs,
-      lastCheckinDate: state.lastCheckinDate,
-      messages: state.messages,
-      advisorRequests: state.advisorRequests,
-      checkinHistory: state.checkinHistory,
-      notifyPrefs: state.notifyPrefs,
-    },
-  }
-}
-
-// profiles + health_records rows -> partial app state
-function rowsToState(userId, profile, health) {
-  const identity = profile
-    ? {
-        name: profile.name || '',
-        email: profile.email || '',
-        ageBand: profile.age_band || null,
-        isMinor: !!profile.is_minor,
-        consentedAt: profile.consented_at || null,
-        privacyAckAt: profile.privacy_ack_at || null,
-        parentEmail: profile.parent_email || '',
-        dashboardActive: !!profile.dashboard_active,
-        transparencyMode: profile.transparency_mode || 'full',
-        supportContact: profile.support_contact || null,
-      }
-    : null
-  const healthState = health?.data ? { ...health.data, onboarded: !!health.onboarded, streak: health.streak || 0 } : null
-  return { userId, ...(identity ? { identity } : {}), ...(healthState || {}) }
-}
-
-/** Pull this user's rows from Supabase. Returns partial state or null. */
 export async function pullFromSupabase(userId) {
-  if (!supabase || !userId) return null
-  const [{ data: profile }, { data: health }] = await Promise.all([
-    supabase.from('profiles').select('*').eq('user_id', userId).maybeSingle(),
-    supabase.from('health_records').select('*').eq('user_id', userId).maybeSingle(),
+  requireClient()
+  const [profiles, settings, daily, periods, answers] = await Promise.all([
+    ownRows('profiles', userId), ownRows('tracker_settings', userId), ownRows('daily_logs', userId),
+    ownRows('period_days', userId), ownRows('questionnaire_answers', userId),
   ])
-  if (!profile && !health) return null
-  return rowsToState(userId, profile, health)
-}
-
-/** Upsert the current state to Supabase. Fire-and-forget; logs on failure. */
-export async function pushToSupabase(userId, state) {
-  if (!supabase || !userId) return
-  const results = await Promise.allSettled([
-    supabase.from('profiles').upsert(identityToRow(userId, state.identity), { onConflict: 'user_id' }),
-    supabase.from('health_records').upsert(healthToRow(userId, state), { onConflict: 'user_id' }),
-  ])
-  for (const r of results) {
-    if (r.status === 'rejected' || r.value?.error) {
-      console.warn('[maisie] Supabase sync failed:', r.value?.error?.message || r.reason)
-    }
+  const profile = profiles[0] || {}
+  const setting = settings[0]
+  if (!setting) { snapshots.delete(userId); return null }
+  const result = await rpc('save_tracker_changes', { changes: {}, expected_user_id: userId })
+  const state = {
+    userId, onboarded: setting.onboarded, profile: setting.profile, notifyPrefs: setting.preferences,
+    identity: {
+      name: profile.name || '', email: profile.email || '', ageBand: profile.age_band,
+      isMinor: !!profile.is_minor, privacyAckAt: profile.privacy_ack_at,
+    },
+    dailyLogs: Object.fromEntries(daily.map((row) => [row.log_date, row.data])),
+    periodLogs: Object.fromEntries(periods.map((row) => [row.log_date, row.data])),
+    answers: Object.fromEntries(answers.map((row) => [row.question_key, row.answer])),
+    lastCheckinDate: daily.map((row) => row.log_date).sort().at(-1) || null,
+    result, pendingTier2: [], confirmedTier2: [],
   }
+  snapshots.set(userId, trackerRecords(state))
+  return state
 }
 
-/** Record an advisor request row (best-effort). */
-export async function pushAdvisorRequest(userId, req) {
-  if (!supabase || !userId) return
-  const { error } = await supabase.from('advisor_requests').insert({
-    user_id: userId,
-    result_level: req.level || null,
-    flag_ids: req.flagIds || [],
-    status: req.status || 'submitted',
-  })
-  if (error) console.warn('[maisie] advisor request sync failed:', error.message)
+export async function pushToSupabase(userId, state) {
+  requireClient()
+  const { data, error } = await supabase.auth.getUser()
+  if (error || data.user?.id !== userId) throw new Error('Sign in again before saving.')
+  const current = trackerRecords(state)
+  const changes = diffRecords(snapshots.get(userId), current)
+  const identity = state.identity || {}
+  const { error: profileError } = await supabase.from('profiles').upsert({
+    user_id: userId, name: identity.name?.trim().slice(0, 80) || null,
+    email: data.user.email, age_band: identity.ageBand || null,
+    is_minor: !!identity.isMinor, privacy_ack_at: identity.privacyAckAt || null,
+  }, { onConflict: 'user_id' })
+  if (profileError) throw new Error(profileError.message)
+  const result = await rpc('save_tracker_changes', { changes, expected_user_id: userId })
+  snapshots.set(userId, current)
+  return result
+}
+
+export const listSupportAccess = () => rpc('list_support_access')
+export const pendingSupportInvitations = () => rpc('pending_support_invitations')
+export const acceptSupportInvitation = (id) => rpc('accept_support_invitation', { invitation_id: id })
+export const manageSupportAccess = (id, kind, mode = null) => rpc('manage_support_access', { record_id: id, record_kind: kind, mode })
+
+export const createSupportInvite = (email, mode) => rpc('create_support_invitation', { invited_email: email.trim().toLowerCase(), mode })
+
+export async function sendSupportInviteLink(email, invitationId) {
+  if (!supabase) return { ok: false, error: new Error('Account services are not configured.') }
+  const next = invitationId ? `/parent?invite=${encodeURIComponent(invitationId)}` : '/parent'
+  const { error } = await supabase.auth.signInWithOtp({ email: email.trim().toLowerCase(), options: { emailRedirectTo: getAuthRedirectUrl(next) } })
+  return { ok: !error, error }
+}
+
+export async function fetchParentSupportSummaries() {
+  try { return { ok: true, summaries: await rpc('read_support_summaries') } }
+  catch (error) { return { ok: false, error, summaries: [] } }
 }

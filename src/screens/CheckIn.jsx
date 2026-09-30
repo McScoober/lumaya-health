@@ -42,14 +42,13 @@ export default function CheckIn() {
 
   // Determine which step we're on (0 = started gate, 1 = date, 2 = flow, 3 = pain)
   const notStarted = started === 'Not yet'
-  const step = started === null ? 0
-    : notStarted ? 4                       // skip directly to finish
+  const step = started === null || notStarted ? 0
     : !dateConfirmed ? 1
     : flow === null ? 2
     : 3
 
   const totalSteps = notStarted ? 1 : 4
-  const progress   = step / totalSteps
+  const progress   = notStarted ? 0.85 : step / totalSteps
 
   function validateDate(value) {
     if (value === 'unknown') { setDateError(''); return true }

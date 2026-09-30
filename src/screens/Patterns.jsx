@@ -37,6 +37,14 @@ function actualImpacts(log) {
   return (log?.impact || []).filter((impact) => impact !== 'fine')
 }
 
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1)
+}
+
+function addMonths(date, months) {
+  return new Date(date.getFullYear(), date.getMonth() + months, 1)
+}
+
 export default function Patterns({ initialTab }) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -50,6 +58,7 @@ export default function Patterns({ initialTab }) {
   const [showDoctorModal, setShowDoctorModal] = useState(false)
   const [copied, setCopied] = useState(false)
   const [selectedDateKey, setSelectedDateKey] = useState(dateKeyLocal(new Date()))
+  const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
 
   // Sync tab with URL
   useEffect(() => {
@@ -68,14 +77,15 @@ export default function Patterns({ initialTab }) {
     const starts = periodStartKeys(state.periodLogs)
     return buildCycleModel({
       lastStart: starts[starts.length - 1] || state.answers.lastStart || state.answers.periodStart,
-      cycleLength: state.answers.cycleLen ? parseInt(state.answers.cycleLen, 10) : 28,
+      cycleLength: state.result?.cycleLength,
+      predictionsReady: state.result?.patternsReady === true,
       onBirthControl: state.profile.onBirthControl,
     })
-  }, [state.answers, state.profile, state.periodLogs])
+  }, [state.answers, state.profile, state.periodLogs, state.result])
 
   // Current Phase Info for Signals View
   const now = new Date()
-  const predictionsReady = hasThreeFullCycles(state.periodLogs)
+  const predictionsReady = state.result?.authoritative === true && state.result.patternsReady === true
   const phaseInfo = phaseForDate(cycleModel, now)
   const currentPhase = phaseInfo.phase || 'follicular'
   const cycleDay = phaseInfo.dayOfCycle === null || phaseInfo.dayOfCycle === undefined ? 14 : phaseInfo.dayOfCycle + 1
@@ -101,12 +111,17 @@ export default function Patterns({ initialTab }) {
   // can appear on the calendar, but symptoms, pain, and impacts must be real.
   const activeLogs = state.dailyLogs || {}
 
-  // Calendar cells for last 35 days
+  // Calendar cells for the selected month.
   const today = startOfDay(now)
+  const currentMonth = startOfMonth(today)
+  const canGoNextMonth = visibleMonth < currentMonth
+  const monthLabel = visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const calendarDays = useMemo(() => {
     const cells = []
-    for (let i = 34; i >= 0; i--) {
-      const date = addDays(today, -i)
+    const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate()
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = startOfDay(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day))
       const key = dateKeyLocal(date)
       const log = activeLogs[key]
       const periodLog = state.periodLogs[key]
@@ -146,81 +161,38 @@ export default function Patterns({ initialTab }) {
       })
     }
     return cells
-  }, [today, activeLogs, state.periodLogs, cycleModel, predictionsReady])
+  }, [visibleMonth, today, activeLogs, state.periodLogs, cycleModel, predictionsReady])
+
+  const calendarGridCells = useMemo(() => {
+    const leadingBlanks = calendarDays[0]?.date.getDay() || 0
+    return [
+      ...Array.from({ length: leadingBlanks }, (_, index) => ({ type: 'blank', key: `blank-${index}` })),
+      ...calendarDays.map((cell) => ({ type: 'day', ...cell })),
+    ]
+  }, [calendarDays])
 
   // Selected Day Details
-  const selectedCell = calendarDays.find((c) => c.key === selectedDateKey) || calendarDays[calendarDays.length - 1]
+  const selectedCell = calendarDays.find((c) => c.key === selectedDateKey) ||
+    calendarDays.find((c) => c.isToday) ||
+    calendarDays[0]
 
-  // Dynamic Pattern Highlights
+  // Clinical highlights come only from the authoritative server result.
   const patternInsights = useMemo(() => {
-    const insights = []
-    const logEntries = Object.entries(activeLogs)
-
-    if (!predictionsReady) {
-      insights.push({
-        id: 'baseline-tracking',
-        icon: '✨',
-        title: 'Building Your Baseline',
-        body: 'Keep logging period starts and daily check-ins to make Maisie more accurate. Obvious heavy bleeding, long gaps, or very high pain still get flagged right away.',
-        actionText: isTodayLogged ? null : 'Log Today < 10s ⏱️',
-        onAction: () => navigate('/log'),
-        badge: 'Clear',
-      })
-      return insights
-    }
-
-    // 1. Pain in Menstrual Phase
-    const severeMenstrual = logEntries.filter(([k, log]) => {
-      const d = new Date(`${k}T00:00:00`)
-      const { phase } = phaseForDate(cycleModel, d)
-      return phase === 'menstrual' && log.pain >= 6
-    })
-
-    if (severeMenstrual.length >= 1) {
-      insights.push({
-        id: 'severe-cramps',
-        icon: '🩸',
-        title: 'Period Pain Signal (Pain ≥ 6)',
-        body: `Pain at this level was logged on ${severeMenstrual.length} period day(s). This is worth tracking for a doctor.`,
-        actionText: 'What to say to doctor 💬',
-        onAction: () => navigate('/advisor'),
-        badge: 'Moderate',
-      })
-    }
-
-    // 2. Luteal Phase Activity Impact
-    const lutealImpacts = logEntries.filter(([k, log]) => {
-      const d = new Date(`${k}T00:00:00`)
-      const { phase } = phaseForDate(cycleModel, d)
-      return phase === 'luteal' && actualImpacts(log).length > 0
-    })
-
-    if (lutealImpacts.length >= 1) {
-      insights.push({
-        id: 'luteal-impact',
-        icon: '🌙',
-        title: 'Luteal Phase Activity Shifts',
-        body: `School or sports were impacted during your winding-down phase. Rest & hydration during days 18–25 help ease tension.`,
-        actionText: 'View Phase Tips ⚡',
-        onAction: () => navigate('/home'),
-        badge: 'Mild',
-      })
-    }
-
-    if (insights.length === 0) {
-      insights.push({
-        id: 'steady-tracking',
-        icon: '✨',
-        title: 'Building Your Baseline',
-        body: 'Keep logging symptoms to make automatic pattern highlights more accurate.',
-        actionText: isTodayLogged ? null : 'Log Today < 10s ⏱️',
-        onAction: () => navigate('/log'),
-        badge: 'Clear',
-      })
-    }
-
-    return insights
-  }, [activeLogs, cycleModel, navigate, isTodayLogged, predictionsReady])
+    const flags = state.result?.authoritative ? state.result.flags || [] : []
+    if (!flags.length) return [{
+      id: 'tracking', icon: '', title: state.result ? 'Keep tracking' : 'Your logged observations',
+      body: state.result ? 'No screening signal was identified from the available information. This is not a medical assessment.'
+        : state.accountId ? 'Screening updates after your changes are saved.' : 'Save your tracker to receive screening results. Your tips remain available.',
+      actionText: state.accountId ? null : 'Save tracker', onAction: () => navigate('/auth?next=/patterns&source=post-onboarding'),
+      badge: null,
+    }]
+    return flags.map((flag) => ({
+      id: flag.id, icon: '', title: flag.category, body: flag.note,
+      actionText: 'Prepare for a doctor visit', onAction: () => navigate('/advisor'),
+      badge: flag.displaySeverity === 'URGENT' ? 'Urgent' : flag.displaySeverity === 'SOFT' ? 'Mild' : 'Moderate',
+      evidence: flag.supportingData, version: flag.ruleVersion,
+    }))
+  }, [state.result, state.accountId, navigate])
 
   // Doctor Summary Report Text
   const doctorReportText = useMemo(() => {
@@ -238,12 +210,12 @@ Tracked Days: ${totalLogs}
 METRICS:
 • Pain Days (≥5): ${painDays} days
 • Activity Impact Days: ${impactDays} days
-• Target Cycle Length: ~${cycleModel.cycleLength} days
+• Observed Cycle Length: ${state.result?.cycleLength ? `${state.result.cycleLength} days` : 'Not available'}
 
 PATTERNS DETECTED:
 ${patternInsights.map((p) => `• ${p.title}: ${p.body}`).join('\n')}
 
-Note: Pattern awareness summary for medical appointments.`
+Maisie does not diagnose. This summary reflects reported information, not a medical assessment.`
   }, [state.identity.name, activeLogs, cycleModel, patternInsights, calendarDays])
 
   const handleCopyReport = () => {
@@ -404,9 +376,60 @@ Note: Pattern awareness summary for medical appointments.`
           {/* Calendar Grid Card */}
           <Card style={{ padding: '16px 14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-                {calendarDays[0]?.date.toLocaleDateString('en-US', { month: 'short' })} – {calendarDays[calendarDays.length - 1]?.date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  aria-label="Previous month"
+                  onClick={() => {
+                    const nextMonth = addMonths(visibleMonth, -1)
+                    setVisibleMonth(nextMonth)
+                    setSelectedDateKey(dateKeyLocal(nextMonth))
+                  }}
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    background: '#fff',
+                    color: 'var(--text-primary)',
+                    fontSize: 18,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ‹
+                </button>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', minWidth: 128 }}>
+                  {monthLabel}
+                </span>
+                <button
+                  type="button"
+                  aria-label="Next month"
+                  disabled={!canGoNextMonth}
+                  onClick={() => {
+                    if (!canGoNextMonth) return
+                    const nextMonth = addMonths(visibleMonth, 1)
+                    setVisibleMonth(nextMonth)
+                    setSelectedDateKey(dateKeyLocal(nextMonth < currentMonth ? nextMonth : today))
+                  }}
+                  style={{
+                    width: 30,
+                    height: 30,
+                    borderRadius: '50%',
+                    border: '1px solid rgba(0,0,0,0.08)',
+                    background: canGoNextMonth ? '#fff' : '#F4F1EF',
+                    color: canGoNextMonth ? 'var(--text-primary)' : 'var(--text-secondary)',
+                    fontSize: 18,
+                    fontWeight: 800,
+                    lineHeight: 1,
+                    cursor: canGoNextMonth ? 'pointer' : 'not-allowed',
+                    opacity: canGoNextMonth ? 1 : 0.45,
+                  }}
+                >
+                  ›
+                </button>
+              </div>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Tap day to view</span>
             </div>
 
@@ -417,7 +440,11 @@ Note: Pattern awareness summary for medical appointments.`
                 </div>
               ))}
 
-              {calendarDays.map((cell) => {
+              {calendarGridCells.map((cell) => {
+                if (cell.type === 'blank') {
+                  return <div key={cell.key} aria-hidden="true" />
+                }
+
                 const isSelected = cell.key === selectedDateKey
 
                 let cellBg = '#F9F8F6'
@@ -725,7 +752,7 @@ Note: Pattern awareness summary for medical appointments.`
                       {insight.title}
                     </p>
                   </div>
-                  <Badge level={insight.badge} />
+                  {insight.badge && <Badge level={insight.badge} />}
                 </div>
 
                 <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
@@ -835,14 +862,14 @@ Note: Pattern awareness summary for medical appointments.`
               </div>
 
               <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                <CycleOverlayChart cycleDay={cycleDay} dailyLogs={state.dailyLogs} />
+                <CycleOverlayChart cycleDay={null} />
               </div>
 
               <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13, lineHeight: 1.5 }}>
                 <strong style={{ color: '#2C1810' }}>Maisie says:</strong>{' '}
                 {predictionsReady
-                  ? 'This view is here to spot timing from your own cycle history.'
-                  : 'This is an early orientation based on your latest period start. Keep logging so it becomes more personal.'}
+                  ? 'These illustrative curves are general education, not measurements or predictions of your symptoms.'
+                  : 'These illustrative curves are general education. Keep logging to build your personal history.'}
               </p>
             </Card>
           )}

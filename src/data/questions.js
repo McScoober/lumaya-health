@@ -219,6 +219,7 @@ export const DEEP_QUESTIONS = [
     text: 'Are you currently using hormonal birth control (the pill, IUD, implant, ring, or patch)?',
     type: 'chips',
     options: ['Yes', 'No', 'Not sure'],
+    skipIf: (a) => a.started === 'Not yet',
   },
   {
     id: 'q18',

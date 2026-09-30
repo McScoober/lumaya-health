@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { supabase, isSupabaseConfigured, getAuthCallbackParams } from '../lib/supabase.js'
-import { pullFromSupabase } from '../lib/sync.js'
+import { supabase, isSupabaseConfigured, getAuthCallbackParams, safeAuthNext } from '../lib/supabase.js'
 import { useStore } from '../state/store.jsx'
 
 function userFacingAuthError(error) {
@@ -15,7 +14,7 @@ function userFacingAuthError(error) {
 export default function AuthCallback() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { state, dispatch } = useStore()
+  const { state } = useStore()
   const [message, setMessage] = useState('Signing you in...')
 
   useEffect(() => {
@@ -28,7 +27,7 @@ export default function AuthCallback() {
       }
 
       const callbackParams = getAuthCallbackParams()
-      const next = callbackParams.get('next') || searchParams.get('next') || '/home'
+      const next = safeAuthNext(callbackParams.get('next') || searchParams.get('next'))
       const errorDescription = callbackParams.get('error_description')
       const errorCode = callbackParams.get('error_code')
       const code = callbackParams.get('code')
@@ -65,18 +64,11 @@ export default function AuthCallback() {
         return
       }
 
-      const remoteState = await pullFromSupabase(userId)
-      const signedInState = remoteState
-        ? { ...remoteState, userId }
-        : { userId }
-
-      if (!cancelled) {
-        dispatch({ type: 'HYDRATE', payload: signedInState })
-        window.location.replace(remoteState?.onboarded || state.onboarded ? next : '/age')
-      }
+      // StoreProvider owns hydration and clears state when the account changes.
+      if (!cancelled) navigate(next, { replace: true })
     }
 
-    finishSignIn()
+    finishSignIn().catch(() => { if (!cancelled) setMessage('Sign-in could not finish. Please request a new code.') })
 
     return () => {
       cancelled = true

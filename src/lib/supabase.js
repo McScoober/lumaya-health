@@ -1,7 +1,7 @@
 // ============================================================
 // Supabase client (TRD §14.3 / §14.5)
 // Optional: if the env vars aren't set, the app runs fully offline
-// (localStorage only) and everything below no-ops gracefully.
+// (in-memory preview only).
 // ============================================================
 import { createClient } from '@supabase/supabase-js'
 
@@ -14,6 +14,7 @@ export const supabase = isSupabaseConfigured
   ? createClient(url, anonKey, {
       auth: {
         persistSession: true,
+        storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
         autoRefreshToken: true,
         detectSessionInUrl: false,
         flowType: 'implicit',
@@ -22,14 +23,20 @@ export const supabase = isSupabaseConfigured
   : null
 
 /**
- * Ensure we have a user id to key data by. Uses Supabase anonymous auth so each
- * device gets a stable auth.uid() that RLS policies can scope rows to, no
- * password, no email required from the user.
- * Returns the uid, or null if Supabase isn't configured / sign-in fails.
+ * Supabase sync only starts after the user has an existing non-anonymous auth
+ * session. Pre-signup tracker data stays local on the device.
  */
 let currentUserId = null
 export function getCurrentUserId() {
   return currentUserId
+}
+
+function isAnonymousUser(user) {
+  return Boolean(
+    user?.is_anonymous === true ||
+      (!user?.email && user?.app_metadata?.provider === 'anonymous') ||
+      (!user?.email && user?.identities?.some((identity) => identity.provider === 'anonymous')),
+  )
 }
 
 function hasPendingEmailAuthCallback() {
@@ -45,11 +52,16 @@ function hasPendingEmailAuthCallback() {
 export function getAuthRedirectUrl(next = '/home') {
   if (typeof window === 'undefined') return undefined
 
-  const nextParam = encodeURIComponent(next)
+  const nextParam = encodeURIComponent(safeAuthNext(next))
   if (import.meta.env.VITE_ROUTER === 'hash') {
     return `${window.location.origin}/#/auth/callback?next=${nextParam}`
   }
   return `${window.location.origin}/auth/callback?next=${nextParam}`
+}
+
+export function safeAuthNext(value) {
+  if (typeof value !== 'string' || !/^\/(home|profile|parent|age|patterns)(\?|$)/.test(value)) return '/home'
+  return value
 }
 
 export function getAuthCallbackParams() {
@@ -88,16 +100,7 @@ export async function ensureAuthUser() {
   if (!supabase) return null
   if (hasPendingEmailAuthCallback()) return null
 
-  const existingUserId = await getExistingAuthUserId()
-  if (existingUserId) return existingUserId
-
-  const { data, error } = await supabase.auth.signInAnonymously()
-  if (error) {
-    console.warn('[maisie] anonymous sign-in failed:', error.message)
-    return null
-  }
-  currentUserId = data?.user?.id ?? null
-  return currentUserId
+  return getExistingAuthUserId()
 }
 
 export async function getExistingAuthUserId() {
@@ -105,9 +108,11 @@ export async function getExistingAuthUserId() {
   if (hasPendingEmailAuthCallback()) return null
 
   const { data: sessionData } = await supabase.auth.getSession()
-  if (sessionData?.session?.user) {
-    currentUserId = sessionData.session.user.id
+  const user = sessionData?.session?.user
+  if (user && !isAnonymousUser(user)) {
+    currentUserId = user.id
     return currentUserId
   }
+  currentUserId = null
   return null
 }

@@ -1,23 +1,9 @@
-// ============================================================
-// App state + persistence (TRD Section 14.5, identity/data separation)
-//
-// Identity-linked data (name, email, contacts, consent) is stored under a
-// separate key from anonymized health-response data (answers, flags, scores,
-// daily logs), joined only by an opaque userId, never by name or email.
-// This mirrors the Supabase two-schema design without a real backend.
-// ============================================================
-
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react'
-import { scoreCheckIn } from '../engine/scoring.js'
-import { addDays, buildCycleModel, dateKeyLocal, diffDays, fullCycleCount, hasThreeFullCycles } from '../engine/cyclePredictor.js'
-import { isSupabaseConfigured, ensureAuthUser, getExistingAuthUserId } from '../lib/supabase.js'
-import { pullFromSupabase, pushToSupabase } from '../lib/sync.js'
-
-const IDENTITY_KEY = 'maisie.identity'
-const HEALTH_PREFIX = 'maisie.health.' // + userId
-const LEGACY_STORAGE_PREFIX = ['lu', 'maya'].join('')
-const LEGACY_IDENTITY_KEY = `${LEGACY_STORAGE_PREFIX}.identity`
-const LEGACY_HEALTH_PREFIX = `${LEGACY_STORAGE_PREFIX}.health.` // + userId
+// In-memory tracker state. Signed-in observations are saved through authenticated RPCs.
+import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { addDays, buildCycleModel, dateKeyLocal, diffDays, periodStartKeys } from '../engine/cyclePredictor.js'
+import { isSupabaseConfigured, supabase } from '../lib/supabase.js'
+import { pullFromSupabase, pushToSupabase, clearSyncCache } from '../lib/sync.js'
+import { clearLegacyHealthStorage, trackerRecords } from '../lib/trackerRecords.js'
 
 function uid() {
   // Opaque internal user id (UUID-ish). Not derived from name/email.
@@ -26,10 +12,11 @@ function uid() {
 }
 
 // ---- default state ----------------------------------------
-function freshState() {
+export function freshState() {
   const userId = uid()
   return {
     userId,
+    accountId: null,
     onboarded: false,
     step: 'welcome', // onboarding pointer
 
@@ -103,7 +90,7 @@ function seedPeriodLogsFromAnswers(periodLogs, answers) {
 
   const safeLastEnd = lastEnd && diffDays(lastEnd, lastStart) >= 0 ? lastEnd : lastStart
   const lastSpan = Math.min(diffDays(safeLastEnd, lastStart), 9)
-  seedRange(prevStart, lastSpan, 'onboarding-prev')
+  seedRange(prevStart, 0, 'onboarding-prev')
   seedRange(lastStart, lastSpan, 'onboarding-last')
 
   return next
@@ -116,27 +103,7 @@ function removeOnboardingPeriodLogs(periodLogs = {}) {
 }
 
 function latestPeriodStartFromLogs(periodLogs = {}) {
-  const periodKeys = Object.entries(periodLogs)
-    .filter(([, log]) => log?.period === true)
-    .map(([key]) => key)
-    .sort()
-
-  if (periodKeys.length === 0) return null
-
-  const periodSet = new Set(periodKeys)
-  const explicitStarts = Object.entries(periodLogs)
-    .filter(([, log]) => log?.period === true && log?.periodStart === true)
-    .map(([key]) => key)
-    .sort()
-
-  if (explicitStarts.length > 0) return explicitStarts[explicitStarts.length - 1]
-
-  const derivedStarts = periodKeys.filter((key) => {
-    const prevKey = dateKeyLocal(addDays(parseCheckinDate(key), -1))
-    return !periodSet.has(prevKey)
-  })
-
-  return derivedStarts[derivedStarts.length - 1] || periodKeys[0]
+  return periodStartKeys(periodLogs).at(-1) || null
 }
 
 function estimatedPeriodLength(periodLogs = {}) {
@@ -207,6 +174,12 @@ function addPossiblePeriodDays(periodLogs = {}, startKey) {
   return next
 }
 
+function confirmedPeriodRunStart(periodLogs = {}, dateKey) {
+  const explicit = periodStartKeys(periodLogs).filter((key) => key <= dateKey).at(-1)
+  if (explicit) return explicit
+  return Object.keys(periodLogs).filter((key) => key <= dateKey && periodLogs[key].period === true).sort()[0] || dateKey
+}
+
 function normalizeFlagId(id) {
   return id
 }
@@ -256,9 +229,8 @@ function normalizeSavedHealth(payload = {}) {
   let dailyLogs = stripPeriodFieldsFromDailyLogs(payload.dailyLogs || {})
   let periodLogs = { ...(payload.periodLogs || {}), ...extractPeriodLogsFromDailyLogs(payload.dailyLogs || {}) }
 
-  if (answers.lastStart && answers.lastStart !== 'unknown') {
-    periodLogs = removeOnboardingPeriodLogs(periodLogs)
-    periodLogs = seedPeriodLogsFromAnswers(periodLogs, answers)
+  for (const start of periodStartKeys(periodLogs)) {
+    periodLogs = addPossiblePeriodDays(periodLogs, start)
   }
 
   return {
@@ -273,10 +245,24 @@ function normalizeSavedHealth(payload = {}) {
 }
 
 // ---- reducer ----------------------------------------------
-function reducer(state, action) {
+export function reducer(state, action) {
   switch (action.type) {
     case 'HYDRATE':
-      return { ...state, ...normalizeSavedHealth(action.payload) }
+      return { ...freshState(), ...normalizeSavedHealth(action.payload), accountId: action.payload.userId }
+
+    case 'SET_AUTH_USER':
+      return {
+        ...state,
+        userId: action.userId || state.userId,
+        accountId: action.userId,
+        identity: {
+          ...state.identity,
+          ...(action.email ? { email: action.email } : {}),
+        },
+      }
+
+    case 'SERVER_RESULT':
+      return { ...state, result: action.result }
 
     case 'SET_STEP':
       return { ...state, step: action.step }
@@ -297,7 +283,7 @@ function reducer(state, action) {
         identity: {
           ...state.identity,
           ...(action.payload || {}),
-          consentedAt: state.identity.isMinor ? new Date().toISOString() : state.identity.consentedAt,
+          consentedAt: state.identity.consentedAt,
           privacyAckAt: new Date().toISOString(),
         },
       }
@@ -318,20 +304,16 @@ function reducer(state, action) {
     case 'SAVE_CHECKIN': {
       const answers = action.answers
       const onBC = answers.birthControl === 'Yes'
-      const today = dateKeyLocal()
       const periodLogs = seedPeriodLogsFromAnswers(removeOnboardingPeriodLogs(state.periodLogs), answers)
-      const result = scoreCheckIn(answers, {
-        priorTier2Ids: state.confirmedTier2,
-        observedFullCycleCount: fullCycleCount(periodLogs),
-      })
-      const history = [...state.checkinHistory, { date: today, level: result.level }]
+      const result = null
+      const history = state.checkinHistory
       return {
         ...state,
         answers,
         profile: { ...state.profile, onBirthControl: onBC },
         result,
         periodLogs,
-        pendingTier2: Array.from(new Set([...state.pendingTier2, ...result.pendingTier2])),
+        pendingTier2: [],
         checkinHistory: history,
         onboarded: true,
         step: 'result',
@@ -342,11 +324,8 @@ function reducer(state, action) {
       // Saves a single deferred onboarding answer and advances the progress index.
       const updatedAnswers = { ...state.answers, [action.key]: action.value }
       const onBC = updatedAnswers.birthControl === 'Yes'
-      // Re-score with the new answer so result stays current.
-      const updatedResult = scoreCheckIn(updatedAnswers, {
-        priorTier2Ids: state.confirmedTier2,
-        observedFullCycleCount: fullCycleCount(state.periodLogs),
-      })
+      // Clear the old result until the server processes the changed answer.
+      const updatedResult = null
       return {
         ...state,
         answers: updatedAnswers,
@@ -382,7 +361,7 @@ function reducer(state, action) {
         lastCheckinDate = dateKey
       }
 
-      let next = { ...state, dailyLogs, streak, lastCheckinDate }
+      let next = { ...state, dailyLogs, streak, lastCheckinDate, result: null }
 
       return next
     }
@@ -393,8 +372,6 @@ function reducer(state, action) {
       const { status: _status, estimatedFrom: _estimatedFrom, ...cleanPrev } = prev
       const source = action.source || 'manual'
       let periodLogs = clearPossibleDaysFromStart(state.periodLogs, dateKey)
-      const prevKey = dateKeyLocal(addDays(parseCheckinDate(dateKey), -1))
-      const prevConfirmed = periodLogs[prevKey]?.period === true
 
       periodLogs = {
         ...periodLogs,
@@ -402,7 +379,6 @@ function reducer(state, action) {
           ...(period === undefined ? prev : cleanPrev),
           ...(period !== undefined ? { period } : {}),
           ...(period === true ? {
-            periodStart: !prevConfirmed,
             source,
             status: 'confirmed',
           } : {}),
@@ -416,50 +392,29 @@ function reducer(state, action) {
       }
 
       if (period === true) {
-        periodLogs = addPossiblePeriodDays(periodLogs, dateKey)
+        const runStartKey = confirmedPeriodRunStart(periodLogs, dateKey)
+        periodLogs = addPossiblePeriodDays(clearPossibleDaysFromStart(periodLogs, runStartKey), runStartKey)
       }
 
-      let next = { ...state, periodLogs }
-
-      // Passive Tier 2 confirmation: when a new period is logged on a later
-      // date than onboarding, re-run the relevant rules against the user's data.
-      const onboardDate = state.checkinHistory[0]?.date
-      const startsNewCycle = period === true && onboardDate && dateKey > onboardDate
-      if (startsNewCycle && state.pendingTier2.length > 0) {
-        const observedFullCycleCount = fullCycleCount(periodLogs)
-        const rescored = scoreCheckIn(state.answers, {
-          priorTier2Ids: state.pendingTier2,
-          observedFullCycleCount,
-        })
-        const nowConfirmed = rescored.flags
-          .filter((f) => f.tier === 2 && state.pendingTier2.includes(f.id))
-          .map((f) => f.id)
-        if (nowConfirmed.length > 0) {
-          const confirmedTier2 = Array.from(new Set([...state.confirmedTier2, ...nowConfirmed]))
-          const result = scoreCheckIn(state.answers, {
-            priorTier2Ids: confirmedTier2,
-            observedFullCycleCount,
-          })
-          next = {
-            ...next,
-            confirmedTier2,
-            pendingTier2: state.pendingTier2.filter((id) => !nowConfirmed.includes(id)),
-            result,
-            messages: [
-              {
-                id: 'conf-' + Date.now(),
-                at: new Date().toISOString(),
-                channel: 'system',
-                title: 'We noticed the same pattern again',
-                body: "A pattern we were quietly watching showed up again this cycle. It might be worth talking to a Maisie advisor, no pressure, whenever you're ready.",
-                read: false,
-                cta: '/advisor',
-              },
-              ...state.messages,
-            ],
-          }
-        }
+      let next = {
+        ...state,
+        periodLogs,
+        ...(period === true && state.answers.started === 'Not yet'
+          ? { answers: { ...state.answers, started: 'Yes', lastStart: dateKey } }
+          : {}),
       }
+
+      // Refresh eligibility on additions and removals, without treating a new
+      // period date as evidence that old symptom answers have recurred.
+      if (period === undefined) return next
+      const starts = periodStartKeys(periodLogs)
+      const answers = {
+        ...next.answers,
+        lastStart: starts.at(-1) || undefined,
+        prevStart: starts.at(-2) || undefined,
+      }
+      const result = null
+      next = { ...next, answers, result, confirmedTier2: [], pendingTier2: [] }
       return next
     }
 
@@ -506,148 +461,103 @@ function reducer(state, action) {
   }
 }
 
-// ---- persistence ------------------------------------------
-function persist(state) {
-  try {
-    // Identity schema includes join key (userId) only.
-    const identity = { userId: state.userId, ...state.identity }
-    localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity))
-
-    // Health schema is keyed by userId, with no name/email columns.
-    const health = {
-      onboarded: state.onboarded,
-      step: state.step,
-      profile: state.profile,
-      answers: state.answers,
-      result: state.result,
-      pendingTier2: state.pendingTier2,
-      confirmedTier2: state.confirmedTier2,
-      progressiveQIndex: state.progressiveQIndex,
-      dailyLogs: state.dailyLogs,
-      periodLogs: state.periodLogs,
-      streak: state.streak,
-      lastCheckinDate: state.lastCheckinDate,
-      messages: state.messages,
-      advisorRequests: state.advisorRequests,
-      checkinHistory: state.checkinHistory,
-      notifyPrefs: state.notifyPrefs,
-    }
-    localStorage.setItem(HEALTH_PREFIX + state.userId, JSON.stringify(health))
-  } catch (e) {
-    /* storage full / disabled, non-fatal for the demo */
-  }
-}
-
-function hasEntries(value) {
-  return Object.keys(value || {}).length > 0
-}
-
-function hasSupabaseSyncableData(state) {
-  const identity = state.identity || {}
-  const profile = state.profile || {}
-  return Boolean(
-    state.onboarded ||
-      identity.name?.trim() ||
-      identity.email?.trim() ||
-      identity.ageBand ||
-      identity.consentedAt ||
-      identity.privacyAckAt ||
-      identity.parentEmail?.trim() ||
-      identity.dashboardActive ||
-      identity.supportContact ||
-      profile.studentAthlete !== null ||
-      profile.sleep !== null ||
-      profile.sport?.trim() ||
-      profile.onBirthControl ||
-      hasEntries(state.answers) ||
-      state.result ||
-      state.pendingTier2?.length > 0 ||
-      state.confirmedTier2?.length > 0 ||
-      state.progressiveQIndex > 0 ||
-      hasEntries(state.dailyLogs) ||
-      hasEntries(state.periodLogs) ||
-      state.streak > 0 ||
-      state.lastCheckinDate ||
-      state.messages?.length > 0 ||
-      state.advisorRequests?.length > 0 ||
-      state.checkinHistory?.length > 0 ||
-      state.notifyPrefs?.periodCheckin === false ||
-      state.notifyPrefs?.phaseTips === false
+// Health history is held in memory. Authentication has its own SDK session store.
+function isSupportOnlyRoute() {
+  return typeof window !== 'undefined' && (
+    window.location.pathname === '/parent' ||
+    window.location.hash.startsWith('#/parent') ||
+    window.location.href.includes('next=%2Fparent')
   )
 }
 
-function hydrate() {
-  try {
-    const idRaw = localStorage.getItem(IDENTITY_KEY) || localStorage.getItem(LEGACY_IDENTITY_KEY)
-    if (!idRaw) return null
-    const identity = JSON.parse(idRaw)
-    const userId = identity.userId
-    const healthRaw = localStorage.getItem(HEALTH_PREFIX + userId) || localStorage.getItem(LEGACY_HEALTH_PREFIX + userId)
-    const health = healthRaw ? JSON.parse(healthRaw) : {}
-    const { userId: _u, ...identityRest } = identity
-    return {
-      userId,
-      identity: { ...freshState().identity, ...identityRest },
-      ...health,
-    }
-  } catch (e) {
-    return null
-  }
-}
-
-// ---- context ----------------------------------------------
 const StoreCtx = createContext(null)
 
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, () => {
-    const restored = hydrate()
-    return restored ? { ...freshState(), ...normalizeSavedHealth(restored) } : freshState()
-  })
+  const [state, dispatch] = useReducer(reducer, undefined, freshState)
+  const [authLoading, setAuthLoading] = useState(isSupabaseConfigured)
+  const [accountError, setAccountError] = useState('')
+  const stateRef = useRef(state)
+  stateRef.current = state
+  const epoch = useRef(0)
+  const readyAccount = useRef(null)
+  const initializing = useRef(null)
+  const saveQueue = useRef(Promise.resolve())
 
-  // Track the Supabase user id + whether the initial pull has finished, so we
-  // don't push local (possibly empty) state over server data before hydrating.
-  const authUserId = useRef(null)
-  const syncReady = useRef(!isSupabaseConfigured) // if unconfigured, "ready" immediately
-  const pushTimer = useRef(null)
-
-  // On mount: recover an existing Supabase session and pull its rows. Do not
-  // create anonymous auth users for visitors who only open the app.
   useEffect(() => {
-    let cancelled = false
-    if (!isSupabaseConfigured) return
-    ;(async () => {
-      const uidFromAuth = await getExistingAuthUserId()
-      if (cancelled || !uidFromAuth) {
-        syncReady.current = true
+    // Old data is test data; explicitly excluded from the fresh-table rollout.
+    clearLegacyHealthStorage(localStorage)
+    if (!supabase) return
+    let alive = true
+    let scheduled
+    async function adoptSession(session) {
+      const user = session?.user
+      const id = user && !user.is_anonymous ? user.id : null
+      if (id && (readyAccount.current === id || initializing.current === id)) return
+      const revision = ++epoch.current
+      const previous = stateRef.current
+      readyAccount.current = null
+      initializing.current = id
+      clearSyncCache()
+      setAccountError('')
+      if (!id) {
+        if (previous.accountId) dispatch({ type: 'RESET' })
+        setAuthLoading(false)
         return
       }
-      authUserId.current = uidFromAuth
-      const remote = await pullFromSupabase(uidFromAuth)
-      if (cancelled) return
-      if (remote) {
-        // Server has data, so adopt it. Server is source of truth across devices.
-        dispatch({ type: 'HYDRATE', payload: { ...remote, userId: uidFromAuth } })
+      setAuthLoading(true)
+      // An account switch must never retain the previous account's observations.
+      if (previous.accountId && previous.accountId !== id) dispatch({ type: 'RESET' })
+      try {
+        const remote = await pullFromSupabase(id)
+        if (!alive || revision !== epoch.current) return
+        if (remote) {
+          dispatch({ type: 'HYDRATE', payload: remote })
+        } else {
+          if (previous.accountId || isSupportOnlyRoute()) dispatch({ type: 'RESET' })
+          dispatch({ type: 'SET_AUTH_USER', userId: id, email: user.email })
+        }
+        readyAccount.current = id
+      } catch {
+        if (alive && revision === epoch.current) {
+          dispatch({ type: 'RESET' })
+          setAccountError('Your saved tracker could not be loaded. Please reload before continuing.')
+        }
+      } finally {
+        if (alive && revision === epoch.current) {
+          initializing.current = null
+          setAuthLoading(false)
+        }
       }
-      syncReady.current = true
-    })()
-    return () => {
-      cancelled = true
     }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      clearTimeout(scheduled)
+      // Do not call Auth methods while its event callback holds the session lock.
+      scheduled = setTimeout(() => adoptSession(session), 0)
+    })
+    return () => { alive = false; ++epoch.current; clearTimeout(scheduled); subscription.unsubscribe() }
   }, [])
 
-  // Persist on every change: localStorage always; Supabase (debounced) when ready.
+  const fingerprint = JSON.stringify({ records: trackerRecords(state), identity: state.identity })
   useEffect(() => {
-    persist(state)
-    if (isSupabaseConfigured && syncReady.current && hasSupabaseSyncableData(state)) {
-      clearTimeout(pushTimer.current)
-      pushTimer.current = setTimeout(async () => {
-        const uid = authUserId.current || await ensureAuthUser()
-        if (!uid) return
-        authUserId.current = uid
-        pushToSupabase(uid, { ...state, userId: uid })
-      }, 700)
-    }
-  }, [state])
+    if (!state.accountId || readyAccount.current !== state.accountId || authLoading || isSupportOnlyRoute()) return
+    const snapshot = state
+    const revision = epoch.current
+    const timer = setTimeout(() => {
+      saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
+        if (revision !== epoch.current || readyAccount.current !== snapshot.accountId) return
+        try {
+          const result = await pushToSupabase(snapshot.accountId, snapshot)
+          if (revision !== epoch.current) return
+          setAccountError('')
+          const currentFingerprint = JSON.stringify({ records: trackerRecords(stateRef.current), identity: stateRef.current.identity })
+          if (currentFingerprint === fingerprint) dispatch({ type: 'SERVER_RESULT', result })
+        } catch {
+          if (revision === epoch.current) setAccountError('Your latest changes could not be saved. Keep this page open and try again later.')
+        }
+      })
+    }, 700)
+    return () => clearTimeout(timer)
+  }, [fingerprint, state.accountId, authLoading])
 
   const cycleModel = useMemo(() => {
     const lastStart = latestPeriodStartFromLogs(state.periodLogs) || state.answers.lastStart
@@ -655,11 +565,11 @@ export function StoreProvider({ children }) {
       lastStart: lastStart && lastStart !== 'unknown' ? lastStart : null,
       cycleLength: state.result?.cycleLength,
       onBirthControl: state.profile.onBirthControl,
-      predictionsReady: hasThreeFullCycles(state.periodLogs),
+      predictionsReady: state.result?.authoritative === true && state.result.patternsReady === true,
     })
   }, [state.periodLogs, state.answers.lastStart, state.result, state.profile.onBirthControl])
 
-  const value = useMemo(() => ({ state, dispatch, cycleModel }), [state, cycleModel])
+  const value = useMemo(() => ({ state, dispatch, cycleModel, authLoading, accountError }), [state, cycleModel, authLoading, accountError])
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }
 

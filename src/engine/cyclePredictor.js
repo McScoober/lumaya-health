@@ -139,17 +139,7 @@ export function periodStartKeys(periodLogs = {}) {
   if (periodKeys.length === 0) return []
 
   const periodSet = new Set(periodKeys)
-  const explicitStarts = Object.entries(periodLogs)
-    .filter(([, log]) => log?.period === true && log?.periodStart === true)
-    .map(([key]) => key)
-    .sort()
-
-  if (explicitStarts.length > 0) return explicitStarts
-
-  return periodKeys.filter((key) => {
-    const prevKey = dateKeyLocal(addDays(parseDateLocal(key), -1))
-    return !periodSet.has(prevKey)
-  })
+  return periodKeys.filter((key) => !periodSet.has(dateKeyLocal(addDays(parseDateLocal(key), -1))))
 }
 
 export function fullCycleCount(periodLogs = {}) {

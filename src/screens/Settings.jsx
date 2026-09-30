@@ -70,7 +70,7 @@ export default function Settings() {
       <div className="card__label" style={{ marginTop: 18 }}>Privacy</div>
       <Card>
         <p className="muted" style={{ fontSize: 13, margin: '0 0 12px' }}>
-          Your answers are encrypted and never sold. You can request full deletion at any time (PIPEDA).
+          Your answers are stored securely and never sold. You can delete local data from this device at any time.
         </p>
         <Button variant="ghost" style={{ color: 'var(--red)' }} onClick={deleteData}>
           Delete my data

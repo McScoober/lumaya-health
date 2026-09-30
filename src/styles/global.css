@@ -168,6 +168,16 @@ button {
 
 .screen--pad-bottom { padding-bottom: 80px; }
 
+.auth-screen__main {
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 24px;
+}
+
 @media (min-width: 768px) {
   .screen {
     padding: 34px 40px 36px;
@@ -260,10 +270,16 @@ button {
   font-weight: 600;
 }
 /* Color is never the sole differentiator (13.3): selected chips get a check */
-.chip[aria-pressed='true']::before {
+.chip::before {
   content: '✓';
   font-weight: 700;
   color: var(--accent);
+  width: 1em;
+  opacity: 0;
+  flex: 0 0 1em;
+}
+.chip[aria-pressed='true']::before {
+  opacity: 1;
 }
 .chip--stack { width: 100%; justify-content: flex-start; }
 

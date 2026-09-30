@@ -152,12 +152,14 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
           strokeLinejoin="round"
         />
 
+        {Number.isFinite(cycleDay) && <>
         <line x1={todayX} y1={0} x2={todayX} y2={H} stroke="#E0528A" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
         <circle cx={todayX} cy={(() => {
           const dayIdx = Math.min(cycleDay - 1, signal.values.length - 1)
           const v = signal.values[dayIdx]
           return 14 + ((5 - v) / 5) * (H - 28)
         })()} r={4} fill="#E0528A" />
+        </>}
 
         {phaseBands.map(p => (
           <text key={p.label + '-lbl'} x={p.x + p.w / 2} y={H + 16} textAnchor="middle" fontSize={8.5} fill={p.color} fontWeight="700" fontFamily="'DM Sans', sans-serif">

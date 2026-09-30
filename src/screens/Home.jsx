@@ -37,7 +37,7 @@ export default function Home() {
   const checkedInToday = todayLog.checkinCompleted === true
 
   const periodStarts = periodStartKeys(state.periodLogs)
-  const predictionsReady = hasThreeFullCycles(state.periodLogs)
+  const predictionsReady = state.result?.authoritative === true && state.result.patternsReady === true
   const supportPhaseInfo = phaseForDate(cycleModel, now)
   const supportPhase = supportPhaseInfo.phase
   const supportCycleDay = supportPhaseInfo.dayOfCycle === null || supportPhaseInfo.dayOfCycle === undefined
@@ -233,16 +233,24 @@ export default function Home() {
 
       {/* Progressive onboarding mini-cards (fast-start users only) */}
       <ProgressiveCheckin />
+      {state.result?.authoritative && state.result.flags?.length > 0 && (
+        <section style={{ marginTop: 16, padding: 16, border: '1px solid #e8a0b0', borderRadius: 8 }}>
+          <h2 style={{ fontSize: 20 }}>Signals to review</h2>
+          {state.result.flags.map((flag) => <p key={flag.id}><strong>{flag.category}:</strong> {flag.note}</p>)}
+          <p className="muted" style={{ fontSize: 12 }}>Maisie does not diagnose. These signals come from what you reported.</p>
+          <Button onClick={() => navigate('/advisor')}>Prepare for a doctor visit</Button>
+        </section>
+      )}
 
       {shouldShowPeriodStartCard && (
         <Card style={{ marginTop: 14, background: '#FDEEF4', borderColor: 'rgba(224,82,138,0.35)' }}>
           {periodStartedToday ? (
             <>
               <p style={{ margin: '0 0 4px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
-                Got it, your period started today.
+                Your period is logged for today.
               </p>
               <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.45 }}>
-                I’ll use today as your new cycle start.
+                The first marked day of this period is used as its start.
               </p>
             </>
           ) : (
@@ -252,7 +260,7 @@ export default function Home() {
                   ? 'Still on your period today?'
                   : predictionsReady
                     ? 'Did your period start today?'
-                    : 'Any period or spotting today?'}
+                    : 'Are you on your period today?'}
               </p>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <button

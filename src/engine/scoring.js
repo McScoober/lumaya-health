@@ -218,7 +218,9 @@ function levelFromFlags(flags) {
  * @returns { level, flags, cycleLength, onBirthControl, needsAdvisor, pendingTier2 }
  */
 export function scoreCheckIn(answers, opts = {}) {
-  const priorTier2 = new Set(opts.priorTier2Ids || [])
+  // Saved rule IDs alone cannot prove recurrence across independent cycles.
+  // Leave patterns unconfirmed until cycle-linked symptom evidence is available.
+  const priorTier2 = new Set()
   const observedFullCycleCount = opts.observedFullCycleCount ?? 0
   const patternsReady = observedFullCycleCount >= MIN_FULL_CYCLES_FOR_PATTERNS
   const rules = patternsReady ? [...OBVIOUS_RULES, ...PATTERN_RULES] : OBVIOUS_RULES
@@ -263,7 +265,7 @@ export const LEVEL_COPY = {
   },
   [LEVEL.MILD]: {
     title: 'One thing to keep an eye on',
-    body: 'Maisie noticed a repeat signal. It’s not urgent — keep logging so we can see whether it continues.',
+    body: 'Your answers include a signal to keep track of. More logs can help show whether it repeats.',
   },
   [LEVEL.MODERATE]: {
     title: 'A signal worth a conversation',

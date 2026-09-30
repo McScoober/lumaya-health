@@ -21,7 +21,9 @@ import Messages from './screens/Messages.jsx'
 const APP_TABS = ['/home', '/patterns', '/library', '/profile']
 
 function RequireOnboarded({ children }) {
-  const { state } = useStore()
+  const { state, authLoading, accountError } = useStore()
+  if (authLoading) return <div className="screen"><p>Loading your tracker...</p></div>
+  if (accountError && !state.accountId) return <div className="screen"><p role="alert">{accountError}</p><button className="btn" onClick={() => window.location.reload()}>Reload</button></div>
   if (!state.onboarded) return <Navigate to="/" replace />
   return children
 }
@@ -34,6 +36,7 @@ import Profile from './screens/Profile.jsx'
 
 export default function App() {
   const { pathname } = useLocation()
+  const { accountError } = useStore()
   
   // UX RULE: Nav hidden during the log screen.
   const isLogScreen = pathname === '/log'
@@ -42,6 +45,7 @@ export default function App() {
   return (
     <div className="app-frame">
       <div className="phone">
+        {accountError && <p role="alert" style={{ padding: 12, margin: 0, background: '#fff1f2', color: '#8f2439' }}>{accountError}</p>}
         <Routes>
           {/* Onboarding & Auth flow */}
           <Route path="/" element={<Welcome />} />

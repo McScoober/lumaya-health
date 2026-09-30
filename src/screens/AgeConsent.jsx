@@ -23,7 +23,7 @@ export default function AgeConsent() {
   const is18    = age === '18+'
 
   const nameError    = name.trim() ? '' : "Enter your first name so Maisie knows what to call you."
-  const consentError = isMinor && !consent ? "Check this once you have a parent or guardian's permission." : ''
+  const consentError = isMinor && !consent ? "Please confirm you understand how Maisie uses your answers." : ''
   const ackError     = is18 && !ack ? "Check this to confirm you've read the privacy policy." : ''
 
   const showError = (key) => submitted || touched[key]
@@ -92,7 +92,7 @@ export default function AgeConsent() {
                   onChange={(e) => setConsent(e.target.checked)}
                   style={{ width: 22, height: 22, marginTop: 2, accentColor: 'var(--accent)' }}
                 />
-                <span>I am at least 13 years old and have a parent or guardian's permission to use Maisie.</span>
+                <span>I am at least 13. I understand Maisie uses my answers to show health signals, and sharing with a trusted adult is optional.</span>
               </label>
               {submitted && consentError && (
                 <p style={{ margin: '8px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>

@@ -136,7 +136,7 @@ export default function Result() {
         </div>
       </div>
 
-      <button onClick={() => navigate('/home')}
+      <button onClick={() => navigate('/auth?next=/home&source=post-onboarding')}
         style={{
           width: '100%',
           maxWidth: '340px',
@@ -149,7 +149,7 @@ export default function Result() {
           fontWeight: 500,
           cursor: 'pointer'
         }}>
-        let's go
+        save my tracker
       </button>
     </div>
   )

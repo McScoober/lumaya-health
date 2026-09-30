@@ -5,10 +5,12 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { TopBar, Card, Button, ChipGroup, PillTag } from '../components/ui.jsx'
+import { TopBar, Card, Button, ChipGroup } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
-import { ShieldCheck, UserCheck, Bell, Sparkle, Heart } from '@phosphor-icons/react'
 import { addDays, dateKeyLocal } from '../engine/cyclePredictor.js'
+import { supabase } from '../lib/supabase.js'
+import SupportAccess from '../components/SupportAccess.jsx'
+import { clearLegacyHealthStorage } from '../lib/trackerRecords.js'
 
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
@@ -25,12 +27,6 @@ function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
   return count
 }
 
-const TRANSPARENCY_MODES = [
-  { id: 'full', label: 'Full visibility', desc: 'Sees every check-in, result updates, and monthly overview.' },
-  { id: 'flags', label: 'Flags only', desc: 'Notified only if severe pain or red flags occur. Routine days stay private.' },
-  { id: 'digest', label: 'Monthly digest', desc: 'One rolled-up monthly summary of general trends and cycle regularity.' },
-]
-
 export default function Profile() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
@@ -38,12 +34,8 @@ export default function Profile() {
   const isMinor = identity.isMinor
 
   const [activeTab, setActiveTab] = useState('settings') // 'settings' | 'support'
-  const [parentEmail, setParentEmail] = useState(identity.parentEmail || '')
-  const [supportName, setSupportName] = useState('')
-  const [supportEmail, setSupportEmail] = useState('')
   const [toast, setToast] = useState('')
 
-  const firstName = identity.name?.split(' ')[0] || 'You'
   const ageDisplay = identity.ageBand ? `${identity.ageBand} yrs old` : 'Teen'
   const recentLogs = recentCheckInCount(state.dailyLogs)
 
@@ -57,12 +49,15 @@ export default function Profile() {
     flash('Preferences saved')
   }
 
-  function deleteData() {
-    if (confirm('Delete all your Maisie data from this device? This cannot be undone.')) {
-      localStorage.clear()
-      dispatch({ type: 'RESET' })
-      navigate('/')
+  async function deleteData() {
+    if (!confirm('Sign out and clear Maisie data from this device? Saved account data will remain available when you sign in again.')) return
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: 'local' })
+      if (error) { flash('Could not sign out. Please try again.'); return }
     }
+    clearLegacyHealthStorage(localStorage)
+    dispatch({ type: 'RESET' })
+    navigate('/')
   }
 
   return (
@@ -80,7 +75,7 @@ export default function Profile() {
               {identity.name || 'Maisie User'}
             </h2>
             <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--text-secondary)' }}>
-              {ageDisplay} · {identity.isMinor ? 'Minor Account (Consented)' : 'Independent Account'}
+              {ageDisplay} · {identity.isMinor ? 'Teen account' : 'Independent account'}
             </p>
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <span
@@ -197,24 +192,7 @@ export default function Profile() {
               on={notifyPrefs.periodCheckin}
               onChange={(v) => dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin: v } })}
             />
-            <hr className="divider" style={{ margin: '12px 0' }} />
-            <Toggle
-              label="Phase Tips"
-              desc="Weekly bite-sized tips tailored to your current phase."
-              on={notifyPrefs.phaseTips}
-              onChange={(v) => dispatch({ type: 'SET_NOTIFY', payload: { phaseTips: v } })}
-            />
-          </Card>
 
-          {/* Privacy & Data */}
-          <Card>
-            <div className="card__label">Privacy & Data</div>
-            <p className="muted" style={{ fontSize: 13, margin: '0 0 12px' }}>
-              Your health answers are encrypted and joined only by an anonymous user ID. They are never sold to advertisers. You can delete all local data at any time.
-            </p>
-            <Button variant="ghost" style={{ color: 'var(--red)', padding: 0 }} onClick={deleteData}>
-              Delete all my data from this device
-            </Button>
           </Card>
 
           <p className="muted center" style={{ fontSize: 11, marginTop: 12 }}>
@@ -226,183 +204,8 @@ export default function Profile() {
       {/* ===================================================================== */}
       {/* TAB 2: PARENT / SUPPORT DASHBOARD                                     */}
       {/* ===================================================================== */}
-      {activeTab === 'support' && (
-        <div className="stack-16" style={{ animation: 'fadeIn 0.2s ease' }}>
-          {isMinor ? (
-            <>
-              {/* Minor Parent Dashboard Controls */}
-              <Card>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
-                      Parent Dashboard
-                    </h3>
-                    <p className="muted" style={{ margin: '2px 0 0', fontSize: 13 }}>
-                      {identity.dashboardActive ? 'Dashboard is currently active' : 'Dashboard is paused'}
-                    </p>
-                  </div>
-                  <PillTag>{identity.dashboardActive ? 'Active' : 'Off'}</PillTag>
-                </div>
+      {activeTab === 'support' && <SupportAccess />}
 
-                <p className="muted" style={{ fontSize: 13, margin: '12px 0' }}>
-                  Your parent gave permission for you to use Maisie. Whether they see an ongoing view is completely your choice.
-                </p>
-
-                {!identity.dashboardActive ? (
-                  <div>
-                    <div className="card__label">Parent's Email</div>
-                    <input
-                      className="input"
-                      type="email"
-                      value={parentEmail}
-                      onChange={(e) => setParentEmail(e.target.value)}
-                      placeholder="parent@example.com"
-                      style={{ marginBottom: 10 }}
-                    />
-                    <Button
-                      variant="primary"
-                      block
-                      disabled={!/.+@.+\..+/.test(parentEmail)}
-                      onClick={() => {
-                        dispatch({ type: 'ACTIVATE_DASHBOARD', email: parentEmail.trim() })
-                        flash('Parent dashboard activated')
-                      }}
-                    >
-                      Turn On Parent Dashboard
-                    </Button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <div style={{ padding: '10px 12px', background: '#F9F8F6', borderRadius: 10, fontSize: 13 }}>
-                      Connected to: <strong>{identity.parentEmail}</strong>
-                    </div>
-
-                    <div className="card__label" style={{ marginTop: 8 }}>Transparency Level</div>
-                    {TRANSPARENCY_MODES.map((m) => (
-                      <Card
-                        key={m.id}
-                        onClick={() => dispatch({ type: 'SET_TRANSPARENCY', mode: m.id })}
-                        role="button"
-                        tabIndex={0}
-                        style={{
-                          cursor: 'pointer',
-                          borderColor: identity.transparencyMode === m.id ? 'var(--pink-accent)' : 'rgba(0,0,0,0.08)',
-                          borderWidth: identity.transparencyMode === m.id ? 2 : 1,
-                          padding: 12,
-                        }}
-                      >
-                        <div className="row row--between">
-                          <strong style={{ fontSize: 13.5 }}>{m.label}</strong>
-                          {identity.transparencyMode === m.id && (
-                            <span style={{ color: 'var(--pink-accent)', fontWeight: 800 }}>✓</span>
-                          )}
-                        </div>
-                        <p className="muted" style={{ margin: '4px 0 0', fontSize: 12 }}>
-                          {m.desc}
-                        </p>
-                      </Card>
-                    ))}
-
-                    <Button
-                      variant="soft"
-                      block
-                      style={{ marginTop: 10 }}
-                      onClick={() => navigate('/parent')}
-                    >
-                      Preview What Your Parent Sees 👁️
-                    </Button>
-
-                    <Button
-                      variant="ghost"
-                      block
-                      style={{ color: 'var(--red)', marginTop: 4 }}
-                      onClick={() => {
-                        dispatch({ type: 'DEACTIVATE_DASHBOARD' })
-                        flash('Parent dashboard turned off')
-                      }}
-                    >
-                      Turn Off Parent Dashboard
-                    </Button>
-                  </div>
-                )}
-              </Card>
-
-              {/* Trust Note Card */}
-              <Card style={{ background: '#F0F9F0', borderColor: 'rgba(75, 175, 107, 0.2)' }}>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-                  <ShieldCheck size={24} color="#2B7A41" style={{ flexShrink: 0 }} />
-                  <p style={{ margin: 0, fontSize: 12.5, color: '#1A5328', lineHeight: 1.5 }}>
-                    <strong>The Privacy Boundary:</strong> Parents only ever see your overall category level and check-in dates — <strong>never</strong> your private individual answers, pain ratings, or health details.
-                  </p>
-                </div>
-              </Card>
-            </>
-          ) : (
-            <>
-              {/* 18+ Adult Support Contact */}
-              <Card>
-                <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
-                  Support Contact
-                </h3>
-                <p className="muted" style={{ margin: '4px 0 14px', fontSize: 13 }}>
-                  Loop in a trusted person — a parent, partner, roommate, or trusted adult. You can revoke access at any time.
-                </p>
-
-                {identity.supportContact ? (
-                  <div>
-                    <div style={{ padding: '12px', background: '#F9F8F6', borderRadius: 10, fontSize: 13, marginBottom: 12 }}>
-                      Connected to: <strong>{identity.supportContact.name}</strong> ({identity.supportContact.email})
-                    </div>
-                    <Button
-                      variant="ghost"
-                      style={{ color: 'var(--red)' }}
-                      onClick={() => dispatch({ type: 'REVOKE_SUPPORT' })}
-                    >
-                      Revoke Support Access
-                    </Button>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="field" style={{ marginBottom: 10 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600 }}>Their Name</label>
-                      <input
-                        className="input"
-                        value={supportName}
-                        onChange={(e) => setSupportName(e.target.value)}
-                        placeholder="e.g. Mom, Maya"
-                      />
-                    </div>
-                    <div className="field" style={{ marginBottom: 14 }}>
-                      <label style={{ fontSize: 12, fontWeight: 600 }}>Their Email</label>
-                      <input
-                        className="input"
-                        type="email"
-                        value={supportEmail}
-                        onChange={(e) => setSupportEmail(e.target.value)}
-                        placeholder="support@example.com"
-                      />
-                    </div>
-                    <Button
-                      variant="primary"
-                      block
-                      disabled={!supportName.trim() || !/.+@.+\..+/.test(supportEmail)}
-                      onClick={() => {
-                        dispatch({
-                          type: 'INVITE_SUPPORT',
-                          contact: { name: supportName.trim(), email: supportEmail.trim() },
-                        })
-                        flash('Support contact added')
-                      }}
-                    >
-                      Invite Support Contact
-                    </Button>
-                  </div>
-                )}
-              </Card>
-            </>
-          )}
-        </div>
-      )}
     </div>
   )
 }

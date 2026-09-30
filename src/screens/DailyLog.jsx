@@ -3,7 +3,7 @@
 //
 // Layout (top → bottom):
 //   1. Mood row — 5 emoji faces, tap to select
-//   2. Pain dot-scale — 1–10 tappable dots (no dragging)
+//   2. Pain dot-scale — 0–10 tappable dots (no dragging)
 //   3. Symptom bubbles — chip grid (existing set)
 //   4. Impact toggles — compact icon row
 //   5. "Log it" button
@@ -309,8 +309,8 @@ export default function DailyLog() {
             gap: 5,
           }}
         >
-          {Array.from({ length: 10 }, (_, i) => {
-            const val = i + 1
+          {Array.from({ length: 11 }, (_, i) => {
+            const val = i
             const isSelected = pain === val
             const isUnder    = pain !== null && val <= pain
             // Color ramps: green → yellow → orange → red
@@ -324,12 +324,12 @@ export default function DailyLog() {
                 key={val}
                 id={`pain-dot-${val}`}
                 type="button"
-                aria-label={`Pain ${val}`}
+                aria-label={val === 0 ? 'Pain 0, no pain' : `Pain ${val}`}
                 onClick={() => setPain(isSelected ? null : val)}
                 style={{
                   flex: 1,
                   aspectRatio: '1',
-                  maxWidth: 30,
+                  maxWidth: 28,
                   borderRadius: '50%',
                   border: isSelected
                     ? `2px solid ${dotColor}`
@@ -351,7 +351,7 @@ export default function DailyLog() {
           className="row row--between muted"
           style={{ fontSize: 11, marginTop: 5 }}
         >
-          <span>1 · mild</span>
+          <span>0 · none</span>
           <span>10 · worst</span>
         </div>
         {pain !== null && (
@@ -367,7 +367,7 @@ export default function DailyLog() {
                 : '#C01B50',
             }}
           >
-            {pain <= 3 ? 'Mild' : pain <= 6 ? 'Moderate' : pain <= 8 ? 'Severe' : 'Extreme'} · {pain}/10
+            {pain === 0 ? 'No pain' : pain <= 3 ? 'Mild' : pain <= 6 ? 'Moderate' : pain <= 8 ? 'Severe' : 'Extreme'} · {pain}/10
           </p>
         )}
       </div>

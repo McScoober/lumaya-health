@@ -27,19 +27,31 @@ export default function Welcome() {
         <Button className="btn--primary btn--block" onClick={() => navigate(state.onboarded ? '/home' : '/age')}>
           For you (Teen)
         </Button>
-        <Button className="btn--ghost btn--block" onClick={() => navigate('/auth')}>
-          Sign in with email ✨
-        </Button>
         <Button className="btn--ghost btn--block" onClick={() => navigate('/parent')}>
           For a parent
         </Button>
+        <button
+          type="button"
+          onClick={() => navigate('/auth?next=/home&source=signin')}
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-secondary)',
+            fontSize: 13,
+            fontWeight: 700,
+            cursor: 'pointer',
+            padding: '4px 0',
+          }}
+        >
+          Already have an account? Sign in
+        </button>
       </div>
 
       <div className="card" style={{ textAlign: 'left', marginBottom: 12, padding: '14px', width: '100%', maxWidth: 380 }}>
         <div className="row" style={{ alignItems: 'flex-start', gap: 10 }}>
           <span aria-hidden="true" style={{ fontSize: 18 }}>🔒</span>
           <p className="muted" style={{ margin: 0, fontSize: 13, lineHeight: 1.4 }}>
-            Maisie forms part of your health record. Your answers are private.
+            Until you save your tracker, answers stay in this open page. Closing or refreshing it clears them.
           </p>
         </div>
       </div>

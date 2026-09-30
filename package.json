@@ -3,8 +3,9 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Maisie, a period health app with a metabolic signal layer.",
+  "description": "Maisie, a teen period health app for tracking cycle signals and obvious abnormalities without diagnosing conditions.",
   "scripts": {
+    "test": "node --test src/engine/*.test.js src/lib/*.test.js src/state/*.test.mjs",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"

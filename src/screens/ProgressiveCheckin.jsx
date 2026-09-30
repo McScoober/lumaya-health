@@ -12,7 +12,7 @@ import { Chip, ChipGroup } from '../components/ui.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
 
 // Questions shown during fast-start seed (already answered)
-const SEED_KEYS = new Set(['age', 'started', 'lastStart', 'flow', 'painWorst'])
+const SEED_KEYS = new Set(['age', 'started', 'lastStart', 'lastEnd', 'prevStart', 'flow', 'painWorst'])
 // Questions we actively defer to progressive cards (everything else)
 const DEFERRED = DEEP_QUESTIONS.filter(
   (q) => !SEED_KEYS.has(q.key) && q.type !== 'your_thing'
@@ -147,7 +147,7 @@ function ProgressiveCard({ question: q, answers, onAnswer, remaining }) {
           options={q.options}
           value={localValue}
           onChange={setLocalValue}
-          columns={q.options.length > 6 ? 2 : undefined}
+          stack
         />
       )}
 
