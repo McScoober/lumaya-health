@@ -4,17 +4,25 @@
 // (in-memory preview only).
 // ============================================================
 import { createClient } from '@supabase/supabase-js'
+import { buildAuthRedirectUrl } from './authRedirect.js'
+import { authSessionStorageKey, migrateAuthSessionStorage } from './authStorage.js'
 
 const url = import.meta.env.VITE_SUPABASE_URL
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const isSupabaseConfigured = Boolean(url && anonKey && !url.includes('YOUR-PROJECT'))
+const authStorageKey = isSupabaseConfigured ? authSessionStorageKey(url) : null
+
+if (typeof window !== 'undefined' && authStorageKey) {
+  migrateAuthSessionStorage(window.sessionStorage, window.localStorage, authStorageKey)
+}
 
 export const supabase = isSupabaseConfigured
   ? createClient(url, anonKey, {
       auth: {
         persistSession: true,
-        storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+        storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+        storageKey: authStorageKey,
         autoRefreshToken: true,
         detectSessionInUrl: false,
         flowType: 'implicit',
@@ -52,11 +60,11 @@ function hasPendingEmailAuthCallback() {
 export function getAuthRedirectUrl(next = '/home') {
   if (typeof window === 'undefined') return undefined
 
-  const nextParam = encodeURIComponent(safeAuthNext(next))
-  if (import.meta.env.VITE_ROUTER === 'hash') {
-    return `${window.location.origin}/#/auth/callback?next=${nextParam}`
-  }
-  return `${window.location.origin}/auth/callback?next=${nextParam}`
+  return buildAuthRedirectUrl(
+    window.location.origin,
+    safeAuthNext(next),
+    import.meta.env.VITE_ROUTER === 'hash',
+  )
 }
 
 export function safeAuthNext(value) {

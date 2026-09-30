@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase, isSupabaseConfigured, getAuthRedirectUrl, safeAuthNext } from '../lib/supabase.js'
+import { saveSignupDraft } from '../lib/signupDraft.js'
 import { useStore } from '../state/store.jsx'
 import { Button, TopBar } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
@@ -14,25 +15,16 @@ export default function Auth() {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
-  const [code, setCode] = useState('')
   const { state, authLoading } = useStore()
   const source = searchParams.get('source')
   const next = safeAuthNext(searchParams.get('next'))
   const isPostOnboarding = source === 'post-onboarding'
+  const isExplicitSignIn = source === 'signin'
 
   useEffect(() => {
+    if (isExplicitSignIn) return
     if (state.accountId && !authLoading) navigate(next === '/parent' || next.startsWith('/parent?') || state.onboarded ? next : '/age', { replace: true })
-  }, [state.accountId, state.onboarded, authLoading, next, navigate])
-
-  async function verifyCode(event) {
-    event.preventDefault()
-    setLoading(true); setErrorMsg(null)
-    try {
-      const { error } = await supabase.auth.verifyOtp({ email: email.trim().toLowerCase(), token: code.trim(), type: 'email' })
-      if (error) setErrorMsg('That code did not work. Check the newest email or request a new code.')
-    } catch { setErrorMsg('Could not verify the code. Please try again.') }
-    finally { setLoading(false) }
-  }
+  }, [state.accountId, state.onboarded, authLoading, isExplicitSignIn, next, navigate])
 
   async function handleSendMagicLink(e) {
     e.preventDefault()
@@ -54,6 +46,7 @@ export default function Auth() {
       email,
       options: {
         emailRedirectTo: getAuthRedirectUrl(next),
+        shouldCreateUser: isPostOnboarding,
       },
     })
 
@@ -62,6 +55,7 @@ export default function Auth() {
     if (error) {
       setErrorMsg(error.message)
     } else {
+      if (isPostOnboarding) saveSignupDraft(window.localStorage, state, email)
       setSent(true)
     }
   }
@@ -73,24 +67,31 @@ export default function Auth() {
         <MaisieLogo size={88} />
 
         <h1 style={{ fontSize: 28, margin: '20px 0 8px', textAlign: 'center' }}>
-          {sent ? 'Check your email' : isPostOnboarding ? 'Save your tracker' : 'Sign in'}
+          {sent ? (isPostOnboarding ? 'Confirm your email' : 'Check your email') : isPostOnboarding ? 'Save your tracker' : 'Sign in'}
         </h1>
 
         <p className="muted center" style={{ maxWidth: 320, fontSize: 14, marginBottom: 24 }}>
           {sent
-            ? `Enter the code sent to ${email} here. Keep this page open to save your answers.`
+            ? isPostOnboarding
+              ? `Open the email sent to ${email} and use the confirmation link to finish creating your account.`
+              : `Open the email sent to ${email} and use the secure link to sign in.`
             : isPostOnboarding
               ? 'Add your email so your Maisie tracker can come with you across devices. No password needed.'
-            : 'Enter your email to receive a sign-in code.'}
+            : 'Enter your email to receive a secure sign-in link.'}
         </p>
 
         {sent ? (
-          <form onSubmit={verifyCode} style={{ width: '100%', maxWidth: 340 }}>
-            <label>Sign-in code<input className="input" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6,10}" maxLength={10} required value={code} onChange={(event) => setCode(event.target.value)} /></label>
-            {errorMsg && <p role="alert">{errorMsg}</p>}
-            <Button block disabled={loading || authLoading} style={{ marginTop: 12 }}>{loading || authLoading ? 'Signing in...' : 'Verify code'}</Button>
-            <button type="button" className="btn btn--ghost" onClick={() => { setSent(false); setCode('') }}>Change email or resend</button>
-          </form>
+          <div style={{ width: '100%', maxWidth: 340 }} aria-live="polite">
+            <div className="card" style={{ padding: 16, textAlign: 'center' }}>
+              <EnvelopeSimple size={28} weight="duotone" color="var(--pink-accent)" />
+              <p style={{ margin: '8px 0 0', lineHeight: 1.5 }}>
+                The link expires shortly and can only be used once.
+              </p>
+            </div>
+            <button type="button" className="btn btn--ghost" onClick={() => setSent(false)}>
+              Change email or send another link
+            </button>
+          </div>
         ) : (
           <form onSubmit={handleSendMagicLink} style={{ width: '100%', maxWidth: 340 }}>
             {errorMsg && (
@@ -131,7 +132,7 @@ export default function Auth() {
             </div>
 
             <Button block disabled={loading} style={{ background: 'var(--pink-accent)', color: '#fff' }}>
-              {loading ? 'Sending...' : 'Send sign-in code'}
+              {loading ? 'Sending...' : isPostOnboarding ? 'Send confirmation email' : 'Send sign-in link'}
             </Button>
           </form>
         )}

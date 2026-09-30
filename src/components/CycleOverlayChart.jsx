@@ -58,12 +58,20 @@ function makePath(values, W, H, padX = 4, padY = 14) {
   return d
 }
 
-export default function CycleOverlayChart({ cycleDay = 14 }) {
+export default function CycleOverlayChart({ cycleDay = 14, cycleLength = TOTAL_DAYS }) {
   const W = 320
   const H = 140
   const padX = 4
 
-  const todayX = padX + ((Math.min(cycleDay - 1, TOTAL_DAYS - 1) / (TOTAL_DAYS - 1)) * (W - padX * 2))
+  const hasCyclePosition = Number.isFinite(cycleDay)
+  const safeCycleLength = Number.isFinite(cycleLength) ? Math.max(2, cycleLength) : TOTAL_DAYS
+  const safeCycleDay = hasCyclePosition ? Math.max(1, Math.min(cycleDay, safeCycleLength)) : null
+  const chartDayIndex = hasCyclePosition
+    ? ((safeCycleDay - 1) / (safeCycleLength - 1)) * (TOTAL_DAYS - 1)
+    : null
+  const todayX = hasCyclePosition
+    ? padX + ((chartDayIndex / (TOTAL_DAYS - 1)) * (W - padX * 2))
+    : null
 
   let xCursor = padX
   const phaseBands = PHASES.map((p) => {
@@ -77,7 +85,7 @@ export default function CycleOverlayChart({ cycleDay = 14 }) {
   let dayCount = 0
   const todayPhase = PHASES.find((p) => {
     dayCount += p.days
-    return cycleDay <= dayCount
+    return chartDayIndex + 1 <= dayCount
   }) || PHASES[PHASES.length - 1]
 
   return (
@@ -124,7 +132,13 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
         ))}
       </div>
 
-      <svg viewBox={`0 0 ${W} ${H + 30}`} width="100%" style={{ display: 'block' }}>
+      <svg
+        viewBox={`0 0 ${W} ${H + 30}`}
+        width="100%"
+        role="img"
+        aria-label={Number.isFinite(cycleDay) ? `${signal.label} curve with your approximate cycle position marked` : `${signal.label} cycle curve`}
+        style={{ display: 'block' }}
+      >
         {phaseBands.map(p => (
           <rect key={p.label} x={p.x} y={0} width={p.w} height={H} fill={p.lightColor} />
         ))}
@@ -153,12 +167,33 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
         />
 
         {Number.isFinite(cycleDay) && <>
-        <line x1={todayX} y1={0} x2={todayX} y2={H} stroke="#E0528A" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.7} />
-        <circle cx={todayX} cy={(() => {
-          const dayIdx = Math.min(cycleDay - 1, signal.values.length - 1)
-          const v = signal.values[dayIdx]
-          return 14 + ((5 - v) / 5) * (H - 28)
-        })()} r={4} fill="#E0528A" />
+          <line x1={todayX} y1={23} x2={todayX} y2={H} stroke="#E0528A" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.8} />
+          <circle cx={todayX} cy={(() => {
+            const dayIdx = Math.max(0, Math.min(Math.round(((todayX - padX) / (W - padX * 2)) * (signal.values.length - 1)), signal.values.length - 1))
+            const v = signal.values[dayIdx]
+            return 14 + ((5 - v) / 5) * (H - 28)
+          })()} r={4.5} fill="#E0528A" stroke="#fff" strokeWidth={2} />
+          <g>
+            <rect
+              x={Math.max(padX + 2, Math.min(todayX - 29, W - padX - 60))}
+              y={5}
+              width={58}
+              height={17}
+              rx={8.5}
+              fill="#E0528A"
+            />
+            <text
+              x={Math.max(padX + 31, Math.min(todayX, W - padX - 31))}
+              y={16.5}
+              textAnchor="middle"
+              fontSize={8.5}
+              fill="#fff"
+              fontWeight="700"
+              fontFamily="'DM Sans', sans-serif"
+            >
+              About here
+            </text>
+          </g>
         </>}
 
         {phaseBands.map(p => (

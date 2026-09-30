@@ -31,6 +31,7 @@ export default function CheckIn() {
 
   // seed from existing answers in case user is returning mid-flow
   const [started,   setStarted]   = useState(state.answers.started   || null)
+  const [startedConfirmed, setStartedConfirmed] = useState(Boolean(state.answers.started))
   const [lastStart, setLastStart] = useState(state.answers.lastStart  || '')
   const [dateUnknown, setDateUnknown] = useState(state.answers.lastStart === 'unknown')
   const [dateConfirmed, setDateConfirmed] = useState(Boolean(state.answers.lastStart))
@@ -42,7 +43,7 @@ export default function CheckIn() {
 
   // Determine which step we're on (0 = started gate, 1 = date, 2 = flow, 3 = pain)
   const notStarted = started === 'Not yet'
-  const step = started === null || notStarted ? 0
+  const step = !startedConfirmed || notStarted ? 0
     : !dateConfirmed ? 1
     : flow === null ? 2
     : 3
@@ -119,12 +120,19 @@ export default function CheckIn() {
           />
         </div>
         <div className="spacer" />
-        {/* If "Not yet" is selected, allow them to proceed directly */}
-        {started === 'Not yet' && (
-          <Button block onClick={finish}>
-            Set up my tracker
-          </Button>
-        )}
+        <Button
+          block
+          disabled={!started}
+          onClick={() => {
+            if (started === 'Not yet') {
+              finish()
+              return
+            }
+            setStartedConfirmed(true)
+          }}
+        >
+          Next
+        </Button>
       </div>
     )
   }
@@ -133,7 +141,7 @@ export default function CheckIn() {
   if (step === 1) {
     return (
       <div className="screen">
-        <TopBar onBack={() => setStarted(null)} />
+        <TopBar onBack={() => setStartedConfirmed(false)} />
         <ProgressBar value={0.3} />
         <div style={{ marginTop: 24 }}>
           <p className="eyebrow">Quick setup · 1 of 3</p>

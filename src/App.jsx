@@ -24,7 +24,7 @@ function RequireOnboarded({ children }) {
   const { state, authLoading, accountError } = useStore()
   if (authLoading) return <div className="screen"><p>Loading your tracker...</p></div>
   if (accountError && !state.accountId) return <div className="screen"><p role="alert">{accountError}</p><button className="btn" onClick={() => window.location.reload()}>Reload</button></div>
-  if (!state.onboarded) return <Navigate to="/" replace />
+  if (!state.onboarded) return <Navigate to={state.accountId ? '/age' : '/'} replace />
   return children
 }
 

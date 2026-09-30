@@ -6,7 +6,7 @@ import { useStore } from '../state/store.jsx'
 function userFacingAuthError(error) {
   const message = error?.message || ''
   if (message.toLowerCase().includes('code verifier')) {
-    return 'This sign-in link was created with an older browser-bound login flow. Please request a fresh magic link and open the newest email.'
+    return 'This sign-in link is out of date. Please request a new link and open the newest email.'
   }
   return message || 'This sign-in link did not work. Please request a new one.'
 }

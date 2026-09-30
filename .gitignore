@@ -17,3 +17,5 @@ dist-artifact
 /docs/RESEND_SMTP_SETUP.md
 /maisie-investor-pitch-2026.html
 /outputs/
+/supabase/setup/
+/supabase/tests/

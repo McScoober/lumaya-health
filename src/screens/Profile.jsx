@@ -11,6 +11,10 @@ import { addDays, dateKeyLocal } from '../engine/cyclePredictor.js'
 import { supabase } from '../lib/supabase.js'
 import SupportAccess from '../components/SupportAccess.jsx'
 import { clearLegacyHealthStorage } from '../lib/trackerRecords.js'
+import { clearSignupDraft } from '../lib/signupDraft.js'
+import { ageBandFromBirthMonthYear } from '../lib/age.js'
+import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
+import { GearSix, UsersThree } from '@phosphor-icons/react'
 
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
@@ -35,9 +39,14 @@ export default function Profile() {
 
   const [activeTab, setActiveTab] = useState('settings') // 'settings' | 'support'
   const [toast, setToast] = useState('')
+  const [birthMonth, setBirthMonth] = useState(identity.birthMonth)
+  const [birthYear, setBirthYear] = useState(identity.birthYear)
 
   const ageDisplay = identity.ageBand ? `${identity.ageBand} yrs old` : 'Teen'
   const recentLogs = recentCheckInCount(state.dailyLogs)
+  const birthError = (birthMonth || birthYear) && !ageBandFromBirthMonthYear(birthMonth, birthYear)
+    ? 'Maisie is for people age 13 and up.'
+    : ''
 
   function flash(msg) {
     setToast(msg)
@@ -49,6 +58,14 @@ export default function Profile() {
     flash('Preferences saved')
   }
 
+  function updateBirthMonthYear(month, year) {
+    setBirthMonth(month)
+    setBirthYear(year)
+    if (!ageBandFromBirthMonthYear(month, year)) return
+    dispatch({ type: 'SET_BIRTH_MONTH_YEAR', birthMonth: month, birthYear: year })
+    flash('Birthday saved')
+  }
+
   async function deleteData() {
     if (!confirm('Sign out and clear Maisie data from this device? Saved account data will remain available when you sign in again.')) return
     if (supabase) {
@@ -56,6 +73,7 @@ export default function Profile() {
       if (error) { flash('Could not sign out. Please try again.'); return }
     }
     clearLegacyHealthStorage(localStorage)
+    clearSignupDraft(localStorage)
     dispatch({ type: 'RESET' })
     navigate('/')
   }
@@ -96,62 +114,25 @@ export default function Profile() {
       </Card>
 
       {/* Segmented Tab Switcher */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
-          gap: 6,
-          background: 'rgba(0,0,0,0.05)',
-          padding: 4,
-          borderRadius: 14,
-          marginTop: 14,
-          marginBottom: 14,
-        }}
-      >
+      <div className="profile-tabs">
         <button
           type="button"
+          className="profile-tab"
+          aria-pressed={activeTab === 'settings'}
           onClick={() => setActiveTab('settings')}
-          style={{
-            padding: '9px 12px',
-            borderRadius: 10,
-            border: 'none',
-            background: activeTab === 'settings' ? '#fff' : 'transparent',
-            color: activeTab === 'settings' ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: 13,
-            boxShadow: activeTab === 'settings' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-          }}
         >
-          <span>⚙️</span> Preferences
+          <GearSix size={17} weight="bold" aria-hidden="true" />
+          Preferences
         </button>
 
         <button
           type="button"
+          className="profile-tab"
+          aria-pressed={activeTab === 'support'}
           onClick={() => setActiveTab('support')}
-          style={{
-            padding: '9px 12px',
-            borderRadius: 10,
-            border: 'none',
-            background: activeTab === 'support' ? '#fff' : 'transparent',
-            color: activeTab === 'support' ? 'var(--text-primary)' : 'var(--text-secondary)',
-            fontWeight: 700,
-            fontSize: 13,
-            boxShadow: activeTab === 'support' ? '0 2px 5px rgba(0,0,0,0.08)' : 'none',
-            cursor: 'pointer',
-            transition: 'all 0.15s ease',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-          }}
         >
-          <span>🤝</span> {isMinor ? 'Parent Dashboard' : 'Support Contact'}
+          <UsersThree size={17} weight="bold" aria-hidden="true" />
+          {isMinor ? 'Parent sharing' : 'Support sharing'}
         </button>
       </div>
 
@@ -160,6 +141,26 @@ export default function Profile() {
       {/* ===================================================================== */}
       {activeTab === 'settings' && (
         <div className="stack-16" style={{ animation: 'fadeIn 0.2s ease' }}>
+          <Card>
+            <div className="card__label">Birthday</div>
+            <div style={{ marginTop: 8 }}>
+              <BirthMonthYearFields
+                idPrefix="profile-birth"
+                birthMonth={birthMonth}
+                birthYear={birthYear}
+                onChange={updateBirthMonthYear}
+              />
+              <p className="muted" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
+                Maisie uses this to keep your age current.
+              </p>
+              {birthError && (
+                <p style={{ margin: '6px 0 0', color: '#B3265A', fontSize: 12.5 }}>
+                  {birthError}
+                </p>
+              )}
+            </div>
+          </Card>
+
           {/* Lifestyle Preferences */}
           <Card>
             <div className="card__label">Student & Athlete Status</div>
@@ -193,6 +194,16 @@ export default function Profile() {
               onChange={(v) => dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin: v } })}
             />
 
+          </Card>
+
+          <Card>
+            <div className="card__label">Privacy & Data</div>
+            <p className="muted" style={{ margin: '4px 0 14px', fontSize: 13, lineHeight: 1.5 }}>
+              Sign out and clear Maisie data from this device. Information saved to your account stays available when you sign in again.
+            </p>
+            <Button variant="ghost" style={{ color: 'var(--red)' }} onClick={deleteData}>
+              Sign out and clear this device
+            </Button>
           </Card>
 
           <p className="muted center" style={{ fontSize: 11, marginTop: 12 }}>

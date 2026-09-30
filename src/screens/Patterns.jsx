@@ -11,6 +11,8 @@ import { TopBar, Card, Button, Badge } from '../components/ui.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
 import { deriveBodySignals } from '../engine/bodySignals.js'
+import { summarizeDoctorLogs } from '../engine/doctorSummary.js'
+import { monthCacheKey } from '../lib/historyWindow.js'
 import {
   buildCycleModel,
   phaseForDate,
@@ -48,7 +50,7 @@ function addMonths(date, months) {
 export default function Patterns({ initialTab }) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { state, dispatch } = useStore()
+  const { state, dispatch, historyStatus, loadHistoryMonth } = useStore()
 
   // Tab State: 'calendar' | 'signals'
   const tabFromUrl = searchParams.get('tab')
@@ -59,6 +61,10 @@ export default function Patterns({ initialTab }) {
   const [copied, setCopied] = useState(false)
   const [selectedDateKey, setSelectedDateKey] = useState(dateKeyLocal(new Date()))
   const [visibleMonth, setVisibleMonth] = useState(() => startOfMonth(new Date()))
+
+  useEffect(() => {
+    if (activeTab === 'calendar' && state.accountId) loadHistoryMonth(visibleMonth)
+  }, [activeTab, state.accountId, visibleMonth, loadHistoryMonth])
 
   // Sync tab with URL
   useEffect(() => {
@@ -75,13 +81,14 @@ export default function Patterns({ initialTab }) {
   // Compute Cycle Model
   const cycleModel = useMemo(() => {
     const starts = periodStartKeys(state.periodLogs)
+    const summarizedStart = state.cycles?.at(-1)?.start_date
     return buildCycleModel({
-      lastStart: starts[starts.length - 1] || state.answers.lastStart || state.answers.periodStart,
+      lastStart: starts[starts.length - 1] || summarizedStart || state.answers.lastStart || state.answers.periodStart,
       cycleLength: state.result?.cycleLength,
       predictionsReady: state.result?.patternsReady === true,
       onBirthControl: state.profile.onBirthControl,
     })
-  }, [state.answers, state.profile, state.periodLogs, state.result])
+  }, [state.answers, state.profile, state.periodLogs, state.cycles, state.result])
 
   // Current Phase Info for Signals View
   const now = new Date()
@@ -116,6 +123,8 @@ export default function Patterns({ initialTab }) {
   const currentMonth = startOfMonth(today)
   const canGoNextMonth = visibleMonth < currentMonth
   const monthLabel = visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const visibleMonthKey = state.accountId ? monthCacheKey(state.accountId, visibleMonth) : null
+  const isLoadingVisibleMonth = historyStatus.key === visibleMonthKey
   const calendarDays = useMemo(() => {
     const cells = []
     const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate()
@@ -197,26 +206,25 @@ export default function Patterns({ initialTab }) {
   // Doctor Summary Report Text
   const doctorReportText = useMemo(() => {
     const name = state.identity.name || 'Maisie User'
-    const totalLogs = Object.keys(activeLogs).length
-    const painDays = Object.values(activeLogs).filter((l) => l.pain >= 5).length
-    const impactDays = Object.values(activeLogs).filter((l) => actualImpacts(l).length > 0).length
+    const summary = summarizeDoctorLogs(activeLogs, now)
+    const reportStart = addDays(now, -29)
 
     return `MAISIE HEALTH — 30-DAY PATTERN REPORT
 --------------------------------------------------
 Patient / User: ${name}
-Date Range: ${calendarDays[0]?.date.toLocaleDateString()} – ${calendarDays[calendarDays.length - 1]?.date.toLocaleDateString()}
-Tracked Days: ${totalLogs}
+Date Range: ${reportStart.toLocaleDateString()} – ${now.toLocaleDateString()}
+Tracked Days: ${summary.totalLogs}
 
 METRICS:
-• Pain Days (≥5): ${painDays} days
-• Activity Impact Days: ${impactDays} days
+• High-Pain Days (≥7): ${summary.highPainDays} days
+• Activity Impact Days: ${summary.impactCount} days
 • Observed Cycle Length: ${state.result?.cycleLength ? `${state.result.cycleLength} days` : 'Not available'}
 
 PATTERNS DETECTED:
 ${patternInsights.map((p) => `• ${p.title}: ${p.body}`).join('\n')}
 
 Maisie does not diagnose. This summary reflects reported information, not a medical assessment.`
-  }, [state.identity.name, activeLogs, cycleModel, patternInsights, calendarDays])
+  }, [state.identity.name, activeLogs, state.result?.cycleLength, patternInsights, todayKey])
 
   const handleCopyReport = () => {
     navigator.clipboard?.writeText(doctorReportText)
@@ -432,6 +440,15 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Tap day to view</span>
             </div>
+
+            {(isLoadingVisibleMonth || historyStatus.error) && (
+              <p
+                role={historyStatus.error ? 'alert' : 'status'}
+                style={{ margin: '-6px 0 10px', fontSize: 11, color: historyStatus.error ? '#8F2439' : 'var(--text-secondary)' }}
+              >
+                {historyStatus.error || 'Loading saved days...'}
+              </p>
+            )}
 
             <div className="cal">
               {DOW.map((d, i) => (
@@ -862,7 +879,10 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               </div>
 
               <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                <CycleOverlayChart cycleDay={null} />
+                <CycleOverlayChart
+                  cycleDay={predictionsReady ? cycleDay : null}
+                  cycleLength={cycleModel.cycleLength}
+                />
               </div>
 
               <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13, lineHeight: 1.5 }}>

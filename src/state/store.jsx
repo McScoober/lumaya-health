@@ -1,9 +1,12 @@
 // In-memory tracker state. Signed-in observations are saved through authenticated RPCs.
-import { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { addDays, buildCycleModel, dateKeyLocal, diffDays, periodStartKeys } from '../engine/cyclePredictor.js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase.js'
-import { pullFromSupabase, pushToSupabase, clearSyncCache } from '../lib/sync.js'
+import { pullFromSupabase, pushToSupabase, clearSyncCache, loadHistoryPage, loadHistoryRange } from '../lib/sync.js'
 import { clearLegacyHealthStorage, trackerRecords } from '../lib/trackerRecords.js'
+import { clearSignupDraft, readSignupDraft } from '../lib/signupDraft.js'
+import { bufferedMonthRange, monthCacheKey } from '../lib/historyWindow.js'
+import { ageBandFromBirthMonthYear } from '../lib/age.js'
 
 function uid() {
   // Opaque internal user id (UUID-ish). Not derived from name/email.
@@ -25,6 +28,8 @@ export function freshState() {
       name: '',
       email: '',
       ageBand: null, // '13'..'17' | '18+'
+      birthMonth: null,
+      birthYear: null,
       isMinor: false,
       consentedAt: null,
       privacyAckAt: null,
@@ -49,6 +54,7 @@ export function freshState() {
     progressiveQIndex: 0, // how many deferred check-in Qs have been answered
     dailyLogs: {}, // 'YYYY-MM-DD' -> completed daily check-ins
     periodLogs: {}, // 'YYYY-MM-DD' -> period-only tracking
+    cycles: [], // compact server-derived cycle summaries
     streak: 0,
     lastCheckinDate: null,
     messages: [], // inbox
@@ -250,6 +256,13 @@ export function reducer(state, action) {
     case 'HYDRATE':
       return { ...freshState(), ...normalizeSavedHealth(action.payload), accountId: action.payload.userId }
 
+    case 'MERGE_HISTORY': {
+      const dailyLogs = { ...state.dailyLogs, ...(action.dailyLogs || {}) }
+      let periodLogs = { ...state.periodLogs, ...(action.periodLogs || {}) }
+      for (const start of periodStartKeys(periodLogs)) periodLogs = addPossiblePeriodDays(periodLogs, start)
+      return { ...state, dailyLogs, periodLogs }
+    }
+
     case 'SET_AUTH_USER':
       return {
         ...state,
@@ -274,6 +287,24 @@ export function reducer(state, action) {
         ...state,
         identity: { ...state.identity, ageBand: band, isMinor },
         answers: { ...state.answers, age: band },
+      }
+    }
+
+    case 'SET_BIRTH_MONTH_YEAR': {
+      const birthMonth = Number(action.birthMonth)
+      const birthYear = Number(action.birthYear)
+      const ageBand = ageBandFromBirthMonthYear(birthMonth, birthYear)
+      if (!ageBand) return state
+      return {
+        ...state,
+        identity: {
+          ...state.identity,
+          birthMonth,
+          birthYear,
+          ageBand,
+          isMinor: ageBand !== '18+',
+        },
+        answers: { ...state.answers, age: ageBand },
       }
     }
 
@@ -476,12 +507,15 @@ export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, freshState)
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured)
   const [accountError, setAccountError] = useState('')
+  const [historyStatus, setHistoryStatus] = useState({ key: null, error: '' })
   const stateRef = useRef(state)
   stateRef.current = state
   const epoch = useRef(0)
   const readyAccount = useRef(null)
   const initializing = useRef(null)
   const saveQueue = useRef(Promise.resolve())
+  const loadedHistoryMonths = useRef(new Set())
+  const historyRequests = useRef(new Map())
 
   useEffect(() => {
     // Old data is test data; explicitly excluded from the fresh-table rollout.
@@ -498,6 +532,9 @@ export function StoreProvider({ children }) {
       readyAccount.current = null
       initializing.current = id
       clearSyncCache()
+      loadedHistoryMonths.current.clear()
+      historyRequests.current.clear()
+      setHistoryStatus({ key: null, error: '' })
       setAccountError('')
       if (!id) {
         if (previous.accountId) dispatch({ type: 'RESET' })
@@ -513,8 +550,20 @@ export function StoreProvider({ children }) {
         if (remote) {
           dispatch({ type: 'HYDRATE', payload: remote })
         } else {
-          if (previous.accountId || isSupportOnlyRoute()) dispatch({ type: 'RESET' })
-          dispatch({ type: 'SET_AUTH_USER', userId: id, email: user.email })
+          const signupDraft = readSignupDraft(localStorage, user.email)
+          if (signupDraft && !isSupportOnlyRoute()) {
+            dispatch({
+              type: 'HYDRATE',
+              payload: {
+                ...signupDraft,
+                userId: id,
+                identity: { ...signupDraft.identity, email: user.email },
+              },
+            })
+          } else {
+            if (previous.accountId || isSupportOnlyRoute()) dispatch({ type: 'RESET' })
+            dispatch({ type: 'SET_AUTH_USER', userId: id, email: user.email })
+          }
         }
         readyAccount.current = id
       } catch {
@@ -537,6 +586,50 @@ export function StoreProvider({ children }) {
     return () => { alive = false; ++epoch.current; clearTimeout(scheduled); subscription.unsubscribe() }
   }, [])
 
+  const loadHistoryMonth = useCallback(async (month) => {
+    const userId = stateRef.current.accountId
+    if (!userId || !(month instanceof Date) || Number.isNaN(month.getTime())) return
+    const key = monthCacheKey(userId, month)
+    if (loadedHistoryMonths.current.has(key)) return
+    if (historyRequests.current.has(key)) return historyRequests.current.get(key)
+
+    const revision = epoch.current
+    const request = (async () => {
+      setHistoryStatus({ key, error: '' })
+      try {
+        const range = bufferedMonthRange(month)
+        const history = await loadHistoryRange(userId, range.start, range.end)
+        if (revision !== epoch.current || stateRef.current.accountId !== userId) return
+        loadedHistoryMonths.current.add(key)
+        dispatch({ type: 'MERGE_HISTORY', ...history })
+        setHistoryStatus({ key: null, error: '' })
+      } catch {
+        if (revision === epoch.current) {
+          setHistoryStatus({ key: null, error: 'Saved days could not be loaded. Try this month again.' })
+        }
+      } finally {
+        historyRequests.current.delete(key)
+      }
+    })()
+    historyRequests.current.set(key, request)
+    return request
+  }, [])
+
+  const loadOlderHistory = useCallback(async (beforeDate, months) => {
+    const userId = stateRef.current.accountId
+    if (!userId) return null
+    const revision = epoch.current
+    try {
+      const page = await loadHistoryPage(userId, beforeDate, months)
+      if (revision !== epoch.current || stateRef.current.accountId !== userId) return null
+      dispatch({ type: 'MERGE_HISTORY', dailyLogs: page.dailyLogs, periodLogs: page.periodLogs })
+      return page
+    } catch {
+      setHistoryStatus({ key: null, error: 'Older saved days could not be loaded. Please try again.' })
+      return null
+    }
+  }, [])
+
   const fingerprint = JSON.stringify({ records: trackerRecords(state), identity: state.identity })
   useEffect(() => {
     if (!state.accountId || readyAccount.current !== state.accountId || authLoading || isSupportOnlyRoute()) return
@@ -548,6 +641,7 @@ export function StoreProvider({ children }) {
         try {
           const result = await pushToSupabase(snapshot.accountId, snapshot)
           if (revision !== epoch.current) return
+          clearSignupDraft(localStorage)
           setAccountError('')
           const currentFingerprint = JSON.stringify({ records: trackerRecords(stateRef.current), identity: stateRef.current.identity })
           if (currentFingerprint === fingerprint) dispatch({ type: 'SERVER_RESULT', result })
@@ -560,16 +654,26 @@ export function StoreProvider({ children }) {
   }, [fingerprint, state.accountId, authLoading])
 
   const cycleModel = useMemo(() => {
-    const lastStart = latestPeriodStartFromLogs(state.periodLogs) || state.answers.lastStart
+    const summarizedStart = state.cycles?.at(-1)?.start_date
+    const lastStart = latestPeriodStartFromLogs(state.periodLogs) || summarizedStart || state.answers.lastStart
     return buildCycleModel({
       lastStart: lastStart && lastStart !== 'unknown' ? lastStart : null,
       cycleLength: state.result?.cycleLength,
       onBirthControl: state.profile.onBirthControl,
       predictionsReady: state.result?.authoritative === true && state.result.patternsReady === true,
     })
-  }, [state.periodLogs, state.answers.lastStart, state.result, state.profile.onBirthControl])
+  }, [state.periodLogs, state.cycles, state.answers.lastStart, state.result, state.profile.onBirthControl])
 
-  const value = useMemo(() => ({ state, dispatch, cycleModel, authLoading, accountError }), [state, cycleModel, authLoading, accountError])
+  const value = useMemo(() => ({
+    state,
+    dispatch,
+    cycleModel,
+    authLoading,
+    accountError,
+    historyStatus,
+    loadHistoryMonth,
+    loadOlderHistory,
+  }), [state, cycleModel, authLoading, accountError, historyStatus, loadHistoryMonth, loadOlderHistory])
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }
 

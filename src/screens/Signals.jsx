@@ -152,7 +152,11 @@ export default function Signals() {
                 </div>
 
                 <div style={{ marginTop: 12, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                  <CycleOverlayChart cycleDay={cycleDay} dailyLogs={state.dailyLogs} />
+                  <CycleOverlayChart
+                    cycleDay={cycleDay}
+                    cycleLength={cycleModel.cycleLength}
+                    dailyLogs={state.dailyLogs}
+                  />
                 </div>
 
                 <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>

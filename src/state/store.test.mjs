@@ -8,7 +8,7 @@ const compiled = await build({
   plugins: [{ name: 'offline-account-services', setup(builder) {
     builder.onResolve({ filter: /lib\/(supabase|sync)\.js$/ }, (args) => ({ path: args.path, namespace: 'test-services' }))
     builder.onLoad({ filter: /.*/, namespace: 'test-services' }, (args) => ({ contents: args.path.endsWith('/sync.js')
-      ? 'export const pullFromSupabase=async()=>null, pushToSupabase=async()=>null, clearSyncCache=()=>{};'
+      ? 'export const pullFromSupabase=async()=>null, pushToSupabase=async()=>null, clearSyncCache=()=>{}, loadHistoryPage=async()=>null, loadHistoryRange=async()=>({dailyLogs:{},periodLogs:{}});'
       : 'export const isSupabaseConfigured=false, supabase=null;' }))
   } }],
 })
@@ -30,6 +30,17 @@ test('hydrating another account never merges the previous account health data', 
   const b = reducer(a, { type: 'HYDRATE', payload: { userId: 'b', onboarded: true, dailyLogs: {} } })
   assert.equal(b.accountId, 'b')
   assert.deepEqual(b.dailyLogs, {})
+})
+test('loading an older month merges observations without replacing recent state', () => {
+  const before = { ...freshState(), dailyLogs: { '2026-09-30': { pain: 2 } } }
+  const after = reducer(before, {
+    type: 'MERGE_HISTORY',
+    dailyLogs: { '2025-02-10': { pain: 7 } },
+    periodLogs: { '2025-02-10': { period: true, status: 'confirmed' } },
+  })
+  assert.equal(after.dailyLogs['2026-09-30'].pain, 2)
+  assert.equal(after.dailyLogs['2025-02-10'].pain, 7)
+  assert.equal(after.periodLogs['2025-02-10'].period, true)
 })
 test('a changed symptom invalidates stale results until the server recalculates', () => {
   const before = { ...freshState(), result: { authoritative: true, level: 'Clear' } }

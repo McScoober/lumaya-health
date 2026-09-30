@@ -1,27 +1,32 @@
 // Screen 2 — Age & consent (TRD §5.1)
-// Fast-Start rebuild: age chip + first name + consent only.
+// Fast-Start rebuild: birth month/year + first name + consent only.
 // Email removed — teens don't check email and magic-link auth isn't wired.
 // Ages 13-17: consent checkbox. 18+: privacy ack.
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { Button, ChipGroup, ProgressBar, TopBar } from '../components/ui.jsx'
-
-const AGES = ['13', '14', '15', '16', '17', '18+']
+import { Button, ProgressBar, TopBar } from '../components/ui.jsx'
+import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
+import { ageBandFromBirthMonthYear } from '../lib/age.js'
 
 export default function AgeConsent() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
-  const [age, setAge]       = useState(state.identity.ageBand)
+  const [birthMonth, setBirthMonth] = useState(state.identity.birthMonth)
+  const [birthYear, setBirthYear] = useState(state.identity.birthYear)
   const [name, setName]     = useState(state.identity.name || '')
   const [consent, setConsent] = useState(false)
   const [ack, setAck]       = useState(false)
   const [submitted, setSubmitted] = useState(false)
   const [touched, setTouched] = useState({})
 
-  const isMinor = age && age !== '18+'
-  const is18    = age === '18+'
+  const ageBand = ageBandFromBirthMonthYear(birthMonth, birthYear)
+  const isMinor = ageBand && ageBand !== '18+'
+  const is18    = ageBand === '18+'
 
+  const birthError = !birthMonth || !birthYear
+    ? 'Choose your birth month and year.'
+    : !ageBand ? 'Maisie is for people age 13 and up.' : ''
   const nameError    = name.trim() ? '' : "Enter your first name so Maisie knows what to call you."
   const consentError = isMinor && !consent ? "Please confirm you understand how Maisie uses your answers." : ''
   const ackError     = is18 && !ack ? "Check this to confirm you've read the privacy policy." : ''
@@ -29,18 +34,19 @@ export default function AgeConsent() {
   const showError = (key) => submitted || touched[key]
 
   const canContinue =
-    !!age &&
+    !!ageBand &&
+    !birthError &&
     !nameError &&
     (is18 ? !ackError : isMinor ? !consentError : false)
-
-  function chooseAge(a) {
-    setAge(a)
-    dispatch({ type: 'SET_AGE', band: a })
-  }
 
   function proceed() {
     setSubmitted(true)
     if (!canContinue) return
+    dispatch({
+      type: 'SET_BIRTH_MONTH_YEAR',
+      birthMonth,
+      birthYear,
+    })
     dispatch({
       type: 'SET_IDENTITY',
       payload: { name: name.trim() },
@@ -59,11 +65,27 @@ export default function AgeConsent() {
 
       <div style={{ marginTop: 22 }}>
         <p className="eyebrow">A little about you</p>
-        <h1>How old are you?</h1>
-        <ChipGroup options={AGES} value={age} onChange={chooseAge} />
+        <h1>When were you born?</h1>
+        <div style={{ marginTop: 18 }}>
+          <BirthMonthYearFields
+            idPrefix="birth"
+            birthMonth={birthMonth}
+            birthYear={birthYear}
+            onBlur={() => setTouched((t) => ({ ...t, birth: true }))}
+            onChange={(month, year) => {
+              setBirthMonth(month)
+              setBirthYear(year)
+            }}
+          />
+          {showError('birth') && birthError && (
+            <p style={{ margin: '6px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
+              {birthError}
+            </p>
+          )}
+        </div>
       </div>
 
-      {age && (
+      {ageBand && (
         <div className="stack-16" style={{ marginTop: 24 }}>
           <div className="field">
             <label htmlFor="name">Your first name</label>
@@ -74,7 +96,6 @@ export default function AgeConsent() {
               onBlur={() => setTouched((t) => ({ ...t, name: true }))}
               onChange={(e) => setName(e.target.value)}
               placeholder="What should we call you?"
-              autoFocus
             />
             {showError('name') && nameError && (
               <p style={{ margin: '6px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
@@ -124,7 +145,7 @@ export default function AgeConsent() {
       )}
 
       <div className="spacer" />
-      <Button block disabled={!age} onClick={proceed} style={{ marginTop: 20 }}>
+      <Button block disabled={!ageBand} onClick={proceed} style={{ marginTop: 20 }}>
         Continue
       </Button>
     </div>
