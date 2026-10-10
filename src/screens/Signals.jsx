@@ -160,7 +160,7 @@ export default function Signals() {
                 </div>
 
                 <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>
-                  <strong style={{ color: '#2C1810' }}>Maisie says:</strong> this view is here to spot timing from your own cycle history.
+                  <strong style={{ color: '#2C1810' }}>About this chart:</strong> this view helps you notice timing in your own cycle history.
                 </p>
               </>
             ) : (

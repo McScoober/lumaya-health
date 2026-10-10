@@ -23,63 +23,63 @@ export const PRIORITY = {
 // Base per-phase cards (no modifiers) — the physiological "why" + core actions.
 export const PHASE_CARDS = {
   menstrual: {
-    headline: 'Your period’s here — be gentle with yourself.',
-    why: 'Hormones are at their lowest right now, which is why energy can dip and cramps show up.',
+    headline: 'Your period may affect energy and comfort.',
+    why: 'Hormone levels are lower during this phase, and some people notice less energy or more cramps.',
     actions: [
-      { text: 'Warmth helps — a heating pad or a warm drink eases cramps.', p: PRIORITY.physiology },
-      { text: 'Keep water close; it can take the edge off bloating.', p: PRIORITY.physiology },
-      { text: 'Rest is productive too. Early night if you can.', p: PRIORITY.physiology },
+      { text: 'Try a heating pad or warm drink for cramps.', p: PRIORITY.physiology },
+      { text: 'Drink water regularly, especially if you feel bloated.', p: PRIORITY.physiology },
+      { text: 'Rest or go to bed earlier if your energy is low.', p: PRIORITY.physiology },
     ],
   },
   follicular: {
-    headline: 'You’re heading into your follicular phase — energy’s coming back.',
-    why: 'Estrogen is rising after your period, which tends to lift mood, focus, and energy.',
+    headline: 'Energy may increase after your period.',
+    why: 'Estrogen rises during the follicular phase, and some people notice changes in mood, focus, or energy.',
     actions: [
-      { text: 'Great window to start something new or tackle the harder stuff.', p: PRIORITY.physiology },
-      { text: 'Your body recovers faster now — a good time to move.', p: PRIORITY.physiology },
-      { text: 'Ride the momentum, but keep sleep steady.', p: PRIORITY.physiology },
+      { text: 'Use higher-energy days for tasks that need more focus.', p: PRIORITY.physiology },
+      { text: 'Choose movement that feels comfortable for you.', p: PRIORITY.physiology },
+      { text: 'Keep your sleep schedule consistent.', p: PRIORITY.physiology },
     ],
   },
   ovulation: {
-    headline: 'Peak energy — you’re around ovulation.',
-    why: 'Estrogen peaks and testosterone gives a small bump, so many people feel their most social and strong.',
+    headline: 'Some people notice more energy around ovulation.',
+    why: 'Hormone changes around ovulation can affect energy, mood, and discharge differently for each person.',
     actions: [
-      { text: 'Good day for anything that needs confidence or energy.', p: PRIORITY.physiology },
-      { text: 'Stay hydrated — you may notice a little more warmth or discharge; that’s normal.', p: PRIORITY.physiology },
-      { text: 'Lean into it, but don’t skip meals on a busy day.', p: PRIORITY.physiology },
+      { text: 'Plan demanding activities for higher-energy days if that matches your pattern.', p: PRIORITY.physiology },
+      { text: 'Drink water regularly. Changes in discharge can be normal around ovulation.', p: PRIORITY.physiology },
+      { text: 'Try not to skip meals on busy days.', p: PRIORITY.physiology },
     ],
   },
   luteal: {
     headline: 'You may feel more tired or low right now.',
     why: 'Progesterone rises during the luteal phase, which can affect energy and mood.',
     actions: [
-      { text: 'Extra rest tonight — you’ve earned it.', p: PRIORITY.physiology },
-      { text: 'A short walk can lift a low mood more than you’d expect.', p: PRIORITY.physiology },
-      { text: 'Keep water handy; cravings and bloating are normal now.', p: PRIORITY.physiology },
+      { text: 'Allow more time for rest if you feel tired.', p: PRIORITY.physiology },
+      { text: 'A short walk may help with mood or discomfort.', p: PRIORITY.physiology },
+      { text: 'Drink water regularly and note changes in cravings or bloating.', p: PRIORITY.physiology },
     ],
   },
   // Birth-control track (6.1): no ovulation/luteal prediction.
   bc_active: {
-    headline: 'Active-pill days — a steady stretch.',
+    headline: 'Symptoms may be steadier on active-pill days.',
     why: 'Your method keeps hormone levels even, so you may not notice the usual ups and downs.',
     actions: [
       { text: 'Take your method at the same time each day if it’s time-sensitive.', p: PRIORITY.birthControl },
-      { text: 'Steady routines — sleep, water, movement — pay off most now.', p: PRIORITY.birthControl },
+      { text: 'Keep sleep, hydration, and movement routines consistent.', p: PRIORITY.birthControl },
     ],
   },
   bc_break: {
-    headline: 'Break / placebo days — a little dip is normal.',
+    headline: 'Symptoms can change during break or placebo days.',
     why: 'During the hormone-free days, a withdrawal bleed and mild cramps can show up.',
     actions: [
-      { text: 'Treat it like a light period week: warmth, water, rest.', p: PRIORITY.birthControl },
+      { text: 'Warmth, water, and rest may help with mild symptoms.', p: PRIORITY.birthControl },
       { text: 'Don’t skip restarting your next pack on schedule.', p: PRIORITY.birthControl },
     ],
   },
   bc_generic: {
-    headline: 'A quick check-in for the week.',
-    why: 'Since your cycle is guided by your method, here’s a simple steady-state nudge.',
+    headline: 'Check how you have felt this week.',
+    why: 'Hormonal birth control can change cycle patterns, so your own logged symptoms are most useful.',
     actions: [
-      { text: 'Keep your routine consistent — it’s doing more than you think.', p: PRIORITY.birthControl },
+      { text: 'Keep your medication and daily routines consistent.', p: PRIORITY.birthControl },
       { text: 'Note anything that feels off so you can mention it later.', p: PRIORITY.birthControl },
     ],
   },
@@ -98,17 +98,17 @@ export const MODIFIER_ACTIONS = {
       { text: 'Lower-intensity movement is fine — listen to your body.', p: PRIORITY.athlete },
     ],
     follicular: [
-      { text: 'Strength gains come easier now — a good week to push.', p: PRIORITY.athlete },
+      { text: 'Increase training only if your energy and recovery feel normal.', p: PRIORITY.athlete },
     ],
     '*': [{ text: 'Fuel before and after training; don’t train underfed.', p: PRIORITY.sleep - 5 }],
   },
   student: {
     luteal: [
-      { text: 'Build in a study break — focus dips are normal now.', p: PRIORITY.student },
+      { text: 'Schedule short breaks if it is harder to focus.', p: PRIORITY.student },
       { text: 'Caffeine in moderation.', p: PRIORITY.student },
     ],
     follicular: [
-      { text: 'Sharp-focus window — front-load your hardest work.', p: PRIORITY.student },
+      { text: 'Plan harder work for times when your focus is better.', p: PRIORITY.student },
     ],
     '*': [{ text: 'Short, spaced study blocks beat one long cram.', p: PRIORITY.sleep - 5 }],
   },
@@ -118,7 +118,7 @@ export const MODIFIER_ACTIONS = {
     ],
   },
   earlyBird: {
-    '*': [{ text: 'Your early routine is a real asset — protect that morning light.', p: PRIORITY.sleep }],
+    '*': [{ text: 'Keep your wake time consistent and get morning light when possible.', p: PRIORITY.sleep }],
   },
   onBirthControl: {
     '*': [

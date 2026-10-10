@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { PAIN_ANCHORS, painLabel } from '../data/questions.js'
 import { Button, Chip, ChipGroup, ProgressBar, TopBar } from '../components/ui.jsx'
+import NativeDateField from '../components/NativeDateField.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
 
 const TODAY = dateKeyLocal()
@@ -36,6 +37,7 @@ export default function CheckIn() {
   const [dateUnknown, setDateUnknown] = useState(state.answers.lastStart === 'unknown')
   const [dateConfirmed, setDateConfirmed] = useState(Boolean(state.answers.lastStart))
   const [flow,      setFlow]      = useState(state.answers.flow       || null)
+  const [flowConfirmed, setFlowConfirmed] = useState(Boolean(state.answers.flow))
   const [painWorst, setPainWorst] = useState(
     typeof state.answers.painWorst === 'number' ? state.answers.painWorst : 0
   )
@@ -45,7 +47,7 @@ export default function CheckIn() {
   const notStarted = started === 'Not yet'
   const step = !startedConfirmed || notStarted ? 0
     : !dateConfirmed ? 1
-    : flow === null ? 2
+    : !flowConfirmed ? 2
     : 3
 
   const totalSteps = notStarted ? 1 : 4
@@ -82,6 +84,7 @@ export default function CheckIn() {
     setDateConfirmed(true)
     // Advance: stay in this component, step logic will re-render to flow
     setFlow(null) // ensure flow step shows next
+    setFlowConfirmed(false)
   }
 
   function finish() {
@@ -119,20 +122,21 @@ export default function CheckIn() {
             onChange={(v) => setStarted(v)}
           />
         </div>
-        <div className="spacer" />
-        <Button
-          block
-          disabled={!started}
-          onClick={() => {
-            if (started === 'Not yet') {
-              finish()
-              return
-            }
-            setStartedConfirmed(true)
-          }}
-        >
-          Next
-        </Button>
+        <div className="screen__actions">
+          <Button
+            block
+            disabled={!started}
+            onClick={() => {
+              if (started === 'Not yet') {
+                finish()
+                return
+              }
+              setStartedConfirmed(true)
+            }}
+          >
+            Next
+          </Button>
+        </div>
       </div>
     )
   }
@@ -149,9 +153,9 @@ export default function CheckIn() {
           <p className="muted">Your best guess is fine.</p>
         </div>
         <div className="stack-12" style={{ marginTop: 16 }}>
-          <input
-            className="input"
-            type="date"
+          <NativeDateField
+            id="last-period-start"
+            label="Last period start date"
             max={TODAY}
             value={!dateUnknown && lastStart !== 'unknown' ? lastStart : ''}
             onChange={(e) => handleDateChange(e.target.value)}
@@ -174,14 +178,15 @@ export default function CheckIn() {
             </p>
           )}
         </div>
-        <div className="spacer" />
-        <Button
-          block
-          disabled={!dateUnknown && !lastStart}
-          onClick={handleDateNext}
-        >
-          Next
-        </Button>
+        <div className="screen__actions">
+          <Button
+            block
+            disabled={!dateUnknown && !lastStart}
+            onClick={handleDateNext}
+          >
+            Next
+          </Button>
+        </div>
       </div>
     )
   }
@@ -203,10 +208,11 @@ export default function CheckIn() {
             onChange={(v) => setFlow(v)}
           />
         </div>
-        <div className="spacer" />
-        <Button block disabled={!flow} onClick={() => {/* step logic handles re-render */}}>
-          Next
-        </Button>
+        <div className="screen__actions">
+          <Button block disabled={!flow} onClick={() => setFlowConfirmed(true)}>
+            Next
+          </Button>
+        </div>
       </div>
     )
   }
@@ -215,7 +221,7 @@ export default function CheckIn() {
   if (step === 3) {
     return (
       <div className="screen">
-        <TopBar onBack={() => setFlow(null)} />
+        <TopBar onBack={() => setFlowConfirmed(false)} />
         <ProgressBar value={0.85} />
         <div style={{ marginTop: 24 }}>
           <p className="eyebrow">Quick setup · 3 of 3</p>
@@ -251,13 +257,14 @@ export default function CheckIn() {
             </p>
           </div>
         </div>
-        <div className="spacer" />
-        <Button block onClick={finish}>
-          Set up my tracker
-        </Button>
-        <p className="muted center" style={{ fontSize: 12, marginTop: 10 }}>
-          That's it — Maisie will learn more about you as you go.
-        </p>
+        <div className="screen__actions">
+          <Button block onClick={finish}>
+            Set up my tracker
+          </Button>
+          <p className="muted center" style={{ fontSize: 12, margin: '10px 0 0' }}>
+            That's it — Maisie will learn more about you as you go.
+          </p>
+        </div>
       </div>
     )
   }

@@ -1,0 +1,5 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M512 140C590 282 742 434 884 512C742 590 590 742 512 884C434 742 282 590 140 512C282 434 434 282 512 140Z" fill="#F5C8D8"/>
+  <path d="M266 266C394 232 630 232 758 266C792 394 792 630 758 758C630 792 394 792 266 758C232 630 232 394 266 266Z" stroke="#E0528A" stroke-width="18" opacity="0.45" transform="rotate(45 512 512)"/>
+  <circle cx="512" cy="512" r="108" fill="#E0528A"/>
+</svg>

@@ -69,16 +69,17 @@ export default function Personalization() {
         )}
       </div>
 
-      <div className="spacer" />
-      <div className="row" style={{ marginTop: 20, gap: 10 }}>
-        {q.optional && (
-          <Button variant="soft" onClick={next}>
-            Skip
+      <div className="screen__actions">
+        <div className="row" style={{ gap: 10 }}>
+          {q.optional && (
+            <Button variant="soft" onClick={next}>
+              Skip
+            </Button>
+          )}
+          <Button block disabled={!canNext} onClick={next}>
+            {idx < total - 1 ? 'Continue' : 'Start check-in'}
           </Button>
-        )}
-        <Button block disabled={!canNext} onClick={next}>
-          {idx < total - 1 ? 'Continue' : 'Start check-in'}
-        </Button>
+        </div>
       </div>
     </div>
   )

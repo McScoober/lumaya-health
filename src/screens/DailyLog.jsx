@@ -9,10 +9,10 @@
 //   5. "Log it" button
 //
 // After logging:
-//   - Short sisterly advice card appears based on the just-saved log
+//   - A short, practical suggestion appears based on the just-saved log
 //   - If pain ≥ 8 → RedFlagCard instead of/in addition to tip
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
 import { TopBar, Chip } from '../components/ui.jsx'
@@ -20,15 +20,41 @@ import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
 import {
   SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank,
-  BookOpen, PersonSimpleRun, CalendarBlank, Moon, CheckCircle,
+  BookOpen, PersonSimpleRun, CalendarBlank, Moon, CheckCircle, CaretDown,
 } from '@phosphor-icons/react'
 
 // ── Data ──────────────────────────────────────────────────────────────────
 const SYMPTOMS = [
   'Cramps', 'Headache', 'Bloating', 'Fatigue',
   'Back pain', 'Breast tenderness', 'Mood changes', 'Skin breakout',
-  'Nausea', 'Spotting', 'Discharge changes', 'Sleep trouble',
+  'Nausea', 'Dizziness', 'Spotting', 'Discharge changes', 'Sleep trouble',
 ]
+
+const PAIN_TIMING_OPTIONS = [
+  'Before bleeding', 'While bleeding', 'After bleeding', 'Between periods',
+  'Not sure', 'Prefer not to say',
+]
+
+const RELIEF_OPTIONS = [
+  'Heat', 'Rest', 'Pain medicine', 'Movement', 'Something else',
+  'Nothing yet', 'Not sure', 'Prefer not to say',
+]
+
+const RELIEF_RESULT_OPTIONS = [
+  'Helped', 'Helped a little', 'Did not help', 'Not sure', 'Prefer not to say',
+]
+
+const BLEEDING_EXPERIENCE_OPTIONS = [
+  'No leaking or soaking', 'Soaked protection', 'Leaked through clothes or bedding',
+  'Both', 'Not sure', 'Prefer not to say',
+]
+
+const BLEEDING_DURATION_OPTIONS = [
+  'Started today', '2-3 days', '4-7 days', 'More than 7 days',
+  'Not sure', 'Prefer not to say',
+]
+
+const EXCLUSIVE_RELIEF_OPTIONS = new Set(['Nothing yet', 'Not sure', 'Prefer not to say'])
 
 const VIBE_OPTIONS = [
   { key: 'great', label: 'Great',  value: 5, Icon: SmileyWink,  color: '#4BAF6B' },
@@ -46,57 +72,100 @@ const IMPACTS = [
   { id: 'fine',     label: 'All good', Icon: CheckCircle,       color: '#4BAF6B' },
 ]
 
-// ── Sisterly post-log advice ──────────────────────────────────────────────
-function getSisterlyTip({ symptoms, pain, impacts, vibe }) {
+function vibeFromLog(log = {}) {
+  return VIBE_OPTIONS.find((option) =>
+    option.key === log.vibeLabel ||
+    option.value === log.vibe ||
+    option.label === log.mood
+  ) || null
+}
+
+function hasDailyAnswers(log = {}) {
+  return log.checkinCompleted === true ||
+    log.mood !== undefined ||
+    log.vibe !== undefined ||
+    log.symptoms !== undefined ||
+    log.pain !== undefined ||
+    log.impact !== undefined ||
+    log.painTiming !== undefined ||
+    log.reliefAttempted !== undefined ||
+    log.reliefReceived !== undefined ||
+    log.bleedingExperience !== undefined ||
+    log.bleedingDuration !== undefined
+}
+
+// ── Practical post-log guidance ───────────────────────────────────────────
+function getDailyTip({ symptoms, pain, impacts, vibe }) {
   if (symptoms.includes('Cramps') || pain >= 4) {
-    return 'Big-sis move: heat on your lower belly or lower back for 10 minutes. If you can, sip water and give your body a quiet minute.'
+    return 'A heating pad on your lower abdomen or back may help with cramps. Rest and drink water if you can.'
   }
   if (symptoms.includes('Headache')) {
-    return 'Tiny reset: drink a full glass of water and dim your screen for a few minutes. Headaches hate the dramatic lighting.'
+    return 'Drink some water and lower your screen brightness. Rest in a quiet space if possible.'
   }
   if (symptoms.includes('Nausea')) {
-    return 'Try small sips and something plain or salty. No need for a full meal if your stomach is already negotiating.'
+    return 'Try small sips of water and a plain snack. Eat slowly and stop if the nausea gets worse.'
   }
   if (symptoms.includes('Bloating')) {
-    return 'A slow walk or gentle stretch can help more than curling into a ball forever. Annoying, but true.'
+    return 'A short walk or gentle stretch may help with bloating.'
   }
   if (symptoms.includes('Back pain')) {
-    return 'Pillow-under-the-knees trick: lie down, prop your knees, and let your lower back unclench for a bit.'
+    return 'Try lying down with a pillow under your knees to reduce pressure on your lower back.'
   }
   if (symptoms.includes('Fatigue')) {
-    return 'Low battery day. Pick the smallest next thing, not the whole mountain. A snack with iron or protein can help.'
+    return 'Rest if you can, and consider a snack with protein or iron.'
   }
   if (symptoms.includes('Sleep trouble') || impacts.includes('sleep')) {
-    return 'Tonight, aim for boring on purpose: low lights, cozy clothes, phone down a little earlier. Future-you deserves the assist.'
+    return 'Lower the lights, avoid late caffeine, and put your phone down a little earlier.'
   }
   if (symptoms.includes('Mood changes') || vibe?.value <= 2) {
-    return 'Be extra gentle with yourself today. Feelings can be loud without being the whole truth.'
+    return 'Take things slowly today. If a low mood feels intense or lasts, talk to someone you trust.'
   }
   if (symptoms.includes('Skin breakout')) {
-    return 'Hands off the breakout if you can. Wash, moisturize, and let it be boring. Your skin is not a report card.'
+    return 'Wash gently, moisturize, and avoid picking at breakouts.'
   }
   if (impacts.includes('school') || impacts.includes('activity') || impacts.includes('plans')) {
-    return 'If today got interrupted, that counts as data, not failure. One honest log helps you explain the pattern later.'
+    return 'Note what was affected today. This can help you explain the pattern later.'
   }
   if (vibe?.value >= 4) {
-    return 'Love this for you. Make a tiny note of what helped today, even if it was just sleep, snacks, or less chaos.'
+    return 'Think about what helped today, such as sleep, food, movement, or less stress.'
   }
-  return 'You logged it. That is enough for today. Maisie gets smarter from honest check-ins, not perfect ones.'
+  return 'Your check-in is saved. Keep logging when you notice changes.'
 }
 
 // ── Main component ────────────────────────────────────────────────────────
 export default function DailyLog() {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { state, dispatch } = useStore()
 
-  const todayKey   = dateKeyLocal()
-  const todayLog   = state.dailyLogs[todayKey] || {}
-  const alreadyDone = todayLog.checkinCompleted === true
+  const todayKey = dateKeyLocal()
+  const requestedDateKey = searchParams.get('date') || ''
+  const dateKey = /^\d{4}-\d{2}-\d{2}$/.test(requestedDateKey) && requestedDateKey <= todayKey
+    ? requestedDateKey
+    : todayKey
+  const existingLog = state.dailyLogs[dateKey] || {}
+  const isEditing = hasDailyAnswers(existingLog)
+  const isToday = dateKey === todayKey
+  const returnTo = searchParams.get('from') === 'patterns' ? '/patterns' : '/home'
+  const displayDate = new Date(`${dateKey}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  })
 
-  const [vibe,    setVibe]    = useState(null)
-  const [pain,    setPain]    = useState(null)     // null = not yet touched
-  const [symptoms, setSymptoms] = useState([])
-  const [impacts,  setImpacts]  = useState([])
+  const [vibe,    setVibe]    = useState(() => vibeFromLog(existingLog))
+  const [pain,    setPain]    = useState(() => typeof existingLog.pain === 'number' ? existingLog.pain : null)
+  const [symptoms, setSymptoms] = useState(() => [...(existingLog.symptoms || [])])
+  const [impacts,  setImpacts]  = useState(() => [...(existingLog.impact || [])])
+  const [painTiming, setPainTiming] = useState(() => existingLog.painTiming || '')
+  const [reliefAttempted, setReliefAttempted] = useState(() => [...(existingLog.reliefAttempted || [])])
+  const [reliefReceived, setReliefReceived] = useState(() => existingLog.reliefReceived || '')
+  const [bleedingExperience, setBleedingExperience] = useState(() => existingLog.bleedingExperience || '')
+  const [bleedingDuration, setBleedingDuration] = useState(() => existingLog.bleedingDuration || '')
+  const [showDetails, setShowDetails] = useState(() => Boolean(
+    existingLog.painTiming || existingLog.reliefAttempted?.length || existingLog.reliefReceived ||
+    existingLog.bleedingExperience || existingLog.bleedingDuration
+  ))
   const [done,    setDone]    = useState(false)    // post-log confirmation state
 
   function toggleSymptom(s) {
@@ -113,68 +182,59 @@ export default function DailyLog() {
     })
   }
 
+  function toggleRelief(option) {
+    setReliefAttempted((previous) => {
+      if (previous.includes(option)) return previous.filter((item) => item !== option)
+      if (EXCLUSIVE_RELIEF_OPTIONS.has(option)) return [option]
+      return [...previous.filter((item) => !EXCLUSIVE_RELIEF_OPTIONS.has(item)), option]
+    })
+  }
+
   function handleLogIt() {
     dispatch({
       type: 'LOG_DAILY',
-      dateKey: todayKey,
+      dateKey,
       mood: vibe?.label,
       vibe: vibe?.value,
       vibeLabel: vibe?.key,
       symptoms,
       pain: pain ?? undefined,
+      clearPain: isEditing && pain === null,
       impact: impacts.filter((id) => id !== 'fine'),
+      painTiming,
+      reliefAttempted,
+      reliefReceived,
+      bleedingExperience,
+      bleedingDuration,
+      clearOptionalDetails: true,
     })
     setDone(true)
   }
 
-  const sisterlyTip   = getSisterlyTip({ symptoms, pain: pain ?? 0, impacts, vibe })
+  const dailyTip      = getDailyTip({ symptoms, pain: pain ?? 0, impacts, vibe })
   const isHighPain    = (pain ?? 0) >= 8
   const hasSpotting   = symptoms.includes('Spotting')
   const showRedFlag   = isHighPain || (hasSpotting && (pain ?? 0) >= 6)
-
-  // ── Already logged today ─────────────────────────────────────────────
-  if (alreadyDone) {
-    return (
-      <div className="screen center">
-        <TopBar onBack={() => navigate('/home')} />
-        <div className="spacer" />
-        <MaisieLogo size={72} />
-        <div className="card" style={{ marginTop: 24, textAlign: 'center' }}>
-          <p style={{ margin: 0, fontSize: 16, lineHeight: 1.5 }}>
-            you're all caught up for today 🌸<br />
-            <span className="muted" style={{ fontSize: 13 }}>see you tomorrow.</span>
-          </p>
-        </div>
-        <div className="spacer" />
-        <button
-          id="already-logged-home"
-          className="btn btn--primary"
-          style={{ width: '100%' }}
-          onClick={() => navigate('/home')}
-        >
-          Back to home
-        </button>
-      </div>
-    )
-  }
 
   // ── Post-log confirmation + instant tip ──────────────────────────────
   if (done) {
     return (
       <div className="screen">
-        <TopBar onBack={() => navigate('/home')} />
+        <TopBar onBack={() => navigate(returnTo)} />
         <div style={{ marginTop: 28, textAlign: 'center' }}>
           <MaisieLogo size={60} />
-          <h2 style={{ margin: '14px 0 4px', fontSize: 22 }}>logged ✓</h2>
+          <h2 style={{ margin: '14px 0 4px', fontSize: 22 }}>
+            {isEditing ? 'Changes saved' : 'Logged'}
+          </h2>
           <p className="muted" style={{ fontSize: 13, margin: 0 }}>
-            {vibe ? `feeling ${vibe.label.toLowerCase()} · ` : ''}
+            {vibe?.label ? `feeling ${vibe.label.toLowerCase()} · ` : ''}
             {symptoms.length > 0 ? `${symptoms.length} symptom${symptoms.length > 1 ? 's' : ''}` : 'no symptoms'}
           </p>
         </div>
 
         {/* Red flag takes priority */}
         {showRedFlag ? (
-          <RedFlagCard onDismiss={() => navigate('/home')} />
+          <RedFlagCard onDismiss={() => navigate(returnTo)} />
         ) : (
           /* Instant tip payoff */
           <div
@@ -196,10 +256,10 @@ export default function DailyLog() {
                 color: 'var(--pink-accent, #E0528A)',
               }}
             >
-              Maisie's sisterly tip
+              Tip from Maisie
             </p>
             <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55, color: '#2C1810' }}>
-              {sisterlyTip}
+              {dailyTip}
             </p>
           </div>
         )}
@@ -219,9 +279,9 @@ export default function DailyLog() {
               fontWeight: 700,
               cursor: 'pointer',
             }}
-            onClick={() => navigate('/home')}
+            onClick={() => navigate(returnTo)}
           >
-            Back to home
+            {returnTo === '/patterns' ? 'Back to patterns' : 'Back to home'}
           </button>
         </div>
       </div>
@@ -233,12 +293,17 @@ export default function DailyLog() {
 
   return (
     <div className="screen screen--pad-bottom" id="daily-log-screen">
-      <TopBar onBack={() => navigate('/home')} />
+      <TopBar onBack={() => navigate(returnTo)} />
+
+      <div style={{ marginTop: 12 }}>
+        <p className="eyebrow" style={{ marginBottom: 4 }}>{isEditing ? 'Edit daily log' : 'Daily check-in'}</p>
+        <h1 style={{ fontSize: 24, marginBottom: 0 }}>{isToday ? 'Today' : displayDate}</h1>
+      </div>
 
       {/* ── 1. Mood row ───────────────────────────────────────────── */}
       <div style={{ marginTop: 20 }}>
         <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
-          How are you feeling today?
+          {isToday ? 'How are you feeling today?' : 'How were you feeling that day?'}
         </p>
         <div
           style={{
@@ -256,7 +321,7 @@ export default function DailyLog() {
                 type="button"
                 aria-label={label}
                 aria-pressed={selected}
-                onClick={() => setVibe({ key, value })}
+                onClick={() => setVibe({ key, label, value })}
                 style={{
                   aspectRatio: '1',
                   minHeight: 56,
@@ -297,7 +362,7 @@ export default function DailyLog() {
       {/* ── 2. Pain dot-scale ──────────────────────────────────────── */}
       <div style={{ marginTop: 22 }}>
         <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
-          Pain level today{' '}
+          {isToday ? 'Pain level today' : 'Pain level that day'}{' '}
           <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
             (tap to set)
           </span>
@@ -456,6 +521,66 @@ export default function DailyLog() {
       </div>
 
       {/* ── 5. Log it ──────────────────────────────────────────────── */}
+      <div style={{ marginTop: 22 }}>
+        <button
+          type="button"
+          aria-expanded={showDetails}
+          onClick={() => setShowDetails((open) => !open)}
+          style={{
+            width: '100%', minHeight: 48, padding: '11px 14px', borderRadius: 12,
+            border: '1.5px solid rgba(44,24,16,0.09)', background: '#fff',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            color: '#2C1810', fontSize: 14, fontWeight: 700, cursor: 'pointer',
+          }}
+        >
+          <span>More details <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></span>
+          <CaretDown
+            size={18}
+            weight="bold"
+            aria-hidden="true"
+            style={{ transform: showDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}
+          />
+        </button>
+
+        {showDetails && (
+          <div style={{ padding: '4px 2px 0' }}>
+            <OptionalChoice
+              label="When did the pain happen?"
+              options={PAIN_TIMING_OPTIONS}
+              value={painTiming}
+              onChange={(value) => setPainTiming(value === painTiming ? '' : value)}
+            />
+            <OptionalChoice
+              label="What did you try for relief?"
+              options={RELIEF_OPTIONS}
+              value={reliefAttempted}
+              onChange={toggleRelief}
+              multiple
+            />
+            {reliefAttempted.some((option) => !EXCLUSIVE_RELIEF_OPTIONS.has(option)) && (
+              <OptionalChoice
+                label="How much did it help?"
+                options={RELIEF_RESULT_OPTIONS}
+                value={reliefReceived}
+                onChange={(value) => setReliefReceived(value === reliefReceived ? '' : value)}
+              />
+            )}
+            <OptionalChoice
+              label="Any leaking or soaking?"
+              options={BLEEDING_EXPERIENCE_OPTIONS}
+              value={bleedingExperience}
+              onChange={(value) => setBleedingExperience(value === bleedingExperience ? '' : value)}
+            />
+            <OptionalChoice
+              label="How long has this bleeding lasted?"
+              options={BLEEDING_DURATION_OPTIONS}
+              value={bleedingDuration}
+              onChange={(value) => setBleedingDuration(value === bleedingDuration ? '' : value)}
+            />
+          </div>
+        )}
+      </div>
+
       <div style={{ marginTop: 28 }}>
         {!canLog && (
           <p
@@ -483,11 +608,30 @@ export default function DailyLog() {
             transition: 'background 0.15s ease',
           }}
         >
-          Log it ✓
+          {isEditing ? 'Save changes' : 'Log it'}
         </button>
         <p className="muted center" style={{ fontSize: 11.5, marginTop: 8 }}>
-          Takes less than 10 seconds · your data stays private
+          {isEditing ? 'Only this day will be updated' : 'Takes less than 10 seconds · your data stays private'}
         </p>
+      </div>
+    </div>
+  )
+}
+
+function OptionalChoice({ label, options, value, onChange, multiple = false }) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <p style={{ margin: '0 0 9px', fontSize: 14, fontWeight: 700 }}>{label}</p>
+      <div className="chips">
+        {options.map((option) => (
+          <Chip
+            key={option}
+            selected={multiple ? value.includes(option) : value === option}
+            onClick={() => onChange(option)}
+          >
+            {option}
+          </Chip>
+        ))}
       </div>
     </div>
   )

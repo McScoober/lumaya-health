@@ -5,16 +5,7 @@ export default function Result() {
   const navigate = useNavigate()
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#FAF6F0',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      padding: '48px 24px 40px',
-      fontFamily: "'DM Sans', sans-serif",
-      boxSizing: 'border-box'
-    }}>
+    <div className="screen result-screen">
       <p style={{
         fontFamily: "'Fraunces', serif",
         fontSize: '18px',
@@ -136,21 +127,22 @@ export default function Result() {
         </div>
       </div>
 
-      <button onClick={() => navigate('/auth?next=/home&source=post-onboarding')}
-        style={{
-          width: '100%',
-          maxWidth: '340px',
-          background: '#E0528A',
-          color: '#fff',
-          border: 'none',
-          borderRadius: '14px',
-          padding: '16px',
-          fontSize: '16px',
-          fontWeight: 500,
-          cursor: 'pointer'
-        }}>
-        save my tracker
-      </button>
+      <div className="screen__actions result-screen__actions">
+        <button onClick={() => navigate('/auth?next=/home&source=post-onboarding')}
+          style={{
+            width: '100%',
+            background: '#E0528A',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '14px',
+            padding: '16px',
+            fontSize: '16px',
+            fontWeight: 500,
+            cursor: 'pointer'
+          }}>
+          save my tracker
+        </button>
+      </div>
     </div>
   )
 }

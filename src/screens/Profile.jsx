@@ -14,7 +14,7 @@ import { clearLegacyHealthStorage } from '../lib/trackerRecords.js'
 import { clearSignupDraft } from '../lib/signupDraft.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
 import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
-import { GearSix, UsersThree } from '@phosphor-icons/react'
+import { CloudArrowUp, GearSix, UsersThree } from '@phosphor-icons/react'
 
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
@@ -36,6 +36,7 @@ export default function Profile() {
   const { state, dispatch } = useStore()
   const { profile, identity, notifyPrefs } = state
   const isMinor = identity.isMinor
+  const hasSavedAccount = Boolean(state.accountId)
 
   const [activeTab, setActiveTab] = useState('settings') // 'settings' | 'support'
   const [toast, setToast] = useState('')
@@ -67,8 +68,11 @@ export default function Profile() {
   }
 
   async function deleteData() {
-    if (!confirm('Sign out and clear Maisie data from this device? Saved account data will remain available when you sign in again.')) return
-    if (supabase) {
+    const message = hasSavedAccount
+      ? 'Sign out and clear Maisie data from this device? Information saved to your account will still be there when you sign in again.'
+      : 'Clear your Maisie tracker from this device? Because it is not saved to an account, this cannot be undone.'
+    if (!confirm(message)) return
+    if (supabase && hasSavedAccount) {
       const { error } = await supabase.auth.signOut({ scope: 'local' })
       if (error) { flash('Could not sign out. Please try again.'); return }
     }
@@ -197,12 +201,33 @@ export default function Profile() {
           </Card>
 
           <Card>
-            <div className="card__label">Privacy & Data</div>
+            <div className="card__label">Account & Data</div>
+            {!hasSavedAccount && (
+              <div className="account-save-row">
+                <span className="account-save-row__icon" aria-hidden="true">
+                  <CloudArrowUp size={20} weight="duotone" />
+                </span>
+                <div className="account-save-row__copy">
+                  <strong>Tracker saved on this device</strong>
+                  <span>Add an email to use it on another device.</span>
+                </div>
+                <Button
+                  variant="soft"
+                  className="account-save-row__button"
+                  onClick={() => navigate('/auth?next=/profile&source=post-onboarding')}
+                >
+                  Add email
+                </Button>
+              </div>
+            )}
+            {!hasSavedAccount && <div className="divider account-save-row__divider" />}
             <p className="muted" style={{ margin: '4px 0 14px', fontSize: 13, lineHeight: 1.5 }}>
-              Sign out and clear Maisie data from this device. Information saved to your account stays available when you sign in again.
+              {hasSavedAccount
+                ? 'Sign out and clear Maisie data from this device. Information saved to your account stays available when you sign in again.'
+                : 'Clearing this device permanently removes your check-ins and saved information.'}
             </p>
             <Button variant="ghost" style={{ color: 'var(--red)' }} onClick={deleteData}>
-              Sign out and clear this device
+              {hasSavedAccount ? 'Sign out and clear this device' : 'Clear this device'}
             </Button>
           </Card>
 

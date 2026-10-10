@@ -367,26 +367,52 @@ export function reducer(state, action) {
     }
 
     case 'LOG_DAILY': {
-      const { dateKey, mood, vibe, vibeLabel, symptoms, pain, impact } = action
+      const {
+        dateKey, mood, vibe, vibeLabel, symptoms, pain, impact, clearPain,
+        painTiming, reliefAttempted, reliefReceived, bleedingExperience, bleedingDuration,
+        clearOptionalDetails,
+      } = action
       const prev = state.dailyLogs[dateKey] || {}
+      const wasLogged = prev.checkinCompleted === true ||
+        prev.mood !== undefined ||
+        prev.vibe !== undefined ||
+        prev.symptoms !== undefined ||
+        prev.pain !== undefined ||
+        prev.impact !== undefined
+      const updatedLog = {
+        ...prev,
+        checkinCompleted: true,
+        ...(mood !== undefined ? { mood } : {}),
+        ...(vibe !== undefined ? { vibe } : {}),
+        ...(vibeLabel !== undefined ? { vibeLabel } : {}),
+        ...(symptoms !== undefined ? { symptoms } : {}),
+        ...(pain !== undefined ? { pain } : {}),
+        ...(impact !== undefined ? { impact } : {}),
+        ...(painTiming ? { painTiming } : {}),
+        ...(reliefAttempted?.length ? { reliefAttempted } : {}),
+        ...(reliefReceived ? { reliefReceived } : {}),
+        ...(bleedingExperience ? { bleedingExperience } : {}),
+        ...(bleedingDuration ? { bleedingDuration } : {}),
+      }
+      if (clearPain) delete updatedLog.pain
+      if (clearOptionalDetails) {
+        if (!painTiming) delete updatedLog.painTiming
+        if (!reliefAttempted?.length) delete updatedLog.reliefAttempted
+        if (!reliefReceived || !reliefAttempted?.some((option) => !['Nothing yet', 'Not sure', 'Prefer not to say'].includes(option))) {
+          delete updatedLog.reliefReceived
+        }
+        if (!bleedingExperience) delete updatedLog.bleedingExperience
+        if (!bleedingDuration) delete updatedLog.bleedingDuration
+      }
       const dailyLogs = {
         ...state.dailyLogs,
-        [dateKey]: {
-          ...prev,
-          checkinCompleted: true,
-          ...(mood !== undefined ? { mood } : {}),
-          ...(vibe !== undefined ? { vibe } : {}),
-          ...(vibeLabel !== undefined ? { vibeLabel } : {}),
-          ...(symptoms !== undefined ? { symptoms } : {}),
-          ...(pain !== undefined ? { pain } : {}),
-          ...(impact !== undefined ? { impact } : {}),
-        },
+        [dateKey]: updatedLog,
       }
 
       // streak: consecutive days with any completed check-in
       let streak = state.streak
       let lastCheckinDate = state.lastCheckinDate
-      if (state.lastCheckinDate !== dateKey) {
+      if (!wasLogged && state.lastCheckinDate !== dateKey) {
         const yesterday = dateKeyLocal(new Date(Date.now() - 86400000))
         streak = state.lastCheckinDate === yesterday ? state.streak + 1 : 1
         lastCheckinDate = dateKey

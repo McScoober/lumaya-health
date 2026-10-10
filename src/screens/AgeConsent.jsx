@@ -144,10 +144,11 @@ export default function AgeConsent() {
         </div>
       )}
 
-      <div className="spacer" />
-      <Button block disabled={!ageBand} onClick={proceed} style={{ marginTop: 20 }}>
-        Continue
-      </Button>
+      <div className="screen__actions">
+        <Button block disabled={!ageBand} onClick={proceed}>
+          Continue
+        </Button>
+      </div>
     </div>
   )
 }

@@ -249,16 +249,7 @@ export default function Library() {
       </div>
 
       {/* Category Filter Chips */}
-      <div
-        style={{
-          display: 'flex',
-          gap: 8,
-          overflowX: 'auto',
-          padding: '12px 2px 4px',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
+      <div className="library-category-scroll" aria-label="Library topics">
         {CATEGORIES.map((cat) => {
           const isSelected = selectedCategory === cat
           const count = cat === 'Saved' ? savedIds.length : null
@@ -268,17 +259,12 @@ export default function Library() {
               key={cat}
               type="button"
               onClick={() => setSelectedCategory(cat)}
+              className="library-category-chip"
+              aria-pressed={isSelected}
               style={{
-                padding: '7px 14px',
-                borderRadius: 20,
                 border: isSelected ? '1.5px solid var(--pink-accent)' : '1px solid rgba(0,0,0,0.08)',
                 background: isSelected ? 'var(--pink-accent)' : '#fff',
                 color: isSelected ? '#fff' : 'var(--text-primary)',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                transition: 'all 0.15s ease',
               }}
             >
               {cat} {count !== null && count > 0 && `(${count})`}

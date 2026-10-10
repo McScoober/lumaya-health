@@ -30,6 +30,8 @@ export default function Home() {
   const navigate = useNavigate()
   const { state, dispatch, cycleModel } = useStore()
   const [selectedSignal, setSelectedSignal] = useState(null)
+  const [periodPromptChoice, setPeriodPromptChoice] = useState(null)
+  const [periodPromptSaved, setPeriodPromptSaved] = useState(false)
   const now = new Date()
   const todayKey = dateKeyLocal(now)
   const todayLog = state.dailyLogs[todayKey] || {}
@@ -80,8 +82,8 @@ export default function Home() {
     () => (supportPhase
       ? buildTip(supportPhase, { ...state.profile })
       : {
-        headline: 'A tiny reset counts.',
-        why: 'Maisie needs more cycle history before timing-based predictions, but you can still support your body today.',
+        headline: 'Start with the basics.',
+        why: 'Maisie needs more cycle history before showing timing-based patterns.',
         actions: ['Drink some water, eat something steady, and log what you notice.'],
       }),
     [supportPhase, state.profile],
@@ -105,6 +107,17 @@ export default function Home() {
   const firstName = state.identity.name?.split(' ')[0] || 'there'
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
   const recentLogs = recentCheckInCount(state.dailyLogs, now)
+
+  function savePeriodPrompt() {
+    if (periodPromptChoice === null) return
+    dispatch({
+      type: 'UPDATE_PERIOD_STATUS',
+      dateKey: todayKey,
+      period: periodPromptChoice,
+      periodPromptAnswered: true,
+    })
+    setPeriodPromptSaved(true)
+  }
 
   return (
     <div className="screen screen--pad-bottom" style={tintStyle}>
@@ -242,9 +255,20 @@ export default function Home() {
         </section>
       )}
 
-      {shouldShowPeriodStartCard && (
+      {(shouldShowPeriodStartCard || periodPromptSaved) && (
         <Card style={{ marginTop: 14, background: '#FDEEF4', borderColor: 'rgba(224,82,138,0.35)' }}>
-          {periodStartedToday ? (
+          {periodPromptSaved ? (
+            <div role="status">
+              <p style={{ margin: '0 0 4px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
+                {periodPromptChoice ? 'Your period is logged for today.' : 'Saved for today.'}
+              </p>
+              <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.45 }}>
+                {periodPromptChoice
+                  ? 'The first marked day of this period is used as its start.'
+                  : 'You can change this later from your calendar.'}
+              </p>
+            </div>
+          ) : periodStartedToday ? (
             <>
               <p style={{ margin: '0 0 4px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
                 Your period is logged for today.
@@ -265,45 +289,32 @@ export default function Home() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <button
                   type="button"
-                  onClick={() => dispatch({
-                    type: 'UPDATE_PERIOD_STATUS',
-                    dateKey: todayKey,
-                    period: true,
-                    periodPromptAnswered: true,
-                  })}
+                  className="chip"
+                  aria-pressed={periodPromptChoice === true}
+                  onClick={() => setPeriodPromptChoice(true)}
                   style={{
-                    minHeight: 42,
-                    border: '1.5px solid #E0528A',
-                    borderRadius: 999,
-                    background: '#E0528A',
-                    color: '#fff',
-                    fontSize: 14,
-                    fontWeight: 700,
+                    width: '100%',
+                    justifyContent: 'center',
                   }}
                 >
                   Yes
                 </button>
                 <button
                   type="button"
-                  onClick={() => dispatch({
-                    type: 'UPDATE_PERIOD_STATUS',
-                    dateKey: todayKey,
-                    period: false,
-                    periodPromptAnswered: true,
-                  })}
+                  className="chip"
+                  aria-pressed={periodPromptChoice === false}
+                  onClick={() => setPeriodPromptChoice(false)}
                   style={{
-                    minHeight: 42,
-                    border: '1px solid rgba(44,24,16,0.08)',
-                    borderRadius: 999,
-                    background: '#fff',
-                    color: '#2C1810',
-                    fontSize: 14,
-                    fontWeight: 700,
+                    width: '100%',
+                    justifyContent: 'center',
                   }}
                 >
                   Not today
                 </button>
               </div>
+              <Button block disabled={periodPromptChoice === null} onClick={savePeriodPrompt} style={{ marginTop: 10 }}>
+                Save answer
+              </Button>
             </>
           )}
         </Card>

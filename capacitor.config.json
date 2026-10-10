@@ -1,0 +1,23 @@
+{
+  "appId": "com.maisiehealth.app",
+  "appName": "Maisie",
+  "webDir": "dist",
+  "backgroundColor": "#FAF6EE",
+  "ios": {
+    "backgroundColor": "#FAF6EE",
+    "contentInset": "never",
+    "preferredContentMode": "mobile"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "native",
+      "style": "DEFAULT",
+      "autoBackdropColor": "auto"
+    },
+    "SystemBars": {
+      "style": "DARK",
+      "hidden": false,
+      "animation": "FADE"
+    }
+  }
+}

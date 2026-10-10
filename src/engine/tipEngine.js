@@ -33,25 +33,25 @@ export function maisieMessage(phase, cycleDay, profile = {}) {
   const bank = {
     menstrual: [
       isAthlete && activity
-        ? `Your ${activity} can wait this week. Rest is part of training.`
-        : 'This is your rest week. Your body is doing a lot right now.',
+        ? `Reduce ${activity} intensity if pain or fatigue affects training.`
+        : 'You may need more rest during your period.',
       isStudent
-        ? 'Hard to focus during your period? Completely normal. Cut yourself some slack.'
-        : 'Lower your expectations this week. You do not have to be at full power.',
+        ? 'If symptoms affect focus, use shorter study blocks and take breaks.'
+        : 'Adjust your schedule if pain or fatigue affects your day.',
     ],
     follicular: [
-      'Energy is picking up this week. Good time to start things.',
-      'Your follicular phase is when your brain is sharpest. Use it.',
+      'You may notice more energy after your period.',
+      'Track whether your focus or energy changes during this phase.',
     ],
     ovulation: [
-      'Peak phase. You might feel more confident and switched on. Lean into it.',
-      'Best time in your cycle for hard workouts, big conversations, or anything that takes energy.',
+      'Some people notice more energy around ovulation.',
+      'Use your own energy and symptoms to decide how much activity feels right.',
     ],
     luteal: [
       isAthlete && activity
-        ? `Dial back the intensity on ${activity} if your body asks for it. That is not weakness.`
-        : 'Things slow down in this phase. That is not a mood. That is just your cycle.',
-      'Cravings, tiredness, feeling off -- all normal in the luteal phase.',
+        ? `Reduce ${activity} intensity if fatigue or other symptoms affect training.`
+        : 'Energy and mood can change during the luteal phase.',
+      'Track cravings, fatigue, or mood changes to learn whether they repeat.',
     ],
     bc_active: [
       'Steady hormone levels today. Notice how you feel compared to last week.',

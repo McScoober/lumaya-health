@@ -68,13 +68,14 @@ export default function DailyCheckIn() {
         </div>
       </Card>
 
-      <div className="spacer" />
-      <Button block disabled={period === null} onClick={submit} style={{ marginTop: 20 }}>
-        Log today
-      </Button>
-      <p className="muted center" style={{ fontSize: 12, marginTop: 10 }}>
-        No streaks to keep up with — just check in when you can. 🌙
-      </p>
+      <div className="screen__actions">
+        <Button block disabled={period === null} onClick={submit}>
+          Log today
+        </Button>
+        <p className="muted center" style={{ fontSize: 12, margin: '10px 0 0' }}>
+          No streaks to keep up with — just check in when you can. 🌙
+        </p>
+      </div>
     </div>
   )
 }

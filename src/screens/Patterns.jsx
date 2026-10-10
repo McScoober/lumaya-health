@@ -654,6 +654,27 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 </p>
               )}
 
+              {selectedCell.isLogged && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/log?date=${selectedCell.key}&from=patterns`)}
+                  style={{
+                    marginTop: 12,
+                    minHeight: 40,
+                    width: '100%',
+                    borderRadius: 999,
+                    border: '1.5px solid var(--pink-mid)',
+                    background: 'var(--pink-light)',
+                    color: 'var(--text-primary)',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Edit daily check-in
+                </button>
+              )}
+
               {selectedCell.isPossiblePeriodDay ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
                   <button
@@ -886,7 +907,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               </div>
 
               <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13, lineHeight: 1.5 }}>
-                <strong style={{ color: '#2C1810' }}>Maisie says:</strong>{' '}
+                <strong style={{ color: '#2C1810' }}>About this chart:</strong>{' '}
                 {predictionsReady
                   ? 'These illustrative curves are general education, not measurements or predictions of your symptoms.'
                   : 'These illustrative curves are general education. Keep logging to build your personal history.'}

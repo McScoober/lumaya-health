@@ -56,6 +56,12 @@
   --shadow-lg: 0 16px 48px rgba(42, 26, 18, 0.12);
 
   --tap: 48px;
+
+  /* Native WebView insets; browser values resolve to zero when unavailable. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * { box-sizing: border-box; }
@@ -63,6 +69,7 @@
 html, body, #root {
   height: 100%;
   margin: 0;
+  overflow: hidden;
 }
 
 body {
@@ -72,6 +79,7 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overscroll-behavior: none;
 }
 
 h1, h2, h3, h4 {
@@ -98,7 +106,8 @@ button {
 
 /* ---- App phone frame ---- */
 .app-frame {
-  min-height: 100dvh;
+  min-height: var(--app-viewport-height, 100dvh);
+  height: var(--app-viewport-height, 100dvh);
   display: flex;
   justify-content: center;
   background:
@@ -110,21 +119,29 @@ button {
 .phone {
   width: 100%;
   max-width: 440px;
-  min-height: 100dvh;
-  height: 100dvh;
+  min-height: var(--app-viewport-height, 100dvh);
+  height: var(--app-viewport-height, 100dvh);
   background: var(--surface);
   position: relative;
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-lg);
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+.native-app .phone {
+  padding-top: var(--safe-top);
+}
+
+.native-app .phone:has(> .result-screen) {
+  background: #FAF6F0;
 }
 
 @media (min-width: 480px) {
   .phone {
     margin: 24px 0;
-    min-height: calc(100dvh - 48px);
-    height: calc(100dvh - 48px);
+    min-height: calc(var(--app-viewport-height, 100dvh) - 48px);
+    height: calc(var(--app-viewport-height, 100dvh) - 48px);
     border-radius: 34px;
     border: 1px solid var(--line);
   }
@@ -139,8 +156,8 @@ button {
   .phone {
     width: 100%;
     max-width: none;
-    min-height: 100dvh;
-    height: 100dvh;
+    min-height: var(--app-viewport-height, 100dvh);
+    height: var(--app-viewport-height, 100dvh);
     margin: 0;
     border-radius: 0;
     border: none;
@@ -160,13 +177,76 @@ button {
 
 .screen {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 22px 20px 28px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding: 20px 0 calc(96px + var(--safe-bottom));
+  padding: 22px max(20px, var(--safe-right)) max(28px, calc(16px + var(--safe-bottom))) max(20px, var(--safe-left));
   animation: rise 360ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.screen--pad-bottom { padding-bottom: 80px; }
+.screen--pad-bottom { padding-bottom: max(28px, calc(16px + var(--safe-bottom))); }
+
+.library-category-scroll {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 56px;
+  padding: 10px 2px 2px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.library-category-scroll::-webkit-scrollbar { display: none; }
+
+.library-category-chip {
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.screen :is(input, textarea, button, [tabindex]) {
+  scroll-margin-block: 18px 110px;
+}
+
+.screen__actions {
+  position: sticky;
+  z-index: 20;
+  bottom: calc(-16px - var(--safe-bottom));
+  margin-top: auto;
+  padding: 28px 0 max(12px, var(--safe-bottom));
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--surface) 22px);
+}
+
+.keyboard-active .screen__actions {
+  padding-top: 18px;
+}
+
+.screen.result-screen {
+  align-items: center;
+  background: #FAF6F0;
+  padding: 40px max(24px, var(--safe-right)) max(32px, calc(20px + var(--safe-bottom))) max(24px, var(--safe-left));
+}
+
+.result-screen__actions {
+  width: 100%;
+  max-width: 340px;
+  background: linear-gradient(to bottom, rgba(250, 246, 240, 0), #FAF6F0 22px);
+}
 
 .auth-screen__main {
   width: 100%;
@@ -340,10 +420,49 @@ button {
 .input:focus, .textarea:focus { border-color: var(--accent); outline: none; }
 .textarea { resize: vertical; min-height: 88px; }
 
+.native-date-field {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 56px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+.native-date-field:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px rgba(224, 82, 138, 0.12);
+}
+.native-date-field__display {
+  min-height: 54px;
+  padding: 0 16px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) 18px;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 16px;
+  font-weight: 500;
+  pointer-events: none;
+}
+.native-date-field__display > svg { color: var(--pink-accent); }
+.native-date-field__display > svg:last-child { color: var(--ink-soft); }
+.native-date-field__placeholder { color: var(--ink-soft); font-weight: 400; }
+.native-date-field__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .birth-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(108px, 0.8fr);
-  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
 }
 .birth-field label {
   display: block;
@@ -353,6 +472,10 @@ button {
   color: var(--ink-soft);
 }
 .birth-field .inline-dropdown__trigger { min-height: 52px; font-size: 16px; }
+
+@media (max-width: 430px) {
+  .birth-fields { grid-template-columns: 1fr; }
+}
 
 /* ---- Profile sharing ---- */
 .profile-tabs {
@@ -384,6 +507,42 @@ button {
   background: var(--surface);
   color: var(--ink);
   box-shadow: 0 2px 8px rgba(44, 24, 16, 0.08);
+}
+.account-save-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  margin-top: 10px;
+}
+.account-save-row__icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--pink-accent);
+  display: grid;
+  place-items: center;
+}
+.account-save-row__copy { min-width: 0; }
+.account-save-row__copy strong,
+.account-save-row__copy span { display: block; }
+.account-save-row__copy strong { font-size: 13.5px; }
+.account-save-row__copy span {
+  margin-top: 2px;
+  color: var(--ink-soft);
+  font-size: 12px;
+  line-height: 1.35;
+}
+.account-save-row__button {
+  min-height: 40px;
+  padding: 9px 14px;
+  white-space: nowrap;
+}
+.account-save-row__divider { margin: 16px 0; }
+@media (max-width: 350px) {
+  .account-save-row { grid-template-columns: 38px minmax(0, 1fr); }
+  .account-save-row__button { grid-column: 2; justify-self: start; }
 }
 .trusted-access { padding-bottom: 10px; }
 .trusted-access__header { margin: 22px 0 16px; }
@@ -448,7 +607,7 @@ button {
   border-color: var(--accent);
   outline: 3px solid color-mix(in srgb, var(--accent) 16%, transparent);
 }
-.inline-dropdown { position: relative; }
+.inline-dropdown { position: relative; min-width: 0; }
 .inline-dropdown__trigger {
   width: 100%;
   min-height: 50px;
@@ -466,6 +625,13 @@ button {
   gap: 12px;
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
+}
+.inline-dropdown__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .inline-dropdown__trigger:hover { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
 .inline-dropdown__trigger:focus-visible {
@@ -484,8 +650,10 @@ button {
   right: 0;
   display: grid;
   gap: 5px;
-  max-height: 190px;
+  max-height: min(44dvh, 320px);
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   padding: 6px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -495,7 +663,7 @@ button {
 }
 .inline-dropdown__option {
   width: 100%;
-  min-height: 42px;
+  min-height: 48px;
   border: 1px solid transparent;
   border-radius: 7px;
   padding: 9px 11px;
@@ -506,9 +674,10 @@ button {
   font-weight: 500;
   text-align: left;
   cursor: pointer;
+  touch-action: manipulation;
 }
 .inline-dropdown__option:hover { background: #F8F6F5; }
-.inline-dropdown__option[aria-pressed='true'] {
+.inline-dropdown__option[aria-selected='true'] {
   border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent-ink);
@@ -666,8 +835,8 @@ button {
 
 /* ---- Bottom nav ---- */
 .tabbar {
-  position: sticky;
-  bottom: 0;
+  position: relative;
+  flex: 0 0 auto;
   left: 0;
   right: 0;
   z-index: 100;
@@ -676,7 +845,7 @@ button {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--line);
-  padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+  padding: 8px max(6px, var(--safe-right)) calc(8px + var(--safe-bottom)) max(6px, var(--safe-left));
   margin-top: auto;
 }
 .tabbar__item {

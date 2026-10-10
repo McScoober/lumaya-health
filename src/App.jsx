@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useStore } from './state/store.jsx'
 import TabBar from './components/TabBar.jsx'
+import KeyboardViewport from './components/KeyboardViewport.jsx'
 
 import Auth from './screens/Auth.jsx'
 import AuthCallback from './screens/AuthCallback.jsx'
@@ -44,6 +45,7 @@ export default function App() {
 
   return (
     <div className="app-frame">
+      <KeyboardViewport />
       <div className="phone">
         {accountError && <p role="alert" style={{ padding: 12, margin: 0, background: '#fff1f2', color: '#8f2439' }}>{accountError}</p>}
         <Routes>

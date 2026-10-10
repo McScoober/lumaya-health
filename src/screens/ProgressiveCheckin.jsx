@@ -9,6 +9,7 @@ import { useState, useMemo } from 'react'
 import { useStore } from '../state/store.jsx'
 import { DEEP_QUESTIONS, PAIN_ANCHORS, painLabel } from '../data/questions.js'
 import { Chip, ChipGroup } from '../components/ui.jsx'
+import NativeDateField from '../components/NativeDateField.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
 
 // Questions shown during fast-start seed (already answered)
@@ -175,13 +176,12 @@ function ProgressiveCard({ question: q, answers, onAnswer, remaining }) {
 
       {q.type === 'date' && (
         <div className="stack-12">
-          <input
-            className="input"
-            type="date"
+          <NativeDateField
+            id={`progressive-${q.key}`}
+            label={q.text}
             max={TODAY}
             value={localValue && localValue !== 'unknown' ? localValue : ''}
             onChange={(e) => setLocalValue(e.target.value)}
-            style={{ fontSize: 14 }}
           />
           <Chip
             stack
