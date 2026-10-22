@@ -34,3 +34,10 @@ test('cleanup removes only Maisie health/identity, not unrelated browser data', 
   clearLegacyHealthStorage(storage)
   assert.deepEqual(storage, { unrelated: 'keep' })
 })
+test('account preferences include reminder time and bounded tip history', () => {
+  const record = trackerRecords({ notifyPrefs: { reminderTime: '20:15' }, tipHistory: { 'sleep-reset-01': '2026-10-22' } })
+  assert.equal(record.settings.preferences.version, 3)
+  assert.equal(record.settings.preferences.notifications.reminderTime, '20:15')
+  assert.equal(record.settings.preferences.tracking.reminderTime, '20:15')
+  assert.equal(record.settings.preferences.tipHistory['sleep-reset-01'], '2026-10-22')
+})

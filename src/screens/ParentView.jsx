@@ -43,7 +43,7 @@ export default function ParentView() {
   }
   if (authLoading) return <div className="screen"><TopBar onBack={() => navigate('/')} /><p>Checking access...</p></div>
   return <div className="screen screen--pad-bottom stack-16">
-    <TopBar onBack={() => navigate(state.onboarded ? '/profile' : '/')} />
+    <TopBar onBack={() => navigate(state.onboarded ? '/me' : '/')} />
     <h1>Shared with you</h1>
     {!state.accountId ? <>
       <p>Sign in with the email that was invited. Each person chooses what they share with you.</p>

@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   DEFAULT_TRACKING_MODULES,
+  foodSensitiveModeIsActive,
   profilePayloadForTrackingModules,
   shouldShowBleedingDetails,
   shouldShowPainRelief,
@@ -11,6 +12,16 @@ import {
 
 test('tracking preferences use safe defaults and keep food optional', () => {
   assert.deepEqual(trackingModulesFromProfile({}), DEFAULT_TRACKING_MODULES)
+})
+
+test('food-sensitive mode starts after five of the last fourteen logged days report very few meals', () => {
+  const dailyLogs = Object.fromEntries(Array.from({ length: 14 }, (_, index) => [
+    `2026-10-${String(index + 1).padStart(2, '0')}`,
+    { checkinCompleted: true, fuel: { meals: index < 5 ? 'few' : 'most' } },
+  ]))
+  assert.equal(foodSensitiveModeIsActive({}, dailyLogs), true)
+  dailyLogs['2026-10-01'].fuel.meals = 'most'
+  assert.equal(foodSensitiveModeIsActive({}, dailyLogs), false)
 })
 
 test('legacy food preference is reflected in tracking modules', () => {

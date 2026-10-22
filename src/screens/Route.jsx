@@ -21,9 +21,9 @@ import {
   WarningCircle,
 } from '@phosphor-icons/react'
 import { Button, TopBar } from '../components/ui.jsx'
+import MaisieLogo from '../components/MaisieLogo.jsx'
 import { features } from '../config/features.js'
 import { buildRouteSummary, ROUTE_WINDOWS } from '../engine/routeSummary.js'
-import { readRoutePreferences, saveRoutePreferences } from '../lib/routePreferences.js'
 import { useStore } from '../state/store.jsx'
 import { OHIP_NOTE, ONTARIO_CARE_OPTIONS, ROUTE_CARE_REVIEW, URGENT_CARE_OPTIONS } from '../content/route/care.js'
 
@@ -88,12 +88,18 @@ const QUESTION_OPTIONS = [
 ]
 
 function useRoutePreferences() {
-  const [preferences, setPreferences] = useState(readRoutePreferences)
+  const { state, dispatch } = useStore()
+  const preferences = {
+    ...state.routePreferences,
+    checklist: state.checklists.talkToDoctor,
+  }
   function update(change) {
-    setPreferences((current) => saveRoutePreferences({
-      ...current,
-      ...(typeof change === 'function' ? change(current) : change),
-    }))
+    const next = typeof change === 'function' ? change(preferences) : change
+    if (next.checklist) {
+      dispatch({ type: 'SET_CHECKLISTS', payload: { talkToDoctor: next.checklist } })
+    }
+    const { checklist, ...routeChange } = next
+    if (Object.keys(routeChange).length) dispatch({ type: 'SET_ROUTE_PREFERENCES', payload: routeChange })
   }
   return [preferences, update]
 }
@@ -116,12 +122,13 @@ function RouteCard({ to, Icon, title, text, eyebrow, disabled = false }) {
 
 export function RouteHome() {
   if (!features.routeSummary) return <Navigate to="/home" replace />
-  const careReady = features.routeCare
+  const careReady = features.routeCare && features.routeWho
   const urgentReady = features.routeCareReviewed && ROUTE_CARE_REVIEW.clinicalReview === 'complete' && ROUTE_CARE_REVIEW.legalReview === 'complete'
   return (
     <div className="screen screen--pad-bottom route-screen">
       <TopBar title="Route" onBack={false} />
       <header className="route-intro">
+        <MaisieLogo variant="wordmark" width={132} style={{ marginBottom: 14 }} />
         <p className="eyebrow">Your next step</p>
         <h1>Turn what you notice into a clearer conversation.</h1>
         <p>Review your pattern, prepare what to say, and understand your options for getting support.</p>
@@ -345,7 +352,7 @@ export function RouteExport() {
       </div>
 
       <article className="route-print-sheet">
-        <p className="eyebrow">Maisie Health</p>
+        <MaisieLogo variant="wordmark" width={170} style={{ marginBottom: 14 }} />
         <h1>Pattern summary</h1>
         {exportName(state.identity, preferences.nameMode) && <p className="route-print-name">Prepared for {exportName(state.identity, preferences.nameMode)}</p>}
         <p><strong>{summary.windowLabel}</strong> · {summary.loggedDays} logged days out of {summary.windowDays} · {summary.completedCycles} completed cycles</p>

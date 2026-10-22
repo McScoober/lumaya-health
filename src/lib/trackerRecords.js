@@ -1,3 +1,5 @@
+import { synchronizedPreferences } from '../state/storeMigration.js'
+
 // Derived scores never enter the observation payload sent to the server.
 export function trackerRecords(state) {
   return {
@@ -9,7 +11,11 @@ export function trackerRecords(state) {
         return [date, actual]
       })),
     answers: Object.fromEntries(Object.entries(state.answers || {}).filter(([, value]) => value !== undefined && value !== null)),
-    settings: { onboarded: !!state.onboarded, profile: state.profile || {}, preferences: state.notifyPrefs || {} },
+    settings: {
+      onboarded: !!state.onboarded,
+      profile: state.profile || {},
+      preferences: synchronizedPreferences(state),
+    },
   }
 }
 

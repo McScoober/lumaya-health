@@ -14,6 +14,7 @@ import {
   Sparkle,
 } from '@phosphor-icons/react'
 import { TopBar } from '../components/ui.jsx'
+import MaisieLogo from '../components/MaisieLogo.jsx'
 import { useStore } from '../state/store.jsx'
 import { colors } from '../theme/tokens.js'
 import {
@@ -280,7 +281,7 @@ export function LearnHome() {
         </div>
       ) : (
         <div style={{ textAlign: 'center', padding: '48px 20px' }}>
-          <BookmarkSimple size={34} color={colors.lavender} />
+          <MaisieLogo size={64} style={{ margin: '0 auto', opacity: 0.6 }} />
           <h2 style={{ margin: '12px 0 6px', fontSize: 18 }}>Nothing saved yet</h2>
           <p style={{ margin: 0, color: colors.textMuted, fontSize: 14 }}>Use the bookmark button to keep a guide here.</p>
         </div>

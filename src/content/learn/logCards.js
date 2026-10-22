@@ -43,7 +43,9 @@ function heavyPeriodsCard(state) {
   const latestStart = starts.at(-1)
   const logs = realDailyLogs(state).filter(([key]) => !latestStart || key >= latestStart)
   const heavyLogs = logs.filter(([, log]) =>
-    ['Soaked protection', 'Leaked through clothes or bedding', 'Both'].includes(log?.bleedingExperience),
+    ['Soaked protection', 'Leaked through clothes or bedding', 'Both'].includes(log?.bleedingExperience) ||
+    log?.bleeding?.flooding === true ||
+    Number(log?.bleeding?.productFullness?.full) > 0,
   )
   const longBleeding = logs.some(([, log]) => log?.bleedingDuration === 'More than 7 days')
   if (heavyLogs.length === 0 && !longBleeding) return null
@@ -103,7 +105,7 @@ function prePeriodMoodCard(state) {
 }
 
 function foodCard(state) {
-  if (!foodContentIsEnabled(state?.profile)) return null
+  if (!foodContentIsEnabled(state?.profile, state?.dailyLogs)) return null
   return {
     title: 'From your preferences',
     text: 'You chose to include food and fuel. Here is how appetite and energy can shift without counting or judging food.',

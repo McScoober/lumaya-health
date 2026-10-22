@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f4ef">
+  <title>Maisie Health Navigation Concept</title>
+  <style>
+    @font-face {
+      font-family: "DM Sans";
+      src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2") format("woff2");
+      font-weight: 400;
+    }
+    @font-face {
+      font-family: "DM Sans";
+      src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-600-normal.woff2") format("woff2");
+      font-weight: 600;
+    }
+    @font-face {
+      font-family: "DM Sans";
+      src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2") format("woff2");
+      font-weight: 700;
+    }
+    @font-face {
+      font-family: "Fraunces";
+      src: url("../node_modules/@fontsource/fraunces/files/fraunces-latin-600-normal.woff2") format("woff2");
+      font-weight: 600;
+    }
+
+    :root {
+      --ink: #2a1a12;
+      --muted: #796f6a;
+      --subtle: #a49b96;
+      --surface: #ffffff;
+      --canvas: #f7f4ef;
+      --line: #e9e4df;
+      --pink: #e0528a;
+      --pink-soft: #fdeef4;
+      --green: #5d8f71;
+      --green-soft: #edf5ef;
+      --gold: #b8842f;
+      --gold-soft: #fbf3df;
+      --blue: #547da1;
+      --blue-soft: #edf4f8;
+      --violet: #8066a6;
+      --violet-soft: #f2eef8;
+      --shadow: 0 18px 45px rgba(42, 26, 18, 0.11);
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "DM Sans", system-ui, sans-serif;
+      color: var(--ink);
+      background: #ddd8d2;
+      -webkit-font-smoothing: antialiased;
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible {
+      outline: 3px solid rgba(224, 82, 138, 0.32);
+      outline-offset: 2px;
+    }
+
+    .app {
+      width: min(100%, 430px);
+      height: 100dvh;
+      margin: 0 auto;
+      background: var(--canvas);
+      position: relative;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow-y: auto;
+      overscroll-behavior-y: contain;
+      padding: calc(18px + var(--safe-top)) 20px calc(102px + var(--safe-bottom));
+      animation: appear 220ms ease-out;
+    }
+    .screen.active { display: block; }
+    @keyframes appear {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: var(--pink);
+      font-family: "Fraunces", Georgia, serif;
+      font-size: 19px;
+      font-weight: 600;
+    }
+    .brand img { width: 28px; height: 28px; }
+    .avatar {
+      width: 40px;
+      height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--surface);
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      color: var(--pink);
+    }
+
+    .eyebrow {
+      margin: 0 0 5px;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    h1, h2, h3 { font-family: "Fraunces", Georgia, serif; letter-spacing: 0; }
+    h1 { margin: 0; font-size: 30px; line-height: 1.12; }
+    h2 { margin: 0; font-size: 22px; line-height: 1.2; }
+    h3 { margin: 0; font-size: 17px; line-height: 1.25; }
+    p { margin: 0; }
+    .intro { margin-top: 8px; color: var(--muted); font-size: 15px; line-height: 1.5; }
+    .section-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 12px;
+      margin: 26px 0 12px;
+    }
+    .section-title h2 { font-size: 20px; }
+    .text-button {
+      border: 0;
+      background: transparent;
+      color: var(--pink);
+      padding: 4px 0;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 17px;
+      box-shadow: 0 5px 16px rgba(42, 26, 18, 0.04);
+    }
+    .checkin-card {
+      margin-top: 22px;
+      background: var(--surface);
+      border-top: 4px solid var(--pink);
+    }
+    .checkin-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .time-pill {
+      flex: 0 0 auto;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: var(--green);
+      background: var(--green-soft);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .signal-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 9px;
+      margin: 18px 0;
+    }
+    .signal {
+      min-width: 0;
+      min-height: 68px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 8px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      transition: 150ms ease;
+    }
+    .signal svg { width: 20px; height: 20px; color: var(--muted); }
+    .signal[aria-pressed="true"] {
+      border-color: var(--pink);
+      background: var(--pink-soft);
+      color: var(--ink);
+      box-shadow: 0 0 0 2px rgba(224, 82, 138, 0.11);
+    }
+    .signal[aria-pressed="true"] svg { color: var(--pink); }
+    .primary {
+      width: 100%;
+      min-height: 50px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--pink);
+      color: #fff;
+      font-weight: 700;
+      box-shadow: 0 9px 20px rgba(224, 82, 138, 0.2);
+    }
+    .primary:active { transform: scale(0.985); }
+
+    .next-card {
+      display: grid;
+      grid-template-columns: 42px 1fr;
+      gap: 13px;
+      align-items: start;
+      background: var(--green-soft);
+      border-color: #d6e7da;
+    }
+    .icon-well {
+      width: 42px;
+      height: 42px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      color: var(--green);
+    }
+    .icon-well svg { width: 23px; height: 23px; }
+    .next-card .label {
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .next-card h3 { margin-top: 3px; }
+    .next-card p { margin-top: 6px; color: #51665a; font-size: 13px; line-height: 1.45; }
+
+    .pattern-card { overflow: hidden; }
+    .pattern-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .dots { display: flex; gap: 5px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #cddde7; }
+    .dot.on { background: var(--blue); }
+    .pattern-card p { margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.45; }
+
+    .segment-scroll {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 3px 1px 8px;
+      margin: 18px 0 12px;
+      scrollbar-width: none;
+    }
+    .segment-scroll::-webkit-scrollbar { display: none; }
+    .chip {
+      flex: 0 0 auto;
+      min-height: 39px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .chip[aria-pressed="true"] { border-color: var(--pink); background: var(--pink-soft); color: var(--ink); }
+
+    .summary-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      margin: 22px 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--line);
+    }
+    .summary-cell { background: white; padding: 14px 10px; text-align: center; }
+    .summary-cell strong { display: block; font-family: "Fraunces", Georgia, serif; font-size: 22px; }
+    .summary-cell span { color: var(--muted); font-size: 10px; font-weight: 600; }
+
+    .chart-card { padding: 18px 14px 14px; }
+    .chart-header { padding: 0 3px 15px; }
+    .chart-header p { color: var(--muted); font-size: 12px; margin-top: 4px; }
+    .chart {
+      position: relative;
+      height: 190px;
+      border-left: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: repeating-linear-gradient(to bottom, transparent 0, transparent 46px, #eee9e5 47px);
+    }
+    .chart svg { width: 100%; height: 100%; overflow: visible; }
+    .chart-labels { display: flex; justify-content: space-between; margin: 8px 0 0 26px; color: var(--subtle); font-size: 10px; }
+    .legend { display: flex; gap: 16px; margin: 14px 3px 0; color: var(--muted); font-size: 11px; }
+    .legend span::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: 6px; border-radius: 50%; background: var(--blue); }
+    .legend span:last-child::before { background: var(--gold); }
+
+    .insight-list { display: grid; gap: 10px; }
+    .insight {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .insight .icon-well { width: 38px; height: 38px; background: var(--blue-soft); color: var(--blue); }
+    .insight h3 { font-family: "DM Sans", sans-serif; font-size: 14px; }
+    .insight p { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .chevron { color: var(--subtle); font-size: 20px; }
+
+    .search {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      height: 50px;
+      margin-top: 20px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: white;
+    }
+    .search svg { width: 21px; color: var(--muted); }
+    .search input { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); }
+    .search input::placeholder { color: var(--subtle); }
+    .article-list { display: grid; gap: 10px; }
+    .article {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 14px;
+      align-items: start;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+    }
+    .article .icon-well { width: 48px; height: 48px; }
+    .article:nth-child(1) .icon-well { color: var(--green); background: var(--green-soft); }
+    .article:nth-child(2) .icon-well { color: var(--blue); background: var(--blue-soft); }
+    .article:nth-child(3) .icon-well { color: var(--violet); background: var(--violet-soft); }
+    .article h3 { font-size: 16px; }
+    .article p { margin-top: 5px; color: var(--muted); font-size: 12px; line-height: 1.4; }
+    .article .read-time { display: block; margin-top: 8px; color: var(--subtle); font-size: 10px; font-weight: 700; }
+
+    .profile-card { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+    .profile-card .avatar { width: 56px; height: 56px; font-size: 20px; background: var(--pink-soft); }
+    .profile-card p { color: var(--muted); font-size: 12px; margin-top: 3px; }
+    .goal-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .goal-list .chip { background: var(--green-soft); border-color: #dceadf; }
+    .settings-list { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: white; }
+    .setting {
+      width: 100%;
+      min-height: 62px;
+      display: grid;
+      grid-template-columns: 36px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: white;
+      padding: 10px 14px;
+      text-align: left;
+    }
+    .setting:last-child { border-bottom: 0; }
+    .setting svg { width: 21px; color: var(--muted); }
+    .setting strong { display: block; font-size: 13px; }
+    .setting span { color: var(--muted); font-size: 11px; }
+
+    .tabbar {
+      position: absolute;
+      z-index: 10;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      min-height: calc(76px + var(--safe-bottom));
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      padding: 8px 8px var(--safe-bottom);
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(15px);
+    }
+    .tab {
+      border: 0;
+      background: transparent;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      color: var(--subtle);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .tab svg { width: 23px; height: 23px; }
+    .tab[aria-current="page"] { color: var(--pink); }
+
+    .toast {
+      position: absolute;
+      z-index: 20;
+      left: 20px;
+      right: 20px;
+      bottom: calc(88px + var(--safe-bottom));
+      padding: 13px 16px;
+      border-radius: 8px;
+      background: var(--ink);
+      color: white;
+      text-align: center;
+      font-size: 13px;
+      opacity: 0;
+      transform: translateY(14px);
+      pointer-events: none;
+      transition: 180ms ease;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    .checkin-flow {
+      position: absolute;
+      z-index: 30;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      background: var(--canvas);
+    }
+    .checkin-flow.open { display: flex; }
+    .flow-header {
+      flex: 0 0 auto;
+      padding: calc(14px + var(--safe-top)) 20px 14px;
+      background: rgba(247, 244, 239, 0.97);
+    }
+    .flow-header-row {
+      display: grid;
+      grid-template-columns: 44px 1fr 44px;
+      align-items: center;
+    }
+    .icon-button {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: #fff;
+      font-size: 23px;
+      line-height: 1;
+    }
+    .flow-count { color: var(--muted); text-align: center; font-size: 12px; font-weight: 700; }
+    .flow-progress { height: 6px; margin-top: 14px; overflow: hidden; border-radius: 999px; background: #ebdfdf; }
+    .flow-progress span { display: block; width: 20%; height: 100%; border-radius: inherit; background: var(--pink); transition: width 200ms ease; }
+    .flow-content {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 30px 20px 24px;
+      -webkit-overflow-scrolling: touch;
+    }
+    .flow-question { max-width: 360px; margin: 0 auto; }
+    .flow-topic-icon {
+      width: 48px;
+      height: 48px;
+      display: grid;
+      place-items: center;
+      margin-bottom: 18px;
+      border-radius: 8px;
+      background: var(--pink-soft);
+      color: var(--pink);
+    }
+    .flow-topic-icon svg { width: 25px; height: 25px; }
+    .flow-question h1 { font-size: 28px; }
+    .flow-question > p { margin-top: 9px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .flow-options { display: grid; gap: 10px; margin-top: 26px; }
+    .flow-option {
+      width: 100%;
+      min-height: 54px;
+      padding: 12px 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      text-align: center;
+      font-weight: 600;
+    }
+    .flow-option[aria-pressed="true"] {
+      border-color: var(--pink);
+      background: var(--pink-soft);
+      box-shadow: 0 0 0 2px rgba(224, 82, 138, 0.11);
+    }
+    .pain-scale { margin-top: 28px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+    .pain-number { font-family: "Fraunces", Georgia, serif; font-size: 44px; text-align: center; color: var(--pink); }
+    .pain-label { margin-top: -4px; color: var(--muted); font-size: 12px; text-align: center; }
+    .pain-scale input { width: 100%; margin: 22px 0 4px; accent-color: var(--pink); }
+    .range-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+    .other-note {
+      width: 100%;
+      min-height: 120px;
+      margin-top: 24px;
+      resize: vertical;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      font: inherit;
+    }
+    .flow-actions {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: 52px 1fr;
+      gap: 10px;
+      padding: 14px 20px calc(14px + var(--safe-bottom));
+      border-top: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.97);
+    }
+    .flow-actions .back { border: 1px solid var(--line); border-radius: 8px; background: #fff; font-size: 23px; }
+    .review-list { display: grid; gap: 9px; margin-top: 24px; }
+    .review-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      font-size: 13px;
+    }
+    .review-row span { color: var(--muted); }
+    .review-row strong { text-align: right; }
+    .review-note {
+      margin-top: 14px;
+      padding: 14px;
+      border-radius: 8px;
+      background: var(--green-soft);
+      color: #496153;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .saved-checkin { display: none; }
+    .saved-checkin.visible { display: block; }
+    .saved-checkin__top { display: flex; align-items: center; gap: 11px; }
+    .saved-checkin__mark {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: 50%;
+      background: var(--green-soft);
+      color: var(--green);
+      font-size: 21px;
+      font-weight: 700;
+    }
+    .saved-checkin__topics { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+    .saved-checkin__topics span { padding: 5px 9px; border-radius: 999px; background: #f4f1ee; color: var(--muted); font-size: 11px; font-weight: 700; }
+
+    @media (min-width: 500px) {
+      body { padding: 24px; }
+      .app { height: calc(100dvh - 48px); border-radius: 32px; border: 1px solid rgba(42, 26, 18, 0.12); }
+    }
+    @media (max-width: 360px) {
+      .screen { padding-left: 15px; padding-right: 15px; }
+      .signal-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      h1 { font-size: 27px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="app" aria-label="Maisie teenage health navigation prototype">
+    <svg aria-hidden="true" width="0" height="0" style="position:absolute">
+      <defs>
+        <symbol id="i-home" viewBox="0 0 24 24"><path d="M3.5 10.5 12 3l8.5 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-4.5v-6h-5v6H5a1.5 1.5 0 0 1-1.5-1.5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+        <symbol id="i-pattern" viewBox="0 0 24 24"><path d="M4 18V9m5 9V5m5 13v-7m5 7V3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m3 13 6-3 5 3 6-6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+        <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 4.5h5.5A2.5 2.5 0 0 1 12 7v13a3 3 0 0 0-3-3H4Zm16 0h-5.5A2.5 2.5 0 0 0 12 7v13a3 3 0 0 1 3-3h5Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+        <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+        <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 5.8c-2.2-2.2-5.7-2-7.8.2l-1 1.1L11 6C8.9 3.8 5.4 3.6 3.2 5.8 1 8 1.2 11.5 3.4 13.6L12 22l8.6-8.4c2.2-2.1 2.4-5.6.2-7.8Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></symbol>
+        <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m14 2-9 12h7l-2 8 9-12h-7Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+        <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20.5 15.5A9 9 0 0 1 8.5 3.5a9 9 0 1 0 12 12Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+        <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 14.5a5 5 0 0 0 8 0M8.5 9h.01M15.5 9h.01" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+        <symbol id="i-pain" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9 4.9 19.1" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+        <symbol id="i-stomach" viewBox="0 0 24 24"><path d="M8 3v6c0 2 1.1 3 2.5 3S13 10.8 13 9V6c4 0 7 3.1 7 7.3C20 18 16.8 21 12.2 21 7.1 21 4 17.4 4 13c0-2.8 1.2-4.4 4-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+        <symbol id="i-skin" viewBox="0 0 24 24"><path d="M12 3c4.8 0 8 3.7 8 8.5S16.5 21 12 21s-8-4.7-8-9.5S7.2 3 12 3Z" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15.5" cy="13" r="1.2" fill="currentColor"/><circle cx="10.5" cy="16" r=".8" fill="currentColor"/></symbol>
+        <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2S5.5 9.1 5.5 14.5a6.5 6.5 0 0 0 13 0C18.5 9.1 12 2 12 2Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 16.5c.7 1.2 1.7 1.8 3 1.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+        <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15.7 8.3-2.2 5.2-5.2 2.2 2.2-5.2Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+        <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 5 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+        <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="17" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 20a5.5 5.5 0 0 1 11 0M14 15.5a4.5 4.5 0 0 1 6.5 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></symbol>
+        <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8"/></symbol>
+        <symbol id="i-note" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v16H4V5a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 8h8M8 12h8M8 16h5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+      </defs>
+    </svg>
+
+    <section class="screen active" data-screen="today">
+      <header class="topbar">
+        <div class="brand"><img src="/brand/maisie-flower.png" alt="">maisie</div>
+        <button class="avatar" type="button" data-tab-target="profile" aria-label="Open profile">A</button>
+      </header>
+
+      <p class="eyebrow">Friday, October 10</p>
+      <h1>How are you doing today?</h1>
+      <p class="intro">Check in with your whole body. You choose what to track.</p>
+
+      <section class="card checkin-card" id="new-checkin-card" aria-labelledby="checkin-title">
+        <div class="checkin-heading">
+          <div>
+            <h2 id="checkin-title">Quick check-in</h2>
+            <p class="intro" style="font-size:13px; margin-top:4px">What would you like to log?</p>
+          </div>
+          <span class="time-pill">About 1 min</span>
+        </div>
+        <div class="signal-grid">
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-bolt"/></svg>Energy</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-moon"/></svg>Sleep</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-smile"/></svg>Mood</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-pain"/></svg>Pain</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-stomach"/></svg>Digestion</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-skin"/></svg>Skin</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-drop"/></svg>Period</button>
+          <button class="signal" type="button" aria-pressed="false"><svg><use href="#i-heart"/></svg>Other</button>
+        </div>
+        <button class="primary" type="button" id="start-checkin">Continue</button>
+      </section>
+
+      <section class="card checkin-card saved-checkin" id="saved-checkin-card" aria-live="polite">
+        <div class="saved-checkin__top">
+          <span class="saved-checkin__mark">✓</span>
+          <div><h2>Today is logged</h2><p class="intro" style="font-size:13px; margin-top:2px">Saved just now · Private by default</p></div>
+        </div>
+        <div class="saved-checkin__topics" id="saved-topics"></div>
+        <button class="text-button" type="button" id="edit-checkin" style="margin-top:12px">Edit today's answers</button>
+      </section>
+
+      <div class="section-title"><h2>Your next step</h2></div>
+      <article class="card next-card">
+        <div class="icon-well"><svg><use href="#i-compass"/></svg></div>
+        <div>
+          <span class="label">Worth watching</span>
+          <h3>Your energy has been lower this week</h3>
+          <p>You also logged shorter sleep on 4 of the last 5 nights. Keep checking in for a few more days.</p>
+          <button class="text-button" type="button" data-tab-target="patterns">See the pattern</button>
+        </div>
+      </article>
+
+      <div class="section-title"><h2>Something Maisie noticed</h2></div>
+      <article class="card pattern-card">
+        <div class="pattern-meta"><span class="dots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span><span class="dot"></span></span>4 of 5 recent days</div>
+        <h3>Low energy often follows a short night</h3>
+        <p>This is based only on what you logged. It is a pattern to notice, not a diagnosis.</p>
+      </article>
+    </section>
+
+    <section class="screen" data-screen="patterns">
+      <header class="topbar">
+        <div class="brand"><img src="/brand/maisie-flower.png" alt="">maisie</div>
+        <button class="avatar" type="button" data-tab-target="profile" aria-label="Open profile">A</button>
+      </header>
+      <p class="eyebrow">Your observations</p>
+      <h1>Patterns</h1>
+      <p class="intro">See how the things you track may connect over time.</p>
+
+      <div class="segment-scroll" aria-label="Pattern category">
+        <button class="chip pattern-chip" type="button" aria-pressed="true">Overview</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Energy</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Sleep</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Mood</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Pain</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Digestion</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Skin</button>
+        <button class="chip pattern-chip" type="button" aria-pressed="false">Cycle</button>
+      </div>
+
+      <div class="summary-strip">
+        <div class="summary-cell"><strong>18</strong><span>DAYS LOGGED</span></div>
+        <div class="summary-cell"><strong>3</strong><span>SIGNALS</span></div>
+        <div class="summary-cell"><strong>2</strong><span>PATTERNS</span></div>
+      </div>
+
+      <article class="card chart-card">
+        <div class="chart-header">
+          <h2>Sleep and energy</h2>
+          <p>Past 7 days</p>
+        </div>
+        <div class="chart" aria-label="Sleep and energy chart">
+          <svg viewBox="0 0 330 190" role="img">
+            <polyline points="5,62 56,48 108,88 160,104 212,78 264,116 325,80" fill="none" stroke="#547da1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="5,72 56,67 108,110 160,124 212,98 264,138 325,102" fill="none" stroke="#b8842f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            <g fill="#547da1"><circle cx="5" cy="62" r="4"/><circle cx="56" cy="48" r="4"/><circle cx="108" cy="88" r="4"/><circle cx="160" cy="104" r="4"/><circle cx="212" cy="78" r="4"/><circle cx="264" cy="116" r="4"/><circle cx="325" cy="80" r="4"/></g>
+            <g fill="#b8842f"><circle cx="5" cy="72" r="4"/><circle cx="56" cy="67" r="4"/><circle cx="108" cy="110" r="4"/><circle cx="160" cy="124" r="4"/><circle cx="212" cy="98" r="4"/><circle cx="264" cy="138" r="4"/><circle cx="325" cy="102" r="4"/></g>
+          </svg>
+        </div>
+        <div class="chart-labels"><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span></div>
+        <div class="legend"><span>Sleep</span><span>Energy</span></div>
+      </article>
+
+      <div class="section-title"><h2>What stands out</h2></div>
+      <div class="insight-list">
+        <article class="insight"><div class="icon-well"><svg><use href="#i-moon"/></svg></div><div><h3>Sleep and energy move together</h3><p>Seen on 4 recent days</p></div><span class="chevron">›</span></article>
+        <article class="insight"><div class="icon-well" style="color:var(--green);background:var(--green-soft)"><svg><use href="#i-smile"/></svg></div><div><h3>Mood has been steady</h3><p>No major change this week</p></div><span class="chevron">›</span></article>
+        <article class="insight"><div class="icon-well" style="color:var(--pink);background:var(--pink-soft)"><svg><use href="#i-drop"/></svg></div><div><h3>Cycle and period history</h3><p>Calendar, bleeding, and pain</p></div><span class="chevron">›</span></article>
+      </div>
+    </section>
+
+    <section class="screen" data-screen="learn">
+      <header class="topbar">
+        <div class="brand"><img src="/brand/maisie-flower.png" alt="">maisie</div>
+        <button class="avatar" type="button" data-tab-target="profile" aria-label="Open profile">A</button>
+      </header>
+      <p class="eyebrow">Understand your health</p>
+      <h1>Learn</h1>
+      <p class="intro">Clear answers for the things you notice in your body.</p>
+
+      <label class="search"><svg><use href="#i-search"/></svg><input id="learn-search" type="search" placeholder="Search pain, sleep, mood..." aria-label="Search Learn"></label>
+      <div class="segment-scroll" aria-label="Learn category">
+        <button class="chip learn-chip" type="button" aria-pressed="true">For you</button>
+        <button class="chip learn-chip" type="button" aria-pressed="false">Pain</button>
+        <button class="chip learn-chip" type="button" aria-pressed="false">Sleep</button>
+        <button class="chip learn-chip" type="button" aria-pressed="false">Mood</button>
+        <button class="chip learn-chip" type="button" aria-pressed="false">Digestion</button>
+        <button class="chip learn-chip" type="button" aria-pressed="false">Periods</button>
+      </div>
+
+      <div class="section-title"><h2>Recommended for you</h2></div>
+      <div class="article-list" id="article-list">
+        <button class="article" type="button" data-search="doctor appointment trusted adult prepare"><span class="icon-well"><svg><use href="#i-note"/></svg></span><span><h3>How to explain what you are feeling</h3><p>A simple way to prepare for a doctor or trusted adult conversation.</p><span class="read-time">4 MIN READ</span></span></button>
+        <button class="article" type="button" data-search="sleep tired energy fatigue"><span class="icon-well"><svg><use href="#i-moon"/></svg></span><span><h3>Why sleep can change your energy</h3><p>What to notice when feeling tired starts affecting your day.</p><span class="read-time">3 MIN READ</span></span></button>
+        <button class="article" type="button" data-search="pain cramps period severe"><span class="icon-well"><svg><use href="#i-pain"/></svg></span><span><h3>When pain is worth talking about</h3><p>How intensity, timing, and daily impact help tell the story.</p><span class="read-time">5 MIN READ</span></span></button>
+      </div>
+    </section>
+
+    <section class="screen" data-screen="profile">
+      <header class="topbar">
+        <div class="brand"><img src="/brand/maisie-flower.png" alt="">maisie</div>
+      </header>
+      <p class="eyebrow">Your choices</p>
+      <h1>Profile</h1>
+
+      <section class="card profile-card">
+        <div class="avatar">A</div>
+        <div><h2>Ahoo</h2><p>Teen account · Your information stays private</p></div>
+      </section>
+
+      <div class="section-title"><h2>What I want help with</h2><button class="text-button" type="button">Edit</button></div>
+      <div class="goal-list">
+        <button class="chip" type="button">Energy</button>
+        <button class="chip" type="button">Sleep</button>
+        <button class="chip" type="button">Pain</button>
+        <button class="chip" type="button">Periods</button>
+      </div>
+
+      <div class="section-title"><h2>Support and privacy</h2></div>
+      <div class="settings-list">
+        <button class="setting" type="button"><svg><use href="#i-people"/></svg><span><strong>People you trust</strong>Choose what another person can see</span><b class="chevron">›</b></button>
+        <button class="setting" type="button"><svg><use href="#i-note"/></svg><span><strong>Prepare for an appointment</strong>Turn your logs into a useful summary</span><b class="chevron">›</b></button>
+        <button class="setting" type="button"><svg><use href="#i-lock"/></svg><span><strong>Privacy and saved information</strong>Manage your account and this device</span><b class="chevron">›</b></button>
+      </div>
+
+      <div class="section-title"><h2>Tracking</h2></div>
+      <div class="settings-list">
+        <button class="setting" type="button"><svg><use href="#i-heart"/></svg><span><strong>Check-in topics</strong>Choose which questions Maisie asks</span><b class="chevron">›</b></button>
+        <button class="setting" type="button"><svg><use href="#i-drop"/></svg><span><strong>Cycle and period settings</strong>Manage dates, reminders, and predictions</span><b class="chevron">›</b></button>
+      </div>
+    </section>
+
+    <section class="checkin-flow" id="checkin-flow" aria-label="Daily check-in" aria-hidden="true">
+      <header class="flow-header">
+        <div class="flow-header-row">
+          <button class="icon-button" id="close-flow" type="button" aria-label="Close check-in">×</button>
+          <div class="flow-count" id="flow-count">Question 1 of 3</div>
+          <span></span>
+        </div>
+        <div class="flow-progress" aria-hidden="true"><span id="flow-progress-bar"></span></div>
+      </header>
+      <div class="flow-content" id="flow-content"></div>
+      <footer class="flow-actions">
+        <button class="back" id="flow-back" type="button" aria-label="Previous question">‹</button>
+        <button class="primary" id="flow-next" type="button">Next</button>
+      </footer>
+    </section>
+
+    <nav class="tabbar" aria-label="Main navigation">
+      <button class="tab" type="button" data-tab="today" aria-current="page"><svg><use href="#i-home"/></svg>Today</button>
+      <button class="tab" type="button" data-tab="patterns"><svg><use href="#i-pattern"/></svg>Patterns</button>
+      <button class="tab" type="button" data-tab="learn"><svg><use href="#i-book"/></svg>Learn</button>
+      <button class="tab" type="button" data-tab="profile"><svg><use href="#i-user"/></svg>Profile</button>
+    </nav>
+    <div class="toast" role="status" aria-live="polite"></div>
+  </main>
+
+  <script>
+    const screens = [...document.querySelectorAll('[data-screen]')]
+    const tabs = [...document.querySelectorAll('[data-tab]')]
+    const toast = document.querySelector('.toast')
+    let toastTimer
+
+    function showScreen(name) {
+      screens.forEach(screen => screen.classList.toggle('active', screen.dataset.screen === name))
+      tabs.forEach(tab => tab.setAttribute('aria-current', tab.dataset.tab === name ? 'page' : 'false'))
+      document.querySelector(`[data-screen="${name}"]`).scrollTop = 0
+    }
+
+    tabs.forEach(tab => tab.addEventListener('click', () => showScreen(tab.dataset.tab)))
+    document.querySelectorAll('[data-tab-target]').forEach(button => {
+      button.addEventListener('click', () => showScreen(button.dataset.tabTarget))
+    })
+
+    document.querySelectorAll('.signal').forEach(button => {
+      button.addEventListener('click', () => {
+        button.setAttribute('aria-pressed', button.getAttribute('aria-pressed') !== 'true')
+      })
+    })
+
+    const topicQuestions = {
+      Energy: { icon: 'i-bolt', title: 'How is your energy today?', hint: 'Choose the answer that feels closest.', options: ['High', 'Steady', 'Low', 'Exhausted'] },
+      Sleep: { icon: 'i-moon', title: 'How did you sleep?', hint: 'Think about both falling asleep and staying asleep.', options: ['Great', 'Okay', 'Restless', 'Hardly slept'] },
+      Mood: { icon: 'i-smile', title: 'How has your mood felt?', hint: 'It is okay if more than one feeling fits. Choose the main one for now.', options: ['Good', 'Calm', 'Irritable', 'Low', 'Anxious'] },
+      Digestion: { icon: 'i-stomach', title: 'How has your digestion felt?', hint: 'Choose what you noticed most today.', options: ['Fine', 'Bloated', 'Nausea', 'Diarrhea', 'Constipation', 'Not sure'] },
+      Skin: { icon: 'i-skin', title: 'What did you notice about your skin?', hint: 'This can include your face or body.', options: ['No change', 'Breakout', 'Oily', 'Dry or itchy', 'Not sure'] },
+      Period: { icon: 'i-drop', title: 'How is your bleeding today?', hint: 'Your best estimate is enough.', options: ['Spotting', 'Light', 'Medium', 'Heavy', 'Not sure'] },
+    }
+    const topicDetails = {
+      Energy: [
+        { key: 'Dizziness', icon: 'i-bolt', title: 'Did you feel dizzy or light-headed?', hint: 'Include moments when you stood up or were active.', options: ['No', 'Once', 'More than once', 'Not sure', 'Prefer not to say'] },
+      ],
+      Sleep: [
+        { key: 'Sleep length', icon: 'i-moon', title: 'About how long did you sleep?', hint: 'An estimate is completely fine.', options: ['Less than 5 hours', '5–6 hours', '7–8 hours', 'More than 8 hours', 'Not sure'] },
+      ],
+      Mood: [
+        { key: 'Mood change', icon: 'i-smile', title: 'Did this feel different from usual?', hint: 'Maisie looks for changes from your own normal.', options: ['No change', 'A little different', 'Very different', 'Not sure', 'Prefer not to say'] },
+      ],
+      Pain: [
+        { key: 'Pain location', icon: 'i-pain', title: 'Where did you feel the pain?', hint: 'Choose the main area today.', options: ['Lower belly', 'Lower back', 'Head', 'Chest', 'Somewhere else', 'Not sure'] },
+        { key: 'Pain timing', icon: 'i-pain', title: 'When did the pain happen?', hint: 'This helps make patterns easier to see later.', options: ['Most of the day', 'It came and went', 'Only during activity', 'Around my period', 'Not sure'] },
+        { key: 'Relief tried', icon: 'i-heart', title: 'Did you try anything for relief?', hint: 'This is only an observation, not treatment advice.', options: ['Nothing yet', 'Rest', 'Heat', 'Medicine', 'Something else', 'Prefer not to say'] },
+        { key: 'Relief received', icon: 'i-heart', title: 'Did it help?', hint: 'Choose what came closest.', options: ['Did not try anything', 'Helped a lot', 'Helped a little', 'Did not help', 'Not sure'] },
+      ],
+      Digestion: [
+        { key: 'Digestion impact', icon: 'i-stomach', title: 'How much did it bother you?', hint: 'Think about school, meals, sleep, or activities.', options: ['Barely', 'A little', 'A lot', 'Not sure'] },
+      ],
+      Skin: [
+        { key: 'Skin change', icon: 'i-skin', title: 'How different is this from usual?', hint: 'Your own normal is what matters here.', options: ['No change', 'A small change', 'A big change', 'Not sure'] },
+      ],
+      Period: [
+        { key: 'Leaking or soaking', icon: 'i-drop', title: 'Any leaking or soaking through?', hint: 'This can help describe how much bleeding affected your day.', options: ['No', 'Once', 'More than once', 'Not sure', 'Prefer not to say'] },
+        { key: 'Bleeding days', icon: 'i-drop', title: 'About how many days have you been bleeding?', hint: 'Count today. Your best estimate is enough.', options: ['1–2 days', '3–5 days', '6–7 days', 'More than 7 days', 'Not sure'] },
+      ],
+    }
+    const flow = document.querySelector('#checkin-flow')
+    const flowContent = document.querySelector('#flow-content')
+    const flowCount = document.querySelector('#flow-count')
+    const flowBar = document.querySelector('#flow-progress-bar')
+    const flowNext = document.querySelector('#flow-next')
+    const flowBack = document.querySelector('#flow-back')
+    let flowSteps = []
+    let flowIndex = 0
+    let answers = {}
+
+    function showToast(message) {
+      toast.textContent = message
+      toast.classList.add('show')
+      clearTimeout(toastTimer)
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 2600)
+    }
+
+    function selectedTopics() {
+      return [...document.querySelectorAll('.signal[aria-pressed="true"]')].map(button => button.textContent.trim())
+    }
+
+    function optionMarkup(options, current) {
+      return `<div class="flow-options">${options.map(option => `<button class="flow-option" type="button" aria-pressed="${current === option}">${option}</button>`).join('')}</div>`
+    }
+
+    function renderFlow() {
+      const step = flowSteps[flowIndex]
+      const total = flowSteps.length
+      flowCount.textContent = step.type === 'review' ? 'Review' : `Question ${flowIndex + 1} of ${total - 1}`
+      flowBar.style.width = `${((flowIndex + 1) / total) * 100}%`
+      flowBack.style.visibility = flowIndex === 0 ? 'hidden' : 'visible'
+      flowNext.textContent = step.type === 'review' ? 'Save check-in' : 'Next'
+
+      if (step.type === 'overall') {
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#i-heart"/></svg></div><p class="eyebrow">First, the big picture</p><h1>How are you feeling overall?</h1><p>This gives the rest of your answers some context.</p>${optionMarkup(['Good', 'Okay', 'A little off', 'Having a hard day'], answers.Overall)}</div>`
+      } else if (step.type === 'topic' && step.topic === 'Pain') {
+        const value = answers.Pain ?? 0
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#i-pain"/></svg></div><p class="eyebrow">Pain</p><h1>How strong is your pain?</h1><p>Use 0 for no pain and 10 for the strongest pain you can imagine.</p><div class="pain-scale"><div class="pain-number" id="pain-number">${value}</div><div class="pain-label" id="pain-label">${painLabel(value)}</div><input id="pain-range" type="range" min="0" max="10" step="1" value="${value}" aria-label="Pain level"><div class="range-ends"><span>No pain</span><span>Strongest</span></div></div></div>`
+        document.querySelector('#pain-range').addEventListener('input', event => {
+          answers.Pain = Number(event.target.value)
+          document.querySelector('#pain-number').textContent = event.target.value
+          document.querySelector('#pain-label').textContent = painLabel(Number(event.target.value))
+        })
+      } else if (step.type === 'topic' && step.topic === 'Other') {
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#i-heart"/></svg></div><p class="eyebrow">Something else</p><h1>What did you notice?</h1><p>Keep this optional and write only what feels useful.</p><textarea class="other-note" id="other-note" placeholder="For example: I felt dizzy after lunch">${answers.Other || ''}</textarea></div>`
+        document.querySelector('#other-note').addEventListener('input', event => { answers.Other = event.target.value })
+      } else if (step.type === 'topic') {
+        const question = topicQuestions[step.topic]
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#${question.icon}"/></svg></div><p class="eyebrow">${step.topic}</p><h1>${question.title}</h1><p>${question.hint}</p>${optionMarkup(question.options, answers[step.topic])}</div>`
+      } else if (step.type === 'detail') {
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#${step.icon}"/></svg></div><p class="eyebrow">${step.topic}</p><h1>${step.title}</h1><p>${step.hint}</p>${optionMarkup(step.options, answers[step.key])}</div>`
+      } else if (step.type === 'impact') {
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#i-compass"/></svg></div><p class="eyebrow">Daily impact</p><h1>Did any of this make today harder?</h1><p>This helps Maisie understand what matters most, not just what happened.</p>${optionMarkup(['Not at all', 'A little', 'A lot', "I couldn't do my usual things"], answers.Impact)}</div>`
+      } else {
+        const rows = Object.entries(answers).filter(([, value]) => value !== '' && value !== undefined).map(([key, value]) => `<div class="review-row"><span>${key}</span><strong>${key === 'Pain' ? `${value} out of 10` : value}</strong></div>`).join('')
+        flowContent.innerHTML = `<div class="flow-question"><div class="flow-topic-icon"><svg><use href="#i-note"/></svg></div><p class="eyebrow">Check before saving</p><h1>Here is what you logged</h1><p>You can go back and change any answer before saving.</p><div class="review-list">${rows}</div><div class="review-note"><strong>Private by default:</strong> Individual answers stay private unless you choose to include them in a summary.<br><br><strong>What happens next:</strong> Maisie compares this check-in with your own recent logs. It can show something worth watching or help you prepare to talk to someone, but it does not diagnose.</div></div>`
+      }
+
+      flowContent.querySelectorAll('.flow-option').forEach(button => {
+        button.addEventListener('click', () => {
+          flowContent.querySelectorAll('.flow-option').forEach(option => option.setAttribute('aria-pressed', 'false'))
+          button.setAttribute('aria-pressed', 'true')
+          const key = step.type === 'overall' ? 'Overall' : step.type === 'impact' ? 'Impact' : step.type === 'detail' ? step.key : step.topic
+          answers[key] = button.textContent.trim()
+        })
+      })
+      flowContent.scrollTop = 0
+    }
+
+    function painLabel(value) {
+      if (value === 0) return 'No pain'
+      if (value <= 3) return 'Mild'
+      if (value <= 6) return 'Moderate'
+      return 'Severe'
+    }
+
+    function openFlow() {
+      const topics = selectedTopics()
+      if (!topics.length) return showToast('Choose at least one thing you want to log.')
+      answers = {}
+      const topicSteps = topics.flatMap(topic => [
+        { type: 'topic', topic },
+        ...(topicDetails[topic] || []).map(detail => ({ type: 'detail', topic, ...detail })),
+      ])
+      flowSteps = [{ type: 'overall' }, ...topicSteps, { type: 'impact' }, { type: 'review' }]
+      flowIndex = 0
+      flow.classList.add('open')
+      flow.setAttribute('aria-hidden', 'false')
+      renderFlow()
+    }
+
+    function closeFlow() {
+      flow.classList.remove('open')
+      flow.setAttribute('aria-hidden', 'true')
+    }
+
+    document.querySelector('#start-checkin').addEventListener('click', openFlow)
+    document.querySelector('#close-flow').addEventListener('click', closeFlow)
+    flowBack.addEventListener('click', () => {
+      if (flowIndex > 0) { flowIndex -= 1; renderFlow() }
+    })
+    flowNext.addEventListener('click', () => {
+      const step = flowSteps[flowIndex]
+      const answerKey = step.type === 'overall' ? 'Overall' : step.type === 'impact' ? 'Impact' : step.type === 'detail' ? step.key : step.topic
+      const optional = step.type === 'topic' && step.topic === 'Other'
+      if (step.type !== 'review' && !optional && answers[answerKey] === undefined) return showToast('Choose an answer before continuing.')
+      if (step.type === 'review') {
+        closeFlow()
+        const topics = selectedTopics()
+        document.querySelector('#new-checkin-card').style.display = 'none'
+        document.querySelector('#saved-checkin-card').classList.add('visible')
+        document.querySelector('#saved-topics').innerHTML = topics.map(topic => `<span>${topic}</span>`).join('')
+        showToast('Your check-in is saved. You can edit it from Today.')
+        return
+      }
+      flowIndex += 1
+      renderFlow()
+    })
+
+    document.querySelector('#edit-checkin').addEventListener('click', () => {
+      flowIndex = flowSteps.length - 1
+      flow.classList.add('open')
+      flow.setAttribute('aria-hidden', 'false')
+      renderFlow()
+    })
+
+    function makeSingleSelect(selector) {
+      document.querySelectorAll(selector).forEach(button => {
+        button.addEventListener('click', () => {
+          document.querySelectorAll(selector).forEach(item => item.setAttribute('aria-pressed', 'false'))
+          button.setAttribute('aria-pressed', 'true')
+        })
+      })
+    }
+    makeSingleSelect('.pattern-chip')
+    makeSingleSelect('.learn-chip')
+
+    document.querySelector('#learn-search').addEventListener('input', event => {
+      const query = event.target.value.trim().toLowerCase()
+      document.querySelectorAll('.article').forEach(article => {
+        article.hidden = query && !article.dataset.search.includes(query) && !article.textContent.toLowerCase().includes(query)
+      })
+    })
+  </script>
+</body>
+</html>

@@ -73,7 +73,7 @@ export default function DailyCheckIn() {
           Log today
         </Button>
         <p className="muted center" style={{ fontSize: 12, margin: '10px 0 0' }}>
-          No streaks to keep up with — just check in when you can. 🌙
+          No streaks to keep up with. Just check in when you can.
         </p>
       </div>
     </div>

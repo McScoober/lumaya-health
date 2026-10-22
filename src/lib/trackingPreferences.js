@@ -24,6 +24,15 @@ export const DEFAULT_TRACKING_MODULES = {
   moodPms: false,
 }
 
+export const DIET_PREFERENCES = [
+  'Vegetarian', 'Vegan', 'Halal', 'Kosher', 'Gluten-free', 'Dairy-free',
+  'No preference', 'Prefer not to say',
+]
+
+export const PERIOD_PRODUCTS = [
+  'Pads', 'Tampons', 'Cup', 'Period underwear', 'A mix', 'Prefer not to say',
+]
+
 export function trackingModulesFromProfile(profile = {}) {
   const saved = profile.trackingModules || {}
   const usesNewModules = ['core', 'symptoms', 'skinHair', 'movement', 'painRelief', 'bleedingDetail', 'moodPms']
@@ -79,9 +88,21 @@ export function symptomIsEnabled(symptom, modules) {
   return owners.some((moduleId) => modules[moduleId] !== false)
 }
 
-export function foodContentIsEnabled(profile = {}) {
+export function foodContentIsEnabled(profile = {}, dailyLogs = {}) {
   return features.food && trackingModulesFromProfile(profile).food &&
-    profile.hideFoodContent !== true && profile.sensitiveFoodMode !== true
+    profile.hideFoodContent !== true && !foodSensitiveModeIsActive(profile, dailyLogs)
+}
+
+export function foodSensitiveModeIsActive(profile = {}, dailyLogs = {}) {
+  if (profile.sensitiveFoodMode === true) return true
+  if (profile.sensitiveFoodMode === false) return false
+
+  const recentLoggedDays = Object.entries(dailyLogs)
+    .filter(([, log]) => log?.checkinCompleted === true)
+    .sort(([left], [right]) => right.localeCompare(left))
+    .slice(0, 14)
+
+  return recentLoggedDays.filter(([, log]) => log?.fuel?.meals === 'few').length >= 5
 }
 
 export function visibleTrackingModules() {

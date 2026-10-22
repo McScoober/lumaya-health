@@ -127,9 +127,61 @@ test('daily period status can keep a neutral flow observation', () => {
   })
   assert.equal('flow' in removed.periodLogs[dateKey], false)
 })
+test('structured tracking fields and edit metadata are stored without removing older observations', () => {
+  const dateKey = '2026-10-20'
+  const editedAt = '2026-10-22T14:00:00.000Z'
+  const state = reducer({
+    ...freshState(),
+    dailyLogs: { [dateKey]: { checkinCompleted: true, symptoms: ['Cramps'], reliefAttempted: ['Pain medicine'] } },
+  }, {
+    type: 'LOG_DAILY', dateKey, editedAt,
+    energy: 2, sleepHours: '6-7', rested: 'Not rested', movement: 'Light movement',
+    fuel: { meals: 'most', appetite: 'About usual', cravings: ['Salty'], ironFood: true, water: 'Some' },
+    bleeding: { productFullness: { light: 1, moderate: 2, full: 0 }, clots: 'Small', flooding: false },
+    medicineTaken: true, medicineRelief: 'partial',
+  })
+  const log = state.dailyLogs[dateKey]
+  assert.equal(log.editedAt, editedAt)
+  assert.equal(log.energy, 2)
+  assert.equal(log.fuel.ironFood, true)
+  assert.equal(log.bleeding.productFullness.moderate, 2)
+  assert.equal(log.medicineRelief, 'partial')
+  assert.equal('reliefAttempted' in log, false)
+  assert.deepEqual(log.symptoms, ['Cramps'])
+})
+
+test('tip history is bounded and keeps the latest display date', () => {
+  let state = freshState()
+  let latestDate = ''
+  for (let index = 0; index < 65; index += 1) {
+    latestDate = new Date(Date.UTC(2026, 0, index + 1)).toISOString().slice(0, 10)
+    state = reducer(state, { type: 'RECORD_TIPS', dateKey: latestDate, ids: [`tip-${index}`] })
+  }
+  assert.equal(Object.keys(state.tipHistory).length, 60)
+  assert.equal(state.tipHistory['tip-64'], latestDate)
+})
 test('a later period never confirms questionnaire flags in the browser', () => {
   const before = { ...freshState(), pendingTier2: ['PAIN-01'] }
   const after = reducer(before, { type: 'UPDATE_PERIOD_STATUS', dateKey: '2026-09-11', period: true })
   assert.deepEqual(after.confirmedTier2, [])
   assert.equal(after.result, null)
+})
+
+test('foundation and Route preference actions update synchronized state structures', () => {
+  let state = freshState()
+  state = reducer(state, { type: 'SET_TRACKING', payload: { reminderTime: '18:30', modules: { fuel: true } } })
+  state = reducer(state, { type: 'SET_NUTRITION', payload: { dietPattern: ['Vegan'], foodTipsEnabled: true } })
+  state = reducer(state, { type: 'SET_HISTORY', payload: { consentedAt: '2026-10-22T12:00:00.000Z' } })
+  state = reducer(state, { type: 'ADD_PERIODIC_CHECKIN', checkin: { id: 'pc-1', type: 'leaf', date: '2026-10-22', answers: {}, score: null } })
+  state = reducer(state, { type: 'SET_CHECKLISTS', payload: { talkToDoctor: { summary: true } } })
+  state = reducer(state, { type: 'SET_ROUTE_PREFERENCES', payload: { personalNote: 'Ask about pain.' } })
+
+  assert.equal(state.version, 3)
+  assert.equal(state.tracking.modules.fuel, true)
+  assert.equal(state.notifyPrefs.reminderTime, '18:30')
+  assert.deepEqual(state.nutrition.dietPattern, ['Vegan'])
+  assert.equal(state.history.consentedAt, '2026-10-22T12:00:00.000Z')
+  assert.equal(state.periodicCheckins[0].id, 'pc-1')
+  assert.equal(state.checklists.talkToDoctor.summary, true)
+  assert.equal(state.routePreferences.personalNote, 'Ask about pain.')
 })

@@ -1,22 +1,19 @@
 // Bottom navigation for the ongoing app (post-onboarding).
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useStore } from '../state/store.jsx'
 import { House, CalendarBlank, Books, FirstAid, UserCircle } from '@phosphor-icons/react'
 import { features } from '../config/features.js'
 
 const TABS = [
   { to: '/home', label: 'Home', Icon: House },
   { to: '/patterns', label: 'Patterns', Icon: CalendarBlank },
-  { to: '/learn', label: 'Learn', Icon: Books },
   ...(features.routeSummary ? [{ to: '/route', label: 'Route', Icon: FirstAid }] : []),
-  { to: '/profile', label: 'Profile', Icon: UserCircle },
+  { to: '/learn', label: 'Learn', Icon: Books },
+  { to: '/me', label: 'Me', Icon: UserCircle },
 ]
 
 export default function TabBar() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { state } = useStore()
-  const unread = state.messages.filter((m) => !m.read).length
 
   return (
     <nav className="tabbar" aria-label="Primary">
@@ -36,18 +33,6 @@ export default function TabBar() {
                 weight={active ? 'fill' : 'duotone'} 
                 color={active ? 'var(--pink-accent)' : 'var(--text-secondary)'} 
               />
-              {t.to === '/messages' && unread > 0 && (
-                <span
-                  style={{
-                    position: 'absolute', top: -4, right: -8,
-                    background: 'var(--red)', color: '#fff', borderRadius: 999,
-                    fontSize: 10, minWidth: 16, height: 16, display: 'grid', placeItems: 'center',
-                    padding: '0 4px', fontFamily: 'var(--font-body)',
-                  }}
-                >
-                  {unread}
-                </span>
-              )}
             </span>
             {t.label}
           </button>

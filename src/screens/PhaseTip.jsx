@@ -6,7 +6,6 @@ import { useStore } from '../state/store.jsx'
 import { buildTip } from '../engine/tipEngine.js'
 import { PHASE_META } from '../engine/cyclePredictor.js'
 import { Card, TopBar, PillTag } from '../components/ui.jsx'
-import Mascot from '../components/Mascot.jsx'
 
 export default function PhaseTip() {
   const { phase } = useParams()
@@ -22,8 +21,7 @@ export default function PhaseTip() {
       <TopBar title={`${meta.label} phase`} onBack={() => navigate('/home')} />
 
       <Card accent style={{ marginTop: 8, textAlign: 'center' }}>
-        <Mascot size={80} mood={phase === 'luteal' || phase === 'menstrual' ? 'sleepy' : 'happy'} />
-        <h1 style={{ margin: '8px 0 0', fontSize: 23 }}>{tip.headline}</h1>
+        <h1 style={{ margin: 0, fontSize: 23 }}>{tip.headline}</h1>
       </Card>
 
       <Card style={{ marginTop: 14 }}>

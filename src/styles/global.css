@@ -145,6 +145,80 @@ button {
   overflow: hidden;
 }
 
+.sync-notice {
+  position: absolute;
+  z-index: 45;
+  left: 12px;
+  right: 12px;
+  bottom: calc(12px + var(--safe-bottom));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 52px;
+  padding: 9px 10px 9px 13px;
+  color: var(--text-primary);
+  background: #fff;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: sync-notice-in 180ms ease-out;
+}
+
+.sync-notice--above-tabs {
+  bottom: calc(76px + var(--safe-bottom));
+}
+
+.sync-notice__message {
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.sync-notice__retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 36px;
+  padding: 0 8px;
+  color: var(--accent-ink);
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.app-error {
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 32px;
+  text-align: center;
+}
+
+.app-error h1 {
+  margin-bottom: 8px;
+  font-size: 24px;
+}
+
+.app-error p {
+  margin: 0;
+}
+
+.app-error .btn {
+  width: min(100%, 280px);
+}
+
+@keyframes sync-notice-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sync-notice { animation: none; }
+}
+
 .native-app .phone {
   padding-top: var(--safe-top);
 }
@@ -1606,9 +1680,6 @@ button {
   max-width: 90%;
 }
 .sms__meta { font-size: 11px; color: var(--ink-soft); margin-top: 4px; }
-
-/* ---- Mascot ---- */
-.mascot { display: inline-block; }
 
 /* ---- Confetti (milestone celebration 13.2.5) ---- */
 .confetti {

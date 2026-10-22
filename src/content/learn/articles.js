@@ -421,5 +421,5 @@ export const LEGACY_ARTICLE_SLUGS = {
 }
 
 export function visibleLearnArticles(state) {
-  return LEARN_ARTICLES.filter((item) => item.launch && (!item.requiresFoodModule || foodContentIsEnabled(state?.profile)))
+  return LEARN_ARTICLES.filter((item) => item.launch && (!item.requiresFoodModule || foodContentIsEnabled(state?.profile, state?.dailyLogs)))
 }

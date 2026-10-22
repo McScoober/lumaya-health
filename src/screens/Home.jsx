@@ -2,20 +2,21 @@
 // Calendar view, current phase, today's tip card, one-tap check-in CTA, recent activity.
 // The background + card accents tint to the current predicted phase (13.2.3);
 // BC users get a neutral pink/berry tint (no phase prediction).
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
-import { buildTip, maisieMessage } from '../engine/tipEngine.js'
+import { maisieMessage, selectDailyTips } from '../engine/tipEngine.js'
 import { deriveBodySignals } from '../engine/bodySignals.js'
 import { buildRouteSummary } from '../engine/routeSummary.js'
 import { features } from '../config/features.js'
 import { Card, Button } from '../components/ui.jsx'
-import Mascot from '../components/Mascot.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import ProgressiveCheckin from './ProgressiveCheckin.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
-import { ArrowRight, CheckCircle, ClipboardText, Gear } from '@phosphor-icons/react'
+import FoodSupportCard from '../components/FoodSupportCard.jsx'
+import { foodSensitiveModeIsActive } from '../lib/trackingPreferences.js'
+import { ArrowRight, CalendarBlank, CheckCircle, ClipboardText, Gear, MapPin } from '@phosphor-icons/react'
 
 function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
   let count = 0
@@ -84,16 +85,23 @@ export default function Home() {
     ? `Day ${phaseInfo.dayOfPeriod || 1}`
     : meta?.mood
 
-  const tip = useMemo(
-    () => (supportPhase
-      ? buildTip(supportPhase, { ...state.profile })
-      : {
-        headline: 'Start with the basics.',
-        why: 'Maisie needs more cycle history before showing timing-based patterns.',
-        actions: ['Drink some water, eat something steady, and log what you notice.'],
-      }),
-    [supportPhase, state.profile],
+  const tipSelection = useMemo(() => selectDailyTips({
+    phase: supportPhase,
+    profile: state.profile,
+    dailyLogs: state.dailyLogs,
+    tipHistory: state.tipHistory,
+    date: now,
+  }), [supportPhase, state.profile, state.dailyLogs, state.tipHistory, todayKey])
+  const tip = tipSelection.primary
+  const foodSensitive = useMemo(
+    () => foodSensitiveModeIsActive(state.profile, state.dailyLogs),
+    [state.profile, state.dailyLogs],
   )
+  useEffect(() => {
+    if (tipSelection.ids.some((id) => state.tipHistory?.[id] !== todayKey)) {
+      dispatch({ type: 'RECORD_TIPS', dateKey: todayKey, ids: tipSelection.ids })
+    }
+  }, [dispatch, state.tipHistory, tipSelection.ids, todayKey])
   const todayMaisieMsg = useMemo(
     () => (supportPhase ? maisieMessage(supportPhase, supportCycleDay, state.profile) : 'Your body is telling you something every day. Maisie helps you hear it.'),
     [supportPhase, supportCycleDay, state.profile]
@@ -148,36 +156,41 @@ export default function Home() {
 
       {/* Phase card */}
       <Card accent style={{ marginTop: 12 }}>
-        <div className="row row--between">
-          <div>
-            <div className="card__label">Right now</div>
-            {meta ? (
-              <>
-                <h2 style={{ margin: '2px 0 2px', color: 'var(--phase-accent)' }}>
-                  {phase === 'menstrual' ? 'Your period' : `${meta.label} phase`}
-                </h2>
-                <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>{phaseSubtitle}</p>
-              </>
-            ) : (
-              <>
-                <h2 style={{ margin: '2px 0 2px' }}>{baselineTitle}</h2>
-                <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
-                  {baselineBody}
-                </p>
-              </>
-            )}
-          </div>
-          <Mascot size={64} mood={phase === 'luteal' || phase === 'menstrual' ? 'sleepy' : 'happy'} />
+        <div>
+          <div className="card__label">Right now</div>
+          {meta ? (
+            <>
+              <h2 style={{ margin: '2px 0 2px', color: 'var(--phase-accent)' }}>
+                {phase === 'menstrual' ? 'Your period' : `${meta.label} phase`}
+              </h2>
+              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>{phaseSubtitle}</p>
+            </>
+          ) : (
+            <>
+              <h2 style={{ margin: '2px 0 2px' }}>{baselineTitle}</h2>
+              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
+                {baselineBody}
+              </p>
+            </>
+          )}
         </div>
         {periodStartedToday ? (
           <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
             Periods can vary in length. Notice how your energy and comfort feel today.
           </p>
         ) : prediction && (
-          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
-            {inWindow
-              ? "📍 You're in your predicted period window."
-              : `📅 Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}.`}
+          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
+            {inWindow ? (
+              <>
+                <MapPin size={16} weight="regular" aria-hidden="true" />
+                <span>You're in your predicted period window.</span>
+              </>
+            ) : (
+              <>
+                <CalendarBlank size={16} weight="regular" aria-hidden="true" />
+                <span>Next period in about {Math.max(0, prediction.daysUntil)} day{prediction.daysUntil === 1 ? '' : 's'}.</span>
+              </>
+            )}
           </p>
         )}
       </Card>
@@ -217,6 +230,25 @@ export default function Home() {
           </Card>
         </div>
       )}
+
+      {tipSelection.fuel && (
+        <Card style={{ marginTop: 10 }}>
+          <div className="card__label">Fuel note</div>
+          <h3 style={{ margin: '4px 0 6px' }}>{tipSelection.fuel.headline}</h3>
+          <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>{tipSelection.fuel.actions[0]}</p>
+        </Card>
+      )}
+
+      {tipSelection.nudge && (
+        <Card style={{ marginTop: 10 }}>
+          <div className="card__label">Worth reviewing</div>
+          <h3 style={{ margin: '4px 0 6px' }}>{tipSelection.nudge.headline}</h3>
+          <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5 }}>{tipSelection.nudge.why}</p>
+          <Button variant="secondary" onClick={() => navigate('/route')}>Open Route</Button>
+        </Card>
+      )}
+
+      {foodSensitive && <div style={{ marginTop: 10 }}><FoodSupportCard /></div>}
 
       {/* Daily check-in CTA */}
       <Card style={{ marginTop: 14 }}>

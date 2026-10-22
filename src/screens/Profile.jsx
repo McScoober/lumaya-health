@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
   Bell, Cake, CaretRight, CheckCircle, CloudArrowUp, Database, Info,
-  Lightbulb, PencilSimple, ShieldCheck, SlidersHorizontal, UsersThree, X,
+  DownloadSimple, Lightbulb, PencilSimple, ShieldCheck, SlidersHorizontal, UsersThree, X,
 } from '@phosphor-icons/react'
 import { useStore } from '../state/store.jsx'
-import { Button, ChipGroup } from '../components/ui.jsx'
+import { Button, Chip, ChipGroup } from '../components/ui.jsx'
+import FoodSupportCard from '../components/FoodSupportCard.jsx'
 import SupportAccess from '../components/SupportAccess.jsx'
 import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
 import { supabase } from '../lib/supabase.js'
@@ -16,6 +17,9 @@ import { clearGuestTracker } from '../lib/guestTracker.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
 import {
   profilePayloadForTrackingModules,
+  DIET_PREFERENCES,
+  foodSensitiveModeIsActive,
+  PERIOD_PRODUCTS,
   trackingModulesFromProfile,
   visibleTrackingModules,
 } from '../lib/trackingPreferences.js'
@@ -107,6 +111,35 @@ export default function Profile() {
     navigate('/')
   }
 
+  function downloadData() {
+    const exportData = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      profile: {
+        name: identity.name,
+        email: identity.email,
+        ageBand: identity.ageBand,
+        birthMonth: identity.birthMonth,
+        birthYear: identity.birthYear,
+        preferences: profile,
+      },
+      answers: state.answers,
+      dailyLogs: state.dailyLogs,
+      periodLogs: state.periodLogs,
+      reminderPreferences: state.notifyPrefs,
+    }
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `maisie-data-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.setTimeout(() => URL.revokeObjectURL(url), 0)
+    flash('Your data download is ready')
+  }
+
   return (
     <div className="screen screen--pad-bottom profile-screen">
       {toast && <div className="toast" role="status">{toast}</div>}
@@ -166,26 +199,26 @@ export default function Profile() {
             <AccountPanel
               email={identity.email}
               hasSavedAccount={hasSavedAccount}
-              onAddEmail={() => navigate('/auth?next=/profile&source=post-onboarding')}
+              onAddEmail={() => navigate('/auth?next=/me&source=post-onboarding')}
               onOpenData={() => setActiveSheet('data')}
             />
           )}
           {activeSheet === 'tracking' && (
-            <TrackingPanel modules={trackingModules} hideFoodContent={profile.hideFoodContent === true} onSave={(modules, hideFoodContent) => {
-              updateProfile(profilePayloadForTrackingModules(modules, { hideFoodContent }), 'Tracking preferences saved')
+            <TrackingPanel profile={profile} dailyLogs={state.dailyLogs} modules={trackingModules} hideFoodContent={profile.hideFoodContent === true} onSave={(modules, hideFoodContent, context) => {
+              updateProfile({ ...profilePayloadForTrackingModules(modules, { hideFoodContent }), ...context }, 'Tracking preferences saved')
               closeSheet()
             }} />
           )}
           {activeSheet === 'tips' && <TipsPanel profile={profile} notifyPrefs={notifyPrefs} updateProfile={updateProfile} dispatch={dispatch} />}
           {activeSheet === 'reminders' && (
-            <RemindersPanel enabled={notifyPrefs.periodCheckin} onChange={(periodCheckin) => {
-              dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin } })
+            <RemindersPanel enabled={notifyPrefs.periodCheckin} reminderTime={notifyPrefs.reminderTime || '20:30'} onChange={(payload) => {
+              dispatch({ type: 'SET_NOTIFY', payload })
               flash('Reminder preference saved')
             }} />
           )}
           {activeSheet === 'birthday' && <BirthdayPanel birthMonth={birthMonth} birthYear={birthYear} birthError={birthError} onChange={updateBirthMonthYear} />}
           {activeSheet === 'support' && <SupportAccess compact />}
-          {activeSheet === 'data' && <DataPanel hasSavedAccount={hasSavedAccount} onClear={clearDeviceData} />}
+          {activeSheet === 'data' && <DataPanel hasSavedAccount={hasSavedAccount} onDownload={downloadData} onClear={clearDeviceData} />}
           {activeSheet === 'about' && <AboutPanel />}
         </ProfileSheet>,
         document.body,
@@ -264,10 +297,19 @@ function AccountPanel({ email, hasSavedAccount, onAddEmail, onOpenData }) {
   )
 }
 
-function TrackingPanel({ modules, hideFoodContent, onSave }) {
+function TrackingPanel({ profile, dailyLogs, modules, hideFoodContent, onSave }) {
   const [draft, setDraft] = useState(modules)
   const [hideFood, setHideFood] = useState(hideFoodContent)
+  const [dietPreferences, setDietPreferences] = useState(profile.dietPreferences || [])
+  const [periodProducts, setPeriodProducts] = useState(profile.periodProducts || [])
   const availableModules = visibleTrackingModules()
+  const foodSensitive = foodSensitiveModeIsActive(profile, dailyLogs)
+  function toggleContext(value, current, setCurrent) {
+    const exclusive = new Set(['No preference', 'Prefer not to say'])
+    if (current.includes(value)) return setCurrent(current.filter((item) => item !== value))
+    if (exclusive.has(value)) return setCurrent([value])
+    setCurrent([...current.filter((item) => !exclusive.has(item)), value])
+  }
   return (
     <div className="profile-panel">
       <p className="profile-panel__intro">Choose what appears in check-ins and personalized learning. Existing entries are not removed.</p>
@@ -284,7 +326,20 @@ function TrackingPanel({ modules, hideFoodContent, onSave }) {
           }} />
         </div>
       )}
-      <Button block onClick={() => onSave(draft, hideFood)}>Save changes</Button>
+      {draft.food && !hideFood && !foodSensitive && (
+        <div className="profile-panel__section">
+          <h3>Diet preferences</h3>
+          <div className="chips">{DIET_PREFERENCES.map((option) => <Chip key={option} selected={dietPreferences.includes(option)} onClick={() => toggleContext(option, dietPreferences, setDietPreferences)}>{option}</Chip>)}</div>
+        </div>
+      )}
+      {draft.bleedingDetail && (
+        <div className="profile-panel__section">
+          <h3>Period products</h3>
+          <div className="chips">{PERIOD_PRODUCTS.map((option) => <Chip key={option} selected={periodProducts.includes(option)} onClick={() => toggleContext(option, periodProducts, setPeriodProducts)}>{option}</Chip>)}</div>
+        </div>
+      )}
+      {foodSensitive && <FoodSupportCard compact />}
+      <Button block onClick={() => onSave(draft, hideFood, { dietPreferences, periodProducts })}>Save changes</Button>
     </div>
   )
 }
@@ -302,11 +357,12 @@ function TipsPanel({ profile, notifyPrefs, updateProfile, dispatch }) {
   )
 }
 
-function RemindersPanel({ enabled, onChange }) {
+function RemindersPanel({ enabled, reminderTime, onChange }) {
   return (
     <div className="profile-panel">
       <p className="profile-panel__intro">Choose whether Maisie should use your learned period window for reminder preferences.</p>
-      <div className="profile-toggle-list"><Toggle label="Period check-ins" desc="Keep this preference ready for private device reminders." on={enabled} onChange={onChange} /></div>
+      <div className="profile-toggle-list"><Toggle label="Period check-ins" desc="Keep this preference ready for private device reminders." on={enabled} onChange={(periodCheckin) => onChange({ periodCheckin })} /></div>
+      {enabled && <label className="profile-field" htmlFor="reminder-time"><span>Reminder time</span><input id="reminder-time" className="input" type="time" value={reminderTime} onChange={(event) => onChange({ reminderTime: event.target.value })} /></label>}
       <p className="profile-panel__note">Native iPhone notifications are not enabled yet. Maisie will ask permission before sending any.</p>
     </div>
   )
@@ -322,11 +378,12 @@ function BirthdayPanel({ birthMonth, birthYear, birthError, onChange }) {
   )
 }
 
-function DataPanel({ hasSavedAccount, onClear }) {
+function DataPanel({ hasSavedAccount, onDownload, onClear }) {
   return (
     <div className="profile-panel">
       <p className="profile-panel__intro">{hasSavedAccount ? 'Your account information stays available after you clear this device.' : 'Your tracker is stored only on this device. Clearing it cannot be undone.'}</p>
       <div className="profile-data-note"><ShieldCheck size={22} weight="duotone" aria-hidden="true" /><p>Daily answers and pain ratings are not included in supporter access.</p></div>
+      <Button variant="secondary" block onClick={onDownload}><DownloadSimple size={19} weight="bold" aria-hidden="true" /> Download my data</Button>
       <Button variant="ghost" block className="profile-destructive-action" onClick={onClear}>{hasSavedAccount ? 'Sign out and clear this device' : 'Clear this device'}</Button>
       {hasSavedAccount && <p className="profile-panel__note">This signs you out and clears this device. It does not delete your account.</p>}
     </div>

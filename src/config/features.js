@@ -21,7 +21,9 @@ export const features = Object.freeze({
   routeSummary: feature('ROUTE_SUMMARY', true),
   routeCare: feature('ROUTE_CARE', true),
   routeCareReviewed: feature('ROUTE_CARE_REVIEWED', false),
+  routeWho: feature('ROUTE_WHO', true),
   periodicCheckins: feature('PERIODIC_CHECKINS', false),
-  history: feature('HISTORY', false),
+  historyCapture: feature('HISTORY_CAPTURE', false),
+  historyModifiers: feature('HISTORY_MODIFIERS', false),
   compoundFlags: feature('COMPOUND_FLAGS', false),
 })

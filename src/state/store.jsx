@@ -8,6 +8,16 @@ import { clearSignupDraft, readSignupDraft } from '../lib/signupDraft.js'
 import { bufferedMonthRange, monthCacheKey } from '../lib/historyWindow.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
 import { clearGuestTracker, readGuestTracker, saveGuestTracker } from '../lib/guestTracker.js'
+import { clearLegacyRoutePreferences, hasLegacyRoutePreferences, readRoutePreferences } from '../lib/routePreferences.js'
+import {
+  accountStateFromGuest,
+  DEFAULT_CHECKLISTS_V3,
+  DEFAULT_HISTORY_V3,
+  DEFAULT_NUTRITION_V3,
+  DEFAULT_TRACKING_V3,
+  migrateStoreV3,
+  STORE_VERSION,
+} from './storeMigration.js'
 
 function uid() {
   // Opaque internal user id (UUID-ish). Not derived from name/email.
@@ -15,10 +25,13 @@ function uid() {
   return 'u-' + Math.random().toString(36).slice(2) + Date.now().toString(36)
 }
 
+const DEFAULT_NOTIFY_PREFS = { periodCheckin: true, phaseTips: true, reminderTime: '20:30' }
+
 // ---- default state ----------------------------------------
 export function freshState() {
   const userId = uid()
   return {
+    version: STORE_VERSION,
     userId,
     accountId: null,
     onboarded: false,
@@ -47,6 +60,25 @@ export function freshState() {
       sleep: null,
       sport: '',
       onBirthControl: false,
+      menarcheDate: null,
+      periodProduct: null,
+      goals: [],
+    },
+    tracking: { modules: { ...DEFAULT_TRACKING_V3.modules }, reminderTime: DEFAULT_TRACKING_V3.reminderTime },
+    nutrition: { dietPattern: [...DEFAULT_NUTRITION_V3.dietPattern], foodTipsEnabled: DEFAULT_NUTRITION_V3.foodTipsEnabled },
+    history: {
+      conditions: [...DEFAULT_HISTORY_V3.conditions],
+      family: [...DEFAULT_HISTORY_V3.family],
+      medications: [...DEFAULT_HISTORY_V3.medications],
+      consentedAt: null,
+      shareInExport: { ...DEFAULT_HISTORY_V3.shareInExport },
+    },
+    periodicCheckins: [],
+    checklists: { talkToDoctor: { ...DEFAULT_CHECKLISTS_V3.talkToDoctor } },
+    routePreferences: {
+      selectedQuestions: [], personalNote: '', nameMode: 'first',
+      exportSections: { overview: true, cycles: true, pain: true, impact: true, mood: true, symptoms: true },
+      privacyWarningSeen: false, lastExportedAt: null,
     },
     answers: {},
     result: null, // last scoring result
@@ -61,7 +93,8 @@ export function freshState() {
     messages: [], // inbox
     advisorRequests: [],
     checkinHistory: [], // [{ date, level }]
-    notifyPrefs: { periodCheckin: true, phaseTips: true },
+    notifyPrefs: { ...DEFAULT_NOTIFY_PREFS },
+    tipHistory: {},
   }
 }
 
@@ -226,23 +259,26 @@ function normalizeResult(result) {
 }
 
 function normalizeSavedHealth(payload = {}) {
-  const answers = payload.answers || {}
+  const migrated = migrateStoreV3(payload)
+  const answers = migrated.answers || {}
   const {
     theme: _savedTheme,
     themeChoice: _savedThemeChoice,
     cycleNickname: _savedCycleNickname,
     ...profile
-  } = payload.profile || {}
-  let dailyLogs = stripPeriodFieldsFromDailyLogs(payload.dailyLogs || {})
-  let periodLogs = { ...(payload.periodLogs || {}), ...extractPeriodLogsFromDailyLogs(payload.dailyLogs || {}) }
+  } = migrated.profile || {}
+  let dailyLogs = stripPeriodFieldsFromDailyLogs(migrated.dailyLogs || {})
+  let periodLogs = { ...(migrated.periodLogs || {}), ...extractPeriodLogsFromDailyLogs(migrated.dailyLogs || {}) }
 
   for (const start of periodStartKeys(periodLogs)) {
     periodLogs = addPossiblePeriodDays(periodLogs, start)
   }
 
   return {
-    ...payload,
+    ...migrated,
     profile,
+    notifyPrefs: { ...DEFAULT_NOTIFY_PREFS, ...(payload.notifyPrefs || {}) },
+    tipHistory: payload.tipHistory || {},
     result: normalizeResult(payload.result),
     dailyLogs,
     periodLogs,
@@ -327,7 +363,39 @@ export function reducer(state, action) {
         cycleNickname: _cycleNickname,
         ...payload
       } = action.payload || {}
-      return { ...state, profile: { ...state.profile, ...payload } }
+      const savedModules = payload.trackingModules
+      const modules = savedModules ? {
+        ...state.tracking.modules,
+        core: true,
+        symptoms: savedModules.symptoms ?? state.tracking.modules.symptoms,
+        sleep: savedModules.sleep ?? state.tracking.modules.sleep,
+        skin: savedModules.skinHair ?? savedModules.skin ?? state.tracking.modules.skin,
+        fuel: savedModules.food ?? savedModules.fuel ?? state.tracking.modules.fuel,
+        movement: savedModules.movement ?? state.tracking.modules.movement,
+        painRelief: savedModules.painRelief ?? state.tracking.modules.painRelief,
+        bleedingDetail: savedModules.bleedingDetail ?? state.tracking.modules.bleedingDetail,
+        moodPms: savedModules.moodPms ?? state.tracking.modules.moodPms,
+        labs: savedModules.labs ?? state.tracking.modules.labs,
+      } : state.tracking.modules
+      const foodTipsEnabled = payload.hideFoodContent !== undefined
+        ? payload.hideFoodContent !== true
+        : state.nutrition.foodTipsEnabled
+      const periodProductLabels = {
+        Pads: 'pads', Tampons: 'tampons', Cup: 'cup', 'Period underwear': 'period-underwear', 'A mix': 'mix',
+      }
+      const periodProduct = payload.periodProducts
+        ? periodProductLabels[payload.periodProducts[0]] || null
+        : state.profile.periodProduct
+      return {
+        ...state,
+        profile: { ...state.profile, ...payload, periodProduct },
+        tracking: { ...state.tracking, modules },
+        nutrition: {
+          ...state.nutrition,
+          ...(payload.dietPreferences ? { dietPattern: payload.dietPreferences } : {}),
+          foodTipsEnabled,
+        },
+      }
     }
 
     case 'SET_IDENTITY':
@@ -371,6 +439,8 @@ export function reducer(state, action) {
       const {
         dateKey, mood, vibe, vibeLabel, symptoms, pain, impact, clearPain,
         painTiming, reliefAttempted, reliefReceived, bleedingExperience, bleedingDuration,
+        energy, sleepHours, rested, movement, fuel, bleeding, medicineTaken, medicineRelief,
+        editedAt,
         clearOptionalDetails, clearOptionalFields = [],
       } = action
       const prev = state.dailyLogs[dateKey] || {}
@@ -380,6 +450,7 @@ export function reducer(state, action) {
         prev.symptoms !== undefined ||
         prev.pain !== undefined ||
         prev.impact !== undefined
+      const savedEditedAt = editedAt || (wasLogged || dateKey !== dateKeyLocal() ? new Date().toISOString() : undefined)
       const updatedLog = {
         ...prev,
         checkinCompleted: true,
@@ -394,6 +465,15 @@ export function reducer(state, action) {
         ...(reliefReceived ? { reliefReceived } : {}),
         ...(bleedingExperience ? { bleedingExperience } : {}),
         ...(bleedingDuration ? { bleedingDuration } : {}),
+        ...(energy !== undefined ? { energy } : {}),
+        ...(sleepHours ? { sleepHours } : {}),
+        ...(rested ? { rested } : {}),
+        ...(movement ? { movement } : {}),
+        ...(fuel ? { fuel } : {}),
+        ...(bleeding ? { bleeding } : {}),
+        ...(medicineTaken !== undefined ? { medicineTaken } : {}),
+        ...(medicineRelief ? { medicineRelief } : {}),
+        ...(savedEditedAt ? { editedAt: savedEditedAt } : {}),
       }
       if (clearPain) delete updatedLog.pain
       const fieldsToClear = new Set(clearOptionalDetails
@@ -408,6 +488,20 @@ export function reducer(state, action) {
       }
       if (fieldsToClear.has('bleedingExperience') && !bleedingExperience) delete updatedLog.bleedingExperience
       if (fieldsToClear.has('bleedingDuration') && !bleedingDuration) delete updatedLog.bleedingDuration
+      for (const field of ['energy', 'sleepHours', 'rested', 'movement', 'fuel', 'bleeding', 'medicineTaken', 'medicineRelief']) {
+        if (!fieldsToClear.has(field)) continue
+        const value = { energy, sleepHours, rested, movement, fuel, bleeding, medicineTaken, medicineRelief }[field]
+        const emptyObject = value && typeof value === 'object' && !Array.isArray(value) && Object.values(value).every((item) => (
+          item === '' || item === null || item === undefined ||
+          (typeof item === 'object' && Object.values(item).every((nested) => !nested))
+        ))
+        if (value === '' || value === null || value === undefined || emptyObject) delete updatedLog[field]
+      }
+      if (medicineTaken !== undefined || medicineRelief) {
+        delete updatedLog.reliefAttempted
+        delete updatedLog.reliefReceived
+      }
+      if (bleeding) delete updatedLog.bleedingExperience
       const dailyLogs = {
         ...state.dailyLogs,
         [dateKey]: updatedLog,
@@ -428,8 +522,9 @@ export function reducer(state, action) {
     }
 
     case 'UPDATE_PERIOD_STATUS': {
-      const { dateKey, period, periodPromptAnswered, flow } = action
+      const { dateKey, period, periodPromptAnswered, flow, editedAt } = action
       const prev = state.periodLogs[dateKey] || {}
+      const savedEditedAt = editedAt || (Object.keys(prev).length > 0 || dateKey !== dateKeyLocal() ? new Date().toISOString() : undefined)
       const { status: _status, estimatedFrom: _estimatedFrom, ...cleanPrev } = prev
       const source = action.source || 'manual'
       let periodLogs = clearPossibleDaysFromStart(state.periodLogs, dateKey)
@@ -448,6 +543,7 @@ export function reducer(state, action) {
         } : {}),
         ...(periodPromptAnswered !== undefined ? { periodPromptAnswered } : {}),
         ...(period === true && flow ? { flow } : {}),
+        ...(savedEditedAt ? { editedAt: savedEditedAt } : {}),
       }
       if (period === false || flow === '') delete updatedPeriodLog.flow
 
@@ -516,7 +612,75 @@ export function reducer(state, action) {
       return { ...state, identity: { ...state.identity, supportContact: null, dashboardActive: false } }
 
     case 'SET_NOTIFY':
-      return { ...state, notifyPrefs: { ...state.notifyPrefs, ...action.payload } }
+      return {
+        ...state,
+        notifyPrefs: { ...state.notifyPrefs, ...action.payload },
+        tracking: action.payload.reminderTime
+          ? { ...state.tracking, reminderTime: action.payload.reminderTime }
+          : state.tracking,
+      }
+
+    case 'SET_TRACKING': {
+      const tracking = { ...state.tracking, ...action.payload, modules: { ...state.tracking.modules, ...(action.payload.modules || {}), core: true } }
+      return {
+        ...state,
+        tracking,
+        profile: {
+          ...state.profile,
+          trackingModules: {
+            ...state.profile.trackingModules,
+            core: true,
+            symptoms: tracking.modules.symptoms,
+            sleep: tracking.modules.sleep,
+            skinHair: tracking.modules.skin,
+            food: tracking.modules.fuel,
+            movement: tracking.modules.movement,
+            painRelief: tracking.modules.painRelief,
+            bleedingDetail: tracking.modules.bleedingDetail,
+            moodPms: tracking.modules.moodPms,
+          },
+          foodModule: tracking.modules.fuel,
+        },
+        notifyPrefs: action.payload.reminderTime
+          ? { ...state.notifyPrefs, reminderTime: action.payload.reminderTime }
+          : state.notifyPrefs,
+      }
+    }
+
+    case 'SET_NUTRITION': {
+      const nutrition = { ...state.nutrition, ...action.payload }
+      return {
+        ...state,
+        nutrition,
+        profile: {
+          ...state.profile,
+          dietPreferences: nutrition.dietPattern,
+          hideFoodContent: nutrition.foodTipsEnabled === false,
+        },
+      }
+    }
+
+    case 'SET_HISTORY':
+      return { ...state, history: { ...state.history, ...action.payload } }
+
+    case 'ADD_PERIODIC_CHECKIN':
+      return { ...state, periodicCheckins: [...state.periodicCheckins.filter((item) => item.id !== action.checkin.id), action.checkin] }
+
+    case 'SET_ROUTE_PREFERENCES':
+      return { ...state, routePreferences: { ...state.routePreferences, ...action.payload } }
+
+    case 'SET_CHECKLISTS':
+      return { ...state, checklists: { ...state.checklists, ...action.payload } }
+
+    case 'RECORD_TIPS': {
+      const ids = [...new Set(action.ids || [])].filter(Boolean)
+      if (!action.dateKey || ids.length === 0) return state
+      const entries = Object.entries({
+        ...state.tipHistory,
+        ...Object.fromEntries(ids.map((id) => [id, action.dateKey])),
+      }).sort(([, left], [, right]) => right.localeCompare(left)).slice(0, 60)
+      return { ...state, tipHistory: Object.fromEntries(entries) }
+    }
 
     case 'RESET':
       return freshState()
@@ -541,13 +705,17 @@ function initialState() {
   const base = freshState()
   if (typeof window === 'undefined') return base
   const saved = readGuestTracker(window.localStorage)
-  return saved ? { ...base, ...normalizeSavedHealth(saved), accountId: null } : base
+  return saved
+    ? { ...base, ...normalizeSavedHealth(saved), accountId: null }
+    : { ...base, ...normalizeSavedHealth(migrateStoreV3(base, { routePreferences: readRoutePreferences(window.localStorage) })) }
 }
 
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, initialState)
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured)
   const [accountError, setAccountError] = useState('')
+  const [syncStatus, setSyncStatus] = useState({ state: 'idle' })
+  const [syncRetryNonce, setSyncRetryNonce] = useState(0)
   const [historyStatus, setHistoryStatus] = useState({ key: null, error: '' })
   const stateRef = useRef(state)
   stateRef.current = state
@@ -555,6 +723,8 @@ export function StoreProvider({ children }) {
   const readyAccount = useRef(null)
   const initializing = useRef(null)
   const saveQueue = useRef(Promise.resolve())
+  const syncRetryTimer = useRef(null)
+  const syncRetryAttempts = useRef(0)
   const loadedHistoryMonths = useRef(new Set())
   const historyRequests = useRef(new Map())
 
@@ -577,6 +747,9 @@ export function StoreProvider({ children }) {
       historyRequests.current.clear()
       setHistoryStatus({ key: null, error: '' })
       setAccountError('')
+      setSyncStatus({ state: 'idle' })
+      clearTimeout(syncRetryTimer.current)
+      syncRetryAttempts.current = 0
       if (!id) {
         if (previous.accountId) dispatch({ type: 'RESET' })
         setAuthLoading(false)
@@ -589,10 +762,19 @@ export function StoreProvider({ children }) {
         const remote = await pullFromSupabase(id)
         if (!alive || revision !== epoch.current) return
         if (remote) {
-          dispatch({ type: 'HYDRATE', payload: remote })
+          const hasLegacyRoute = hasLegacyRoutePreferences(localStorage)
+          dispatch({
+            type: 'HYDRATE',
+            payload: hasLegacyRoute
+              ? migrateStoreV3(remote, { routePreferences: readRoutePreferences(localStorage) })
+              : remote,
+          })
+          if (hasLegacyRoute) clearLegacyRoutePreferences(localStorage)
         } else {
           const signupDraft = readSignupDraft(localStorage, user.email)
-          if (signupDraft && !isSupportOnlyRoute()) {
+          if (!previous.accountId && previous.onboarded && !isSupportOnlyRoute()) {
+            dispatch({ type: 'HYDRATE', payload: accountStateFromGuest(previous, id, user.email) })
+          } else if (signupDraft && !isSupportOnlyRoute()) {
             dispatch({
               type: 'HYDRATE',
               payload: {
@@ -626,6 +808,21 @@ export function StoreProvider({ children }) {
     })
     return () => { alive = false; ++epoch.current; clearTimeout(scheduled); subscription.unsubscribe() }
   }, [])
+
+  const retryAccountSync = useCallback(() => {
+    clearTimeout(syncRetryTimer.current)
+    setSyncRetryNonce((value) => value + 1)
+  }, [])
+
+  useEffect(() => {
+    function retryWhenOnline() {
+      if (readyAccount.current) retryAccountSync()
+    }
+    window.addEventListener('online', retryWhenOnline)
+    return () => window.removeEventListener('online', retryWhenOnline)
+  }, [retryAccountSync])
+
+  useEffect(() => () => clearTimeout(syncRetryTimer.current), [])
 
   const loadHistoryMonth = useCallback(async (month) => {
     const userId = stateRef.current.accountId
@@ -674,26 +871,49 @@ export function StoreProvider({ children }) {
   const fingerprint = JSON.stringify({ records: trackerRecords(state), identity: state.identity })
   useEffect(() => {
     if (!state.accountId || readyAccount.current !== state.accountId || authLoading || isSupportOnlyRoute()) return
+    clearTimeout(syncRetryTimer.current)
     const snapshot = state
     const revision = epoch.current
     const timer = setTimeout(() => {
       saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
         if (revision !== epoch.current || readyAccount.current !== snapshot.accountId) return
+        setSyncStatus({ state: 'saving' })
         try {
           const result = await pushToSupabase(snapshot.accountId, snapshot)
           if (revision !== epoch.current) return
           clearSignupDraft(localStorage)
           clearGuestTracker(localStorage)
           setAccountError('')
+          setSyncStatus({ state: 'synced' })
+          syncRetryAttempts.current = 0
           const currentFingerprint = JSON.stringify({ records: trackerRecords(stateRef.current), identity: stateRef.current.identity })
           if (currentFingerprint === fingerprint) dispatch({ type: 'SERVER_RESULT', result })
-        } catch {
-          if (revision === epoch.current) setAccountError('Your latest changes could not be saved. Keep this page open and try again later.')
+        } catch (error) {
+          if (revision !== epoch.current) return
+          const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+          const permanent = error?.retryable === false
+          if (import.meta.env.DEV) {
+            console.error('Tracker sync failed', {
+              code: error?.code,
+              status: error?.status,
+              message: error?.message,
+              details: error?.details,
+            })
+          }
+          setSyncStatus({ state: offline ? 'offline' : permanent ? 'blocked' : 'error' })
+          if (!offline && !permanent) {
+            const delay = Math.min(30000, 5000 * (2 ** syncRetryAttempts.current))
+            syncRetryAttempts.current += 1
+            syncRetryTimer.current = setTimeout(
+              () => setSyncRetryNonce((value) => value + 1),
+              delay,
+            )
+          }
         }
       })
     }, 700)
     return () => clearTimeout(timer)
-  }, [fingerprint, state.accountId, authLoading])
+  }, [fingerprint, state.accountId, authLoading, syncRetryNonce])
 
   useEffect(() => {
     if (state.accountId || authLoading || isSupportOnlyRoute()) return
@@ -718,10 +938,12 @@ export function StoreProvider({ children }) {
     cycleModel,
     authLoading,
     accountError,
+    syncStatus,
+    retryAccountSync,
     historyStatus,
     loadHistoryMonth,
     loadOlderHistory,
-  }), [state, cycleModel, authLoading, accountError, historyStatus, loadHistoryMonth, loadOlderHistory])
+  }), [state, cycleModel, authLoading, accountError, syncStatus, retryAccountSync, historyStatus, loadHistoryMonth, loadOlderHistory])
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }
 

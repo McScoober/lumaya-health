@@ -1,5 +1,6 @@
 // CycleOverlayChart, teen-friendly version
 import { useState } from 'react'
+import { Bed, Lightning, Smiley, Sparkle } from '@phosphor-icons/react'
 
 const PHASES = [
   { label: 'Period', days: 5, color: '#F4A5B8', lightColor: '#FDF0F4' },
@@ -12,28 +13,32 @@ const TOTAL_DAYS = PHASES.reduce((s, p) => s + p.days, 0)
 const SIGNALS = [
   {
     key: 'energy',
-    label: '⚡ Energy',
+    label: 'Energy',
+    Icon: Lightning,
     color: '#E8C86A',
     values: [2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2],
     insight: 'Your energy usually builds after your period ends and peaks mid-cycle. It can dip in the wind-down week, which is normal.',
   },
   {
     key: 'skin',
-    label: '✨ Skin',
+    label: 'Skin',
+    Icon: Sparkle,
     color: '#F4A5B8',
     values: [3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 3, 3, 3, 3],
     insight: 'Skin can look clearer during the building-up phase. Breakouts before your period are common and not your fault.',
   },
   {
     key: 'sleep',
-    label: '💤 Sleep',
+    label: 'Sleep',
+    Icon: Bed,
     color: '#C8AAD9',
     values: [3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 3, 3, 3],
     insight: 'Sleep is often best mid-cycle. Restless nights can show up in the wind-down week, so protect your sleep routine then.',
   },
   {
     key: 'mood',
-    label: '💚 Mood',
+    label: 'Mood',
+    Icon: Smiley,
     color: '#A9C7AB',
     values: [2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 3],
     insight: 'Mood often lifts in the building-up and peak phases. The wind-down week can feel heavier, and tracking helps you plan ahead.',
@@ -111,25 +116,33 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 12px 4px' }}>
-        {SIGNALS.map(s => (
-          <button
-            key={s.key}
-            onClick={() => setActiveKey(s.key)}
-            style={{
-              padding: '5px 12px',
-              borderRadius: 99,
-              fontSize: 12,
-              fontWeight: 600,
-              border: activeKey === s.key ? `2px solid ${s.color}` : '2px solid transparent',
-              background: activeKey === s.key ? '#fff' : 'rgba(44,24,16,0.08)',
-              color: activeKey === s.key ? s.color : '#5E3A55',
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            {s.label}
-          </button>
-        ))}
+        {SIGNALS.map(s => {
+          const Icon = s.Icon
+          return (
+            <button
+              key={s.key}
+              onClick={() => setActiveKey(s.key)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                padding: '5px 12px',
+                borderRadius: 99,
+                fontSize: 12,
+                fontWeight: 600,
+                border: activeKey === s.key ? `2px solid ${s.color}` : '2px solid transparent',
+                background: activeKey === s.key ? '#fff' : 'rgba(44,24,16,0.08)',
+                color: activeKey === s.key ? s.color : '#5E3A55',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
+            >
+              <Icon size={14} weight="bold" aria-hidden="true" />
+              {s.label}
+            </button>
+          )
+        })}
       </div>
 
       <svg

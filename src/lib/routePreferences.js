@@ -1,4 +1,4 @@
-const KEY = 'maisie.routePreferences.v1'
+export const LEGACY_ROUTE_PREFERENCES_KEY = 'maisie.routePreferences.v1'
 
 const DEFAULTS = Object.freeze({
   checklist: {},
@@ -19,7 +19,7 @@ const DEFAULTS = Object.freeze({
 
 export function readRoutePreferences(storage = globalThis.localStorage) {
   try {
-    const saved = JSON.parse(storage?.getItem(KEY) || '{}')
+    const saved = JSON.parse(storage?.getItem(LEGACY_ROUTE_PREFERENCES_KEY) || '{}')
     return {
       ...DEFAULTS,
       ...saved,
@@ -31,9 +31,17 @@ export function readRoutePreferences(storage = globalThis.localStorage) {
   }
 }
 
+export function hasLegacyRoutePreferences(storage = globalThis.localStorage) {
+  return Boolean(storage?.getItem(LEGACY_ROUTE_PREFERENCES_KEY))
+}
+
 export function saveRoutePreferences(value, storage = globalThis.localStorage) {
-  storage?.setItem(KEY, JSON.stringify(value))
+  storage?.setItem(LEGACY_ROUTE_PREFERENCES_KEY, JSON.stringify(value))
   return value
+}
+
+export function clearLegacyRoutePreferences(storage = globalThis.localStorage) {
+  storage?.removeItem(LEGACY_ROUTE_PREFERENCES_KEY)
 }
 
 export { DEFAULTS as DEFAULT_ROUTE_PREFERENCES }

@@ -4,6 +4,7 @@ import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { StoreProvider } from './state/store.jsx'
 import App from './App.jsx'
+import AppErrorBoundary from './components/AppErrorBoundary.jsx'
 import { implicitAuthCallbackUrl } from './lib/authRedirect.js'
 import '@fontsource/dm-sans/latin-400.css'
 import '@fontsource/dm-sans/latin-500.css'
@@ -28,10 +29,12 @@ const Router = import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : BrowserRout
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <Router>
-      <StoreProvider>
-        <App />
-      </StoreProvider>
-    </Router>
+    <AppErrorBoundary>
+      <Router>
+        <StoreProvider>
+          <App />
+        </StoreProvider>
+      </Router>
+    </AppErrorBoundary>
   </React.StrictMode>,
 )

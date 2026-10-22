@@ -2,6 +2,7 @@ import { getAuthRedirectUrl, supabase } from './supabase.js'
 import { diffRecords, trackerRecords } from './trackerRecords.js'
 import { historyPageRange, initialHistoryStart } from './historyWindow.js'
 import { ageBandFromBirthMonthYear } from './age.js'
+import { stateFromSynchronizedPreferences } from '../state/storeMigration.js'
 
 const snapshots = new Map()
 export function clearSyncCache() { snapshots.clear() }
@@ -11,8 +12,15 @@ function requireClient() {
 }
 async function rpc(name, args = {}) {
   requireClient()
-  const { data, error } = await supabase.rpc(name, args)
-  if (error) throw new Error(error.message)
+  const { data, error, status } = await supabase.rpc(name, args)
+  if (error) {
+    const requestError = new Error(error.message)
+    requestError.code = error.code
+    requestError.details = error.details
+    requestError.status = status
+    requestError.retryable = !status || status >= 500 || status === 408 || status === 429
+    throw requestError
+  }
   return data
 }
 async function ownRows(table, userId) {
@@ -78,8 +86,10 @@ export async function pullFromSupabase(userId) {
   const result = screening[0]?.result || null
   const savedAnswers = Object.fromEntries(answers.map((row) => [row.question_key, row.answer]))
   const currentAgeBand = ageBandFromBirthMonthYear(profile.birth_month, profile.birth_year) || profile.age_band
+  const foundation = stateFromSynchronizedPreferences(setting.preferences, setting.profile)
   const state = {
-    userId, onboarded: setting.onboarded, profile: setting.profile, notifyPrefs: setting.preferences,
+    ...foundation,
+    userId, onboarded: setting.onboarded, profile: foundation.profile,
     identity: {
       name: profile.name || '', email: profile.email || '', ageBand: currentAgeBand,
       birthMonth: profile.birth_month || null, birthYear: profile.birth_year || null,
@@ -107,13 +117,20 @@ export async function pushToSupabase(userId, state) {
   const current = trackerRecords(state)
   const changes = diffRecords(snapshots.get(userId), current)
   const identity = state.identity || {}
-  const { error: profileError } = await supabase.from('profiles').upsert({
+  const { error: profileError, status: profileStatus } = await supabase.from('profiles').upsert({
     user_id: userId, name: identity.name?.trim().slice(0, 80) || null,
     email: data.user.email, age_band: identity.ageBand || null,
     birth_month: identity.birthMonth || null, birth_year: identity.birthYear || null,
     is_minor: !!identity.isMinor, privacy_ack_at: identity.privacyAckAt || null,
   }, { onConflict: 'user_id' })
-  if (profileError) throw new Error(profileError.message)
+  if (profileError) {
+    const requestError = new Error(profileError.message)
+    requestError.code = profileError.code
+    requestError.details = profileError.details
+    requestError.status = profileStatus
+    requestError.retryable = !profileStatus || profileStatus >= 500 || profileStatus === 408 || profileStatus === 429
+    throw requestError
+  }
   const result = await rpc('save_tracker_changes', { changes, expected_user_id: userId })
   snapshots.set(userId, current)
   return result

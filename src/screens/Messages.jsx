@@ -7,12 +7,20 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { buildSchedule } from '../engine/notifications.js'
 import { Card } from '../components/ui.jsx'
-import Mascot from '../components/Mascot.jsx'
+import MaisieLogo from '../components/MaisieLogo.jsx'
+import { BellSimple, Drop, EnvelopeSimple } from '@phosphor-icons/react'
 
 function fmtDay(d) {
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
-const TYPE_ICON = { period_checkin: '🩸', phase_checkin: '🌙', luteal_nudge: '🌙', system: '✉️' }
+
+function MessageIcon({ type, size = 20 }) {
+  if (type === 'period_checkin') return <Drop size={size} aria-hidden="true" />
+  if (type === 'phase_checkin' || type === 'luteal_nudge') {
+    return <BellSimple size={size} aria-hidden="true" />
+  }
+  return <EnvelopeSimple size={size} aria-hidden="true" />
+}
 
 export default function Messages() {
   const navigate = useNavigate()
@@ -46,7 +54,7 @@ export default function Messages() {
               <Card key={m.id} onClick={() => m.cta && navigate(m.cta)} role={m.cta ? 'button' : undefined}
                 style={m.cta ? { cursor: 'pointer' } : undefined}>
                 <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
-                  <span aria-hidden="true" style={{ fontSize: 20 }}>{TYPE_ICON[m.channel] || '✉️'}</span>
+                  <MessageIcon type={m.channel} />
                   <div className="grow">
                     <p style={{ margin: 0, fontWeight: 600, fontSize: 14.5 }}>{m.title}</p>
                     <p className="muted" style={{ margin: '3px 0 0', fontSize: 13.5 }}>{m.body}</p>
@@ -62,7 +70,7 @@ export default function Messages() {
       <div className="card__label" style={{ marginTop: 18 }}>Coming up</div>
       {schedule.length === 0 ? (
         <Card className="center">
-          <Mascot size={72} />
+          <MaisieLogo size={56} style={{ margin: '0 auto', opacity: 0.72 }} />
           <p className="muted" style={{ margin: '8px 0 0', fontSize: 13.5 }}>
             Log a daily check-in and your personalized cadence will appear here.
           </p>
@@ -76,7 +84,10 @@ export default function Messages() {
               </div>
               <div className="sms grow">
                 {m.body}
-                <div className="sms__meta">{TYPE_ICON[m.type]} {m.title}</div>
+                <div className="sms__meta" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <MessageIcon type={m.type} size={13} />
+                  {m.title}
+                </div>
               </div>
             </div>
           ))}

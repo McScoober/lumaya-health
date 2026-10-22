@@ -29,6 +29,11 @@ test('heavy bleeding card is based only on entered bleeding observations', () =>
     periodLogs: { '2026-10-01': periodDay(true) },
   }
   assert.match(learnLogCard('heavy-periods', state).text, /soaking or leaking on 1 day/)
+  const structured = {
+    dailyLogs: { '2026-10-02': daily({ bleeding: { flooding: true, productFullness: { full: 1 } } }) },
+    periodLogs: { '2026-10-02': periodDay(true) },
+  }
+  assert.match(learnLogCard('heavy-periods', structured).text, /soaking or leaking on 1 day/)
 })
 
 test('irregular cycle card appears above the 45-day boundary', () => {
@@ -67,6 +72,11 @@ test('food card respects module and sensitive-content preferences', () => {
   assert.equal(learnLogCard('food-and-your-cycle', { profile: {} }), null)
   assert.ok(learnLogCard('food-and-your-cycle', { profile: { foodModule: true } }))
   assert.equal(learnLogCard('food-and-your-cycle', { profile: { foodModule: true, sensitiveFoodMode: true } }), null)
+  const recentFewMeals = Object.fromEntries(Array.from({ length: 5 }, (_, index) => [
+    `2026-10-${String(index + 1).padStart(2, '0')}`,
+    daily({ fuel: { meals: 'few' } }),
+  ]))
+  assert.equal(learnLogCard('food-and-your-cycle', { profile: { foodModule: true }, dailyLogs: recentFewMeals }), null)
 })
 
 test('context cards never name a diagnosis', () => {

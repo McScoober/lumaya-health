@@ -69,7 +69,7 @@ export default function SupportAccess({ compact = false }) {
         <ShieldCheck size={26} weight="duotone" aria-hidden="true" />
         <h2>Invite someone you trust</h2>
         <p className="muted">Save your tracker before choosing who can see a support summary.</p>
-        <Button onClick={() => navigate('/auth?next=/profile&source=post-onboarding')}>Save your tracker</Button>
+        <Button onClick={() => navigate('/auth?next=/me&source=post-onboarding')}>Save your tracker</Button>
       </Card>
     )
   }
