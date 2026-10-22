@@ -27,7 +27,7 @@ function currentRecords(records) {
   return [...byEmail.values()].sort((a, b) => priority[b.status] - priority[a.status])
 }
 
-export default function SupportAccess() {
+export default function SupportAccess({ compact = false }) {
   const { state, authLoading } = useStore()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
@@ -76,11 +76,15 @@ export default function SupportAccess() {
 
   return (
     <section className="trusted-access">
-      <header className="trusted-access__header">
-        <p className="eyebrow">Private sharing</p>
-        <h2>People you trust</h2>
-        <p className="muted">You choose what each person can see. Your answers and daily pain ratings stay private.</p>
-      </header>
+      {compact ? (
+        <p className="support-compact-intro">You choose what each person can see. Daily answers and pain ratings stay private.</p>
+      ) : (
+        <header className="trusted-access__header">
+          <p className="eyebrow">Private sharing</p>
+          <h2>People you trust</h2>
+          <p className="muted">You choose what each person can see. Your answers and daily pain ratings stay private.</p>
+        </header>
+      )}
 
       <Card className="support-invite-card">
         <div className="support-section-title">

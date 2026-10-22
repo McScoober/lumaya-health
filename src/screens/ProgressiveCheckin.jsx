@@ -110,7 +110,7 @@ function ProgressiveCard({ question: q, answers, onAnswer, remaining }) {
             fontWeight: 700,
             textTransform: 'uppercase',
             letterSpacing: '0.08em',
-            color: 'var(--pink-accent, #E0528A)',
+            color: 'var(--pink-accent, #713666)',
           }}
         >
           Help Maisie know you better
@@ -130,7 +130,7 @@ function ProgressiveCard({ question: q, answers, onAnswer, remaining }) {
           margin: '0 0 12px',
           fontWeight: 700,
           fontSize: 15,
-          color: '#2C1810',
+          color: '#3F0824',
           lineHeight: 1.35,
         }}
       >
@@ -200,14 +200,14 @@ function ProgressiveCard({ question: q, answers, onAnswer, remaining }) {
               style={{
                 fontSize: 36,
                 fontWeight: 800,
-                color: 'var(--pink-accent, #E0528A)',
+                color: 'var(--pink-accent, #713666)',
                 minWidth: 40,
               }}
             >
               {localValue}
             </span>
             <div>
-              <div style={{ fontWeight: 700, color: 'var(--pink-accent, #E0528A)', fontSize: 13 }}>
+              <div style={{ fontWeight: 700, color: 'var(--pink-accent, #713666)', fontSize: 13 }}>
                 {painLabel(localValue)}
               </div>
               <div className="muted" style={{ fontSize: 12 }}>
@@ -243,7 +243,7 @@ function ProgressiveCard({ question: q, answers, onAnswer, remaining }) {
           padding: '12px 16px',
           border: 'none',
           borderRadius: 12,
-          background: isAnswered ? 'var(--pink-accent, #E0528A)' : 'rgba(44,24,16,0.08)',
+          background: isAnswered ? 'var(--pink-accent, #713666)' : 'rgba(44,24,16,0.08)',
           color: isAnswered ? '#fff' : 'rgba(44,24,16,0.3)',
           fontSize: 14,
           fontWeight: 700,

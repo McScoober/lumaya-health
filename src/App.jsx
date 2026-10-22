@@ -8,6 +8,7 @@ import AuthCallback from './screens/AuthCallback.jsx'
 import Welcome from './screens/Welcome.jsx'
 import AgeConsent from './screens/AgeConsent.jsx'
 import Personalization from './screens/Personalization.jsx'
+import TrackingSetup from './screens/TrackingSetup.jsx'
 import CheckIn from './screens/CheckIn.jsx'
 import Result from './screens/Result.jsx'
 import Home from './screens/Home.jsx'
@@ -18,8 +19,17 @@ import Dashboard from './screens/Dashboard.jsx'
 import ParentView from './screens/ParentView.jsx'
 import Settings from './screens/Settings.jsx'
 import Messages from './screens/Messages.jsx'
+import { features } from './config/features.js'
+import {
+  RouteCare,
+  RouteDismissed,
+  RouteExport,
+  RouteHome,
+  RouteSummary,
+  RouteTalk,
+} from './screens/Route.jsx'
 
-const APP_TABS = ['/home', '/patterns', '/library', '/profile']
+const APP_TABS = ['/home', '/patterns', '/learn', '/route', '/profile']
 
 function RequireOnboarded({ children }) {
   const { state, authLoading, accountError } = useStore()
@@ -32,7 +42,7 @@ function RequireOnboarded({ children }) {
 import DailyLog from './screens/DailyLog.jsx'
 import Patterns from './screens/Patterns.jsx'
 
-import Library from './screens/Library.jsx'
+import { LearnArticle, LearnCategory, LearnHome, LegacyLearnRedirect } from './screens/Learn.jsx'
 import Profile from './screens/Profile.jsx'
 
 export default function App() {
@@ -55,6 +65,7 @@ export default function App() {
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/age" element={<AgeConsent />} />
           <Route path="/personalize" element={<Personalization />} />
+          <Route path="/personalize/tracking" element={<TrackingSetup />} />
           <Route path="/checkin" element={<CheckIn />} />
           <Route path="/result" element={<Result />} />
 
@@ -62,8 +73,20 @@ export default function App() {
           <Route path="/home" element={<RequireOnboarded><Home /></RequireOnboarded>} />
           <Route path="/signals" element={<Navigate to="/patterns?tab=signals" replace />} />
           <Route path="/patterns" element={<RequireOnboarded><Patterns /></RequireOnboarded>} />
-          <Route path="/library" element={<RequireOnboarded><Library /></RequireOnboarded>} />
+          <Route path="/learn" element={<RequireOnboarded><LearnHome /></RequireOnboarded>} />
+          <Route path="/learn/c/:category" element={<RequireOnboarded><LearnCategory /></RequireOnboarded>} />
+          <Route path="/learn/:slug" element={<RequireOnboarded><LearnArticle /></RequireOnboarded>} />
+          <Route path="/library" element={<Navigate to="/learn" replace />} />
+          <Route path="/library/:slug" element={<RequireOnboarded><LegacyLearnRedirect /></RequireOnboarded>} />
           <Route path="/profile" element={<RequireOnboarded><Profile /></RequireOnboarded>} />
+          <Route path="/route" element={<RequireOnboarded><RouteHome /></RequireOnboarded>} />
+          <Route path="/route/summary" element={<RequireOnboarded><RouteSummary /></RequireOnboarded>} />
+          <Route path="/route/summary/export" element={<RequireOnboarded><RouteExport /></RequireOnboarded>} />
+          <Route path="/route/summary/print" element={<RequireOnboarded><RouteExport /></RequireOnboarded>} />
+          <Route path="/route/talk" element={<RequireOnboarded><RouteTalk /></RequireOnboarded>} />
+          <Route path="/route/talk/dismissed" element={<RequireOnboarded><RouteDismissed /></RequireOnboarded>} />
+          <Route path="/route/care" element={<RequireOnboarded><RouteCare /></RequireOnboarded>} />
+          <Route path="/route/care/urgent" element={<RequireOnboarded><RouteCare urgent /></RequireOnboarded>} />
           <Route path="/support" element={<Navigate to="/profile" replace />} />
           <Route path="/dashboard" element={<Navigate to="/profile" replace />} />
           
@@ -71,7 +94,7 @@ export default function App() {
           <Route path="/log" element={<RequireOnboarded><DailyLog /></RequireOnboarded>} />
           <Route path="/daily" element={<Navigate to="/log" replace />} />
           <Route path="/tip/:phase" element={<RequireOnboarded><PhaseTip /></RequireOnboarded>} />
-          <Route path="/advisor" element={<RequireOnboarded><Advisor /></RequireOnboarded>} />
+          <Route path="/advisor" element={features.routeSummary ? <Navigate to="/route/talk" replace /> : <RequireOnboarded><Advisor /></RequireOnboarded>} />
           <Route path="/messages" element={<RequireOnboarded><Messages /></RequireOnboarded>} />
           <Route path="/settings" element={<Navigate to="/profile" replace />} />
 

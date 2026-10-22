@@ -1,0 +1,23 @@
+{
+  "name": "Maisie Health",
+  "short_name": "Maisie",
+  "description": "Teen health navigation for understanding concerns, preparing for care, and finding the right next step.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7FB",
+  "theme_color": "#FAF7FB",
+  "icons": [
+    {
+      "src": "/icons/icon-192.webp",
+      "type": "image/webp",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.webp",
+      "type": "image/webp",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ]
+}

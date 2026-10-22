@@ -1,12 +1,10 @@
 // Daily Micro-Logger — single screen, < 10 seconds to complete.
 // Maisie rebuild: collapses the former 6-screen (/log/0–5) flow into one panel.
 //
-// Layout (top → bottom):
-//   1. Mood row — 5 emoji faces, tap to select
-//   2. Pain dot-scale — 0–10 tappable dots (no dragging)
-//   3. Symptom bubbles — chip grid (existing set)
-//   4. Impact toggles — compact icon row
-//   5. "Log it" button
+// Layout (top to bottom):
+//   1. Core period/flow and pain observations
+//   2. Shared collapsible symptom clusters
+//   3. "Log it" button
 //
 // After logging:
 //   - A short, practical suggestion appears based on the just-saved log
@@ -15,12 +13,20 @@ import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
+import {
+  shouldShowBleedingDetails,
+  shouldShowPainRelief,
+  symptomIsEnabled,
+  trackingModulesFromProfile,
+} from '../lib/trackingPreferences.js'
+import { groupSymptomOptions, SYMPTOM_CLUSTERS } from '../content/symptomClusters.js'
 import { TopBar, Chip } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
 import {
   SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank,
   BookOpen, PersonSimpleRun, CalendarBlank, Moon, CheckCircle, CaretDown,
+  BowlFood, DotsThreeCircle, Drop, Heartbeat, Sparkle,
 } from '@phosphor-icons/react'
 
 // ── Data ──────────────────────────────────────────────────────────────────
@@ -54,22 +60,49 @@ const BLEEDING_DURATION_OPTIONS = [
   'Not sure', 'Prefer not to say',
 ]
 
+const FLOW_OPTIONS = [
+  { value: 'light', label: 'Light' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'heavy', label: 'Heavy' },
+]
+
+const CLUSTER_ICONS = {
+  'period-bleeding': Drop,
+  'pain-cramps': Heartbeat,
+  'mood-energy': Smiley,
+  sleep: Moon,
+  'skin-hair-body': Sparkle,
+  'tummy-other': DotsThreeCircle,
+  'food-fuel': BowlFood,
+}
+
+const OPEN_CLUSTERS_KEY = 'maisie.dailyLog.openClusters'
+
+function readOpenClusters() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(OPEN_CLUSTERS_KEY) || '[]')
+    return new Set(Array.isArray(saved) ? saved : [])
+  } catch {
+    return new Set()
+  }
+}
+
 const EXCLUSIVE_RELIEF_OPTIONS = new Set(['Nothing yet', 'Not sure', 'Prefer not to say'])
 
 const VIBE_OPTIONS = [
-  { key: 'great', label: 'Great',  value: 5, Icon: SmileyWink,  color: '#4BAF6B' },
-  { key: 'good',  label: 'Good',   value: 4, Icon: Smiley,      color: '#C8920A' },
-  { key: 'okay',  label: 'Okay',   value: 3, Icon: SmileyMeh,   color: '#9B72CC' },
-  { key: 'rough', label: 'Rough',  value: 2, Icon: SmileySad,   color: '#E06B6B' },
-  { key: 'awful', label: 'Awful',  value: 1, Icon: SmileyBlank, color: '#E0528A' },
+  { key: 'great', label: 'Great',  value: 5, Icon: SmileyWink,  color: '#4E7554' },
+  { key: 'good',  label: 'Good',   value: 4, Icon: Smiley,      color: '#713666' },
+  { key: 'okay',  label: 'Okay',   value: 3, Icon: SmileyMeh,   color: '#713666' },
+  { key: 'rough', label: 'Rough',  value: 2, Icon: SmileySad,   color: '#EB587B' },
+  { key: 'awful', label: 'Awful',  value: 1, Icon: SmileyBlank, color: '#713666' },
 ]
 
 const IMPACTS = [
   { id: 'school',   label: 'School',   Icon: BookOpen,          color: '#7B9FD4' },
-  { id: 'activity', label: 'Activity', Icon: PersonSimpleRun,   color: '#4BAF6B' },
-  { id: 'plans',    label: 'Plans',    Icon: CalendarBlank,     color: '#C8920A' },
-  { id: 'sleep',    label: 'Sleep',    Icon: Moon,              color: '#9B72CC' },
-  { id: 'fine',     label: 'All good', Icon: CheckCircle,       color: '#4BAF6B' },
+  { id: 'activity', label: 'Activity', Icon: PersonSimpleRun,   color: '#4E7554' },
+  { id: 'plans',    label: 'Plans',    Icon: CalendarBlank,     color: '#713666' },
+  { id: 'sleep',    label: 'Sleep',    Icon: Moon,              color: '#713666' },
+  { id: 'fine',     label: 'All good', Icon: CheckCircle,       color: '#4E7554' },
 ]
 
 function vibeFromLog(log = {}) {
@@ -95,7 +128,7 @@ function hasDailyAnswers(log = {}) {
 }
 
 // ── Practical post-log guidance ───────────────────────────────────────────
-function getDailyTip({ symptoms, pain, impacts, vibe }) {
+function getDailyTip({ symptoms, pain, impacts, vibe, foodEnabled }) {
   if (symptoms.includes('Cramps') || pain >= 4) {
     return 'A heating pad on your lower abdomen or back may help with cramps. Rest and drink water if you can.'
   }
@@ -112,7 +145,9 @@ function getDailyTip({ symptoms, pain, impacts, vibe }) {
     return 'Try lying down with a pillow under your knees to reduce pressure on your lower back.'
   }
   if (symptoms.includes('Fatigue')) {
-    return 'Rest if you can, and consider a snack with protein or iron.'
+    return foodEnabled
+      ? 'Rest if you can, and consider a snack with protein or iron.'
+      : 'Rest if you can, and notice whether the fatigue keeps returning.'
   }
   if (symptoms.includes('Sleep trouble') || impacts.includes('sleep')) {
     return 'Lower the lights, avoid late caffeine, and put your phone down a little earlier.'
@@ -127,7 +162,9 @@ function getDailyTip({ symptoms, pain, impacts, vibe }) {
     return 'Note what was affected today. This can help you explain the pattern later.'
   }
   if (vibe?.value >= 4) {
-    return 'Think about what helped today, such as sleep, food, movement, or less stress.'
+    return foodEnabled
+      ? 'Think about what helped today, such as sleep, food, movement, or less stress.'
+      : 'Think about what helped today, such as sleep, movement, or less stress.'
   }
   return 'Your check-in is saved. Keep logging when you notice changes.'
 }
@@ -144,7 +181,11 @@ export default function DailyLog() {
     ? requestedDateKey
     : todayKey
   const existingLog = state.dailyLogs[dateKey] || {}
-  const isEditing = hasDailyAnswers(existingLog)
+  const existingPeriodLog = state.periodLogs[dateKey] || {}
+  const trackingModules = trackingModulesFromProfile(state.profile)
+  const visibleSymptoms = SYMPTOMS.filter((symptom) => symptomIsEnabled(symptom, trackingModules))
+  const groupedSymptoms = groupSymptomOptions(visibleSymptoms)
+  const isEditing = hasDailyAnswers(existingLog) || existingPeriodLog.periodPromptAnswered === true
   const isToday = dateKey === todayKey
   const returnTo = searchParams.get('from') === 'patterns' ? '/patterns' : '/home'
   const displayDate = new Date(`${dateKey}T12:00:00`).toLocaleDateString(undefined, {
@@ -154,6 +195,12 @@ export default function DailyLog() {
   })
 
   const [vibe,    setVibe]    = useState(() => vibeFromLog(existingLog))
+  const [periodToday, setPeriodToday] = useState(() => {
+    if (existingPeriodLog.period === true || existingPeriodLog.status === 'confirmed') return true
+    if (existingPeriodLog.status === 'not_period') return false
+    return null
+  })
+  const [flow, setFlow] = useState(() => existingPeriodLog.flow || '')
   const [pain,    setPain]    = useState(() => typeof existingLog.pain === 'number' ? existingLog.pain : null)
   const [symptoms, setSymptoms] = useState(() => [...(existingLog.symptoms || [])])
   const [impacts,  setImpacts]  = useState(() => [...(existingLog.impact || [])])
@@ -162,11 +209,24 @@ export default function DailyLog() {
   const [reliefReceived, setReliefReceived] = useState(() => existingLog.reliefReceived || '')
   const [bleedingExperience, setBleedingExperience] = useState(() => existingLog.bleedingExperience || '')
   const [bleedingDuration, setBleedingDuration] = useState(() => existingLog.bleedingDuration || '')
-  const [showDetails, setShowDetails] = useState(() => Boolean(
-    existingLog.painTiming || existingLog.reliefAttempted?.length || existingLog.reliefReceived ||
-    existingLog.bleedingExperience || existingLog.bleedingDuration
-  ))
+  const [openClusters, setOpenClusters] = useState(readOpenClusters)
   const [done,    setDone]    = useState(false)    // post-log confirmation state
+  const painReliefActive = shouldShowPainRelief(trackingModules, pain)
+  const bleedingDetailActive = shouldShowBleedingDetails(trackingModules, {
+    period: periodToday === true,
+    spotting: symptoms.includes('Spotting'),
+    hasExistingDetails: Boolean(existingLog.bleedingExperience || existingLog.bleedingDuration),
+  })
+
+  function toggleCluster(clusterId) {
+    setOpenClusters((current) => {
+      const next = new Set(current)
+      if (next.has(clusterId)) next.delete(clusterId)
+      else next.add(clusterId)
+      localStorage.setItem(OPEN_CLUSTERS_KEY, JSON.stringify([...next]))
+      return next
+    })
+  }
 
   function toggleSymptom(s) {
     setSymptoms((prev) =>
@@ -190,7 +250,32 @@ export default function DailyLog() {
     })
   }
 
+  function choosePeriod(value) {
+    setPeriodToday((current) => current === value ? null : value)
+    if (value === false) setFlow('')
+  }
+
+  const clusterCards = SYMPTOM_CLUSTERS.map((cluster) => {
+    const symptomOptions = groupedSymptoms.find((group) => group.id === cluster.id)?.symptoms || []
+    const showsPainDetails = cluster.id === 'pain-cramps' && painReliefActive
+    const showsBleedingDetails = cluster.id === 'period-bleeding' && bleedingDetailActive
+    const visible = symptomOptions.length > 0 || showsPainDetails || showsBleedingDetails ||
+      cluster.id === 'pain-cramps' || cluster.id === 'mood-energy'
+    const selectedSymptoms = symptomOptions.filter((symptom) => symptoms.includes(symptom)).length
+    const detailCount = cluster.id === 'pain-cramps'
+      ? Number(pain !== null) + Number(impacts.length > 0) + Number(Boolean(painTiming)) + Number(reliefAttempted.length > 0) + Number(Boolean(reliefReceived))
+      : cluster.id === 'period-bleeding'
+        ? Number(periodToday !== null) + Number(Boolean(flow)) + Number(Boolean(bleedingExperience)) + Number(Boolean(bleedingDuration))
+        : cluster.id === 'mood-energy'
+          ? Number(vibe !== null)
+        : 0
+    return { ...cluster, symptomOptions, showsPainDetails, showsBleedingDetails, visible, count: selectedSymptoms + detailCount }
+  }).filter((cluster) => cluster.visible)
+
   function handleLogIt() {
+    const clearOptionalFields = []
+    if (painReliefActive) clearOptionalFields.push('painTiming', 'reliefAttempted', 'reliefReceived')
+    if (bleedingDetailActive) clearOptionalFields.push('bleedingExperience', 'bleedingDuration')
     dispatch({
       type: 'LOG_DAILY',
       dateKey,
@@ -201,17 +286,24 @@ export default function DailyLog() {
       pain: pain ?? undefined,
       clearPain: isEditing && pain === null,
       impact: impacts.filter((id) => id !== 'fine'),
-      painTiming,
-      reliefAttempted,
-      reliefReceived,
-      bleedingExperience,
-      bleedingDuration,
-      clearOptionalDetails: true,
+      ...(painReliefActive ? { painTiming, reliefAttempted, reliefReceived } : {}),
+      ...(bleedingDetailActive ? { bleedingExperience, bleedingDuration } : {}),
+      clearOptionalFields,
     })
+    if (periodToday !== null) {
+      dispatch({
+        type: 'UPDATE_PERIOD_STATUS',
+        dateKey,
+        period: periodToday,
+        periodPromptAnswered: true,
+        flow: periodToday ? flow : '',
+        source: 'daily-log',
+      })
+    }
     setDone(true)
   }
 
-  const dailyTip      = getDailyTip({ symptoms, pain: pain ?? 0, impacts, vibe })
+  const dailyTip      = getDailyTip({ symptoms, pain: pain ?? 0, impacts, vibe, foodEnabled: trackingModules.food })
   const isHighPain    = (pain ?? 0) >= 8
   const hasSpotting   = symptoms.includes('Spotting')
   const showRedFlag   = isHighPain || (hasSpotting && (pain ?? 0) >= 6)
@@ -253,12 +345,12 @@ export default function DailyLog() {
                 fontWeight: 700,
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
-                color: 'var(--pink-accent, #E0528A)',
+                color: 'var(--pink-accent, #713666)',
               }}
             >
               Tip from Maisie
             </p>
-            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55, color: '#2C1810' }}>
+            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.55, color: '#3F0824' }}>
               {dailyTip}
             </p>
           </div>
@@ -273,7 +365,7 @@ export default function DailyLog() {
               padding: '15px',
               border: 'none',
               borderRadius: 14,
-              background: 'var(--pink-accent, #E0528A)',
+              background: 'var(--pink-accent, #713666)',
               color: '#fff',
               fontSize: 15,
               fontWeight: 700,
@@ -289,7 +381,14 @@ export default function DailyLog() {
   }
 
   // ── Main micro-logger panel ──────────────────────────────────────────
-  const canLog = vibe !== null  // mood is the only required field
+  const canLog = isEditing ||
+    vibe !== null ||
+    periodToday !== null ||
+    pain !== null ||
+    symptoms.some((symptom) => visibleSymptoms.includes(symptom)) ||
+    impacts.length > 0 ||
+    (painReliefActive && Boolean(painTiming || reliefAttempted.length || reliefReceived)) ||
+    (bleedingDetailActive && Boolean(bleedingExperience || bleedingDuration))
 
   return (
     <div className="screen screen--pad-bottom" id="daily-log-screen">
@@ -300,62 +399,24 @@ export default function DailyLog() {
         <h1 style={{ fontSize: 24, marginBottom: 0 }}>{isToday ? 'Today' : displayDate}</h1>
       </div>
 
-      {/* ── 1. Mood row ───────────────────────────────────────────── */}
+      {/* ── 1. Period and flow ─────────────────────────────────────── */}
       <div style={{ marginTop: 20 }}>
         <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
-          {isToday ? 'How are you feeling today?' : 'How were you feeling that day?'}
+          {isToday ? 'Are you on your period today?' : 'Were you on your period that day?'}
         </p>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: 8,
-          }}
-        >
-          {VIBE_OPTIONS.map(({ key, label, Icon, color, value }) => {
-            const selected = vibe?.key === key
-            return (
-              <button
-                key={key}
-                id={`vibe-${key}`}
-                type="button"
-                aria-label={label}
-                aria-pressed={selected}
-                onClick={() => setVibe({ key, label, value })}
-                style={{
-                  aspectRatio: '1',
-                  minHeight: 56,
-                  border: `1.5px solid ${selected ? color : 'rgba(44,24,16,0.08)'}`,
-                  borderRadius: 14,
-                  background: selected
-                    ? `color-mix(in srgb, ${color} 14%, white)`
-                    : '#fff',
-                  color,
-                  display: 'grid',
-                  placeItems: 'center',
-                  cursor: 'pointer',
-                  transform: selected ? 'scale(0.95)' : 'scale(1)',
-                  transition: 'transform 0.12s ease, background 0.12s ease, border 0.12s ease',
-                }}
-              >
-                <Icon size={28} weight={selected ? 'fill' : 'duotone'} color={color} />
-              </button>
-            )
-          })}
+        <div className="chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' }}>
+          <Chip selected={periodToday === true} onClick={() => choosePeriod(true)}>Yes</Chip>
+          <Chip selected={periodToday === false} onClick={() => choosePeriod(false)}>No</Chip>
         </div>
-        {/* Label below selected */}
-        {vibe && (
-          <p
-            style={{
-              margin: '6px 0 0',
-              textAlign: 'center',
-              fontSize: 12,
-              color: VIBE_OPTIONS.find((v) => v.key === vibe.key)?.color,
-              fontWeight: 600,
-            }}
-          >
-            {vibe.label}
-          </p>
+        {periodToday === true && (
+          <div style={{ marginTop: 14 }}>
+            <p style={{ margin: '0 0 9px', fontSize: 13.5, fontWeight: 700 }}>How was the flow? <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></p>
+            <div className="chips" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
+              {FLOW_OPTIONS.map((option) => (
+                <Chip key={option.value} selected={flow === option.value} onClick={() => setFlow((current) => current === option.value ? '' : option.value)}>{option.label}</Chip>
+              ))}
+            </div>
+          </div>
         )}
       </div>
 
@@ -380,10 +441,10 @@ export default function DailyLog() {
             const isUnder    = pain !== null && val <= pain
             // Color ramps: green → yellow → orange → red
             const dotColor =
-              val <= 3 ? '#4BAF6B'
-              : val <= 6 ? '#C8920A'
-              : val <= 8 ? '#E06B6B'
-              : '#C01B50'
+              val <= 3 ? '#4E7554'
+              : val <= 6 ? '#713666'
+              : val <= 8 ? '#EB587B'
+              : '#713666'
             return (
               <button
                 key={val}
@@ -426,10 +487,10 @@ export default function DailyLog() {
               fontSize: 13,
               fontWeight: 600,
               color:
-                pain <= 3 ? '#4BAF6B'
-                : pain <= 6 ? '#C8920A'
-                : pain <= 8 ? '#E06B6B'
-                : '#C01B50',
+                pain <= 3 ? '#4E7554'
+                : pain <= 6 ? '#713666'
+                : pain <= 8 ? '#EB587B'
+                : '#713666',
             }}
           >
             {pain === 0 ? 'No pain' : pain <= 3 ? 'Mild' : pain <= 6 ? 'Moderate' : pain <= 8 ? 'Severe' : 'Extreme'} · {pain}/10
@@ -437,149 +498,88 @@ export default function DailyLog() {
         )}
       </div>
 
-      {/* ── 3. Symptom bubbles ─────────────────────────────────────── */}
-      <div style={{ marginTop: 22 }}>
-        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
-          Any symptoms?{' '}
-          <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
-            tap all that apply
-          </span>
-        </p>
-        <div className="chips">
-          {SYMPTOMS.map((s) => {
-            const isSelected = symptoms.includes(s)
-            return (
-              <Chip
-                key={s}
-                selected={isSelected}
-                onClick={() => toggleSymptom(s)}
+      {/* ── 3. Symptom clusters ────────────────────────────────────── */}
+      {clusterCards.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <p style={{ margin: '0 0 4px', fontWeight: 700, fontSize: 15 }}>Anything else?</p>
+          <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>
+            Open an area to add what you noticed.
+          </p>
+          <div style={{ display: 'grid', gap: 9 }}>
+            {clusterCards.map((cluster) => (
+              <SymptomClusterCard
+                key={cluster.id}
+                cluster={cluster}
+                open={openClusters.has(cluster.id)}
+                onToggle={() => toggleCluster(cluster.id)}
               >
-                {s}
-              </Chip>
-            )
-          })}
-        </div>
-      </div>
+                {cluster.id === 'mood-energy' && (
+                  <VibeSelector vibe={vibe} onChange={setVibe} isToday={isToday} />
+                )}
 
-      {/* ── 4. Impact icon-row ─────────────────────────────────────── */}
-      <div style={{ marginTop: 22 }}>
-        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
-          Did it affect your day?
-        </p>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(5, 1fr)',
-            gap: 7,
-          }}
-        >
-          {IMPACTS.map(({ id, label, Icon, color }) => {
-            const isSelected = impacts.includes(id)
-            return (
-              <button
-                key={id}
-                id={`impact-${id}`}
-                type="button"
-                aria-label={label}
-                aria-pressed={isSelected}
-                onClick={() => toggleImpact(id)}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 5,
-                  padding: '10px 4px',
-                  border: `1.5px solid ${isSelected ? color : 'rgba(44,24,16,0.08)'}`,
-                  borderRadius: 12,
-                  background: isSelected
-                    ? `color-mix(in srgb, ${color} 12%, white)`
-                    : '#fff',
-                  cursor: 'pointer',
-                  transition: 'border 0.12s ease, background 0.12s ease',
-                }}
-              >
-                <Icon
-                  size={22}
-                  weight={isSelected ? 'fill' : 'regular'}
-                  color={isSelected ? color : 'rgba(44,24,16,0.35)'}
-                />
-                <span
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: isSelected ? color : 'rgba(44,24,16,0.4)',
-                    textAlign: 'center',
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {label}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
+                {cluster.symptomOptions.length > 0 && (
+                  <div className="chips" style={{ marginTop: cluster.id === 'mood-energy' ? 18 : 0 }}>
+                    {cluster.symptomOptions.map((symptom) => (
+                      <Chip
+                        key={symptom}
+                        selected={symptoms.includes(symptom)}
+                        onClick={() => toggleSymptom(symptom)}
+                      >
+                        {symptom}
+                      </Chip>
+                    ))}
+                  </div>
+                )}
 
-      {/* ── 5. Log it ──────────────────────────────────────────────── */}
-      <div style={{ marginTop: 22 }}>
-        <button
-          type="button"
-          aria-expanded={showDetails}
-          onClick={() => setShowDetails((open) => !open)}
-          style={{
-            width: '100%', minHeight: 48, padding: '11px 14px', borderRadius: 12,
-            border: '1.5px solid rgba(44,24,16,0.09)', background: '#fff',
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            color: '#2C1810', fontSize: 14, fontWeight: 700, cursor: 'pointer',
-          }}
-        >
-          <span>More details <span className="muted" style={{ fontWeight: 400 }}>(optional)</span></span>
-          <CaretDown
-            size={18}
-            weight="bold"
-            aria-hidden="true"
-            style={{ transform: showDetails ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}
-          />
-        </button>
+                {cluster.id === 'pain-cramps' && (
+                  <ImpactSelector impacts={impacts} onToggle={toggleImpact} />
+                )}
 
-        {showDetails && (
-          <div style={{ padding: '4px 2px 0' }}>
-            <OptionalChoice
-              label="When did the pain happen?"
-              options={PAIN_TIMING_OPTIONS}
-              value={painTiming}
-              onChange={(value) => setPainTiming(value === painTiming ? '' : value)}
-            />
-            <OptionalChoice
-              label="What did you try for relief?"
-              options={RELIEF_OPTIONS}
-              value={reliefAttempted}
-              onChange={toggleRelief}
-              multiple
-            />
-            {reliefAttempted.some((option) => !EXCLUSIVE_RELIEF_OPTIONS.has(option)) && (
-              <OptionalChoice
-                label="How much did it help?"
-                options={RELIEF_RESULT_OPTIONS}
-                value={reliefReceived}
-                onChange={(value) => setReliefReceived(value === reliefReceived ? '' : value)}
-              />
-            )}
-            <OptionalChoice
-              label="Any leaking or soaking?"
-              options={BLEEDING_EXPERIENCE_OPTIONS}
-              value={bleedingExperience}
-              onChange={(value) => setBleedingExperience(value === bleedingExperience ? '' : value)}
-            />
-            <OptionalChoice
-              label="How long has this bleeding lasted?"
-              options={BLEEDING_DURATION_OPTIONS}
-              value={bleedingDuration}
-              onChange={(value) => setBleedingDuration(value === bleedingDuration ? '' : value)}
-            />
+                {cluster.showsPainDetails && <>
+                  <OptionalChoice
+                    label="When did the pain happen?"
+                    options={PAIN_TIMING_OPTIONS}
+                    value={painTiming}
+                    onChange={(value) => setPainTiming(value === painTiming ? '' : value)}
+                  />
+                  <OptionalChoice
+                    label="What did you try for relief?"
+                    options={RELIEF_OPTIONS}
+                    value={reliefAttempted}
+                    onChange={toggleRelief}
+                    multiple
+                  />
+                  {reliefAttempted.some((option) => !EXCLUSIVE_RELIEF_OPTIONS.has(option)) && (
+                    <OptionalChoice
+                      label="How much did it help?"
+                      options={RELIEF_RESULT_OPTIONS}
+                      value={reliefReceived}
+                      onChange={(value) => setReliefReceived(value === reliefReceived ? '' : value)}
+                    />
+                  )}
+                </>}
+
+                {cluster.showsBleedingDetails && <>
+                  <OptionalChoice
+                    label="Any leaking or soaking?"
+                    options={BLEEDING_EXPERIENCE_OPTIONS}
+                    value={bleedingExperience}
+                    onChange={(value) => setBleedingExperience(value === bleedingExperience ? '' : value)}
+                  />
+                  <OptionalChoice
+                    label="How long has this bleeding lasted?"
+                    options={BLEEDING_DURATION_OPTIONS}
+                    value={bleedingDuration}
+                    onChange={(value) => setBleedingDuration(value === bleedingDuration ? '' : value)}
+                  />
+                </>}
+              </SymptomClusterCard>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+
+      {/* ── 4. Log it ──────────────────────────────────────────────── */}
 
       <div style={{ marginTop: 28 }}>
         {!canLog && (
@@ -587,7 +587,7 @@ export default function DailyLog() {
             className="muted center"
             style={{ fontSize: 12.5, marginBottom: 8 }}
           >
-            Tap a mood face to continue
+            Add one answer to continue
           </p>
         )}
         <button
@@ -600,7 +600,7 @@ export default function DailyLog() {
             padding: '16px',
             border: 'none',
             borderRadius: 14,
-            background: canLog ? 'var(--pink-accent, #E0528A)' : 'rgba(44,24,16,0.1)',
+            background: canLog ? 'var(--pink-accent, #713666)' : 'rgba(44,24,16,0.1)',
             color: canLog ? '#fff' : 'rgba(44,24,16,0.35)',
             fontSize: 16,
             fontWeight: 700,
@@ -611,8 +611,130 @@ export default function DailyLog() {
           {isEditing ? 'Save changes' : 'Log it'}
         </button>
         <p className="muted center" style={{ fontSize: 11.5, marginTop: 8 }}>
-          {isEditing ? 'Only this day will be updated' : 'Takes less than 10 seconds · your data stays private'}
+          {isEditing ? 'Only this day will be updated' : 'Your data stays private'}
         </p>
+      </div>
+    </div>
+  )
+}
+
+function SymptomClusterCard({ cluster, open, onToggle, children }) {
+  const Icon = CLUSTER_ICONS[cluster.id] || DotsThreeCircle
+  const panelId = `symptom-cluster-${cluster.id}`
+
+  return (
+    <section style={{ border: '1.5px solid rgba(63,8,36,0.1)', borderRadius: 12, background: '#fff', overflow: 'hidden' }}>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={onToggle}
+        style={{
+          width: '100%', minHeight: 64, padding: '11px 13px', border: 0, background: 'transparent',
+          display: 'grid', gridTemplateColumns: '36px minmax(0, 1fr) auto', alignItems: 'center',
+          gap: 10, color: '#3F0824', textAlign: 'left', cursor: 'pointer',
+        }}
+      >
+        <span style={{ width: 36, height: 36, borderRadius: 8, background: '#F4EDF7', display: 'grid', placeItems: 'center' }}>
+          <Icon size={20} weight="duotone" color="#713666" aria-hidden="true" />
+        </span>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: 'block', fontSize: 14, fontWeight: 750 }}>{cluster.label}</span>
+          <span className="muted" style={{ display: 'block', marginTop: 2, fontSize: 11.5, lineHeight: 1.35 }}>
+            {cluster.description}
+          </span>
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+          {cluster.count > 0 && (
+            <span style={{ padding: '3px 7px', borderRadius: 10, background: '#F4EDF7', color: '#713666', fontSize: 10.5, fontWeight: 700 }}>
+              {cluster.count}
+            </span>
+          )}
+          <CaretDown
+            size={17}
+            weight="bold"
+            aria-hidden="true"
+            style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.16s ease' }}
+          />
+        </span>
+      </button>
+      {open && (
+        <div id={panelId} style={{ padding: '2px 13px 15px', borderTop: '1px solid rgba(63,8,36,0.07)' }}>
+          <div style={{ paddingTop: 13 }}>{children}</div>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function VibeSelector({ vibe, onChange, isToday }) {
+  return (
+    <div>
+      <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 14 }}>
+        {isToday ? 'How are you feeling today?' : 'How were you feeling that day?'}
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 7 }}>
+        {VIBE_OPTIONS.map(({ key, label, Icon, color, value }) => {
+          const selected = vibe?.key === key
+          return (
+            <button
+              key={key}
+              id={`vibe-${key}`}
+              type="button"
+              aria-label={label}
+              aria-pressed={selected}
+              onClick={() => onChange(selected ? null : { key, label, value })}
+              style={{
+                aspectRatio: '1', minHeight: 48, border: `1.5px solid ${selected ? color : 'rgba(44,24,16,0.08)'}`,
+                borderRadius: 12, background: selected ? `color-mix(in srgb, ${color} 14%, white)` : '#fff',
+                display: 'grid', placeItems: 'center', cursor: 'pointer',
+                transform: selected ? 'scale(0.95)' : 'scale(1)',
+                transition: 'transform 0.12s ease, background 0.12s ease, border 0.12s ease',
+              }}
+            >
+              <Icon size={24} weight={selected ? 'fill' : 'duotone'} color={color} />
+            </button>
+          )
+        })}
+      </div>
+      {vibe && (
+        <p style={{ margin: '6px 0 0', textAlign: 'center', fontSize: 12, color: VIBE_OPTIONS.find((option) => option.key === vibe.key)?.color, fontWeight: 600 }}>
+          {vibe.label}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ImpactSelector({ impacts, onToggle }) {
+  return (
+    <div style={{ marginTop: 18 }}>
+      <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 14 }}>Did it affect your day?</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 7 }}>
+        {IMPACTS.map(({ id, label, Icon, color }) => {
+          const selected = impacts.includes(id)
+          return (
+            <button
+              key={id}
+              id={`impact-${id}`}
+              type="button"
+              aria-label={label}
+              aria-pressed={selected}
+              onClick={() => onToggle(id)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5,
+                minWidth: 0, padding: '9px 2px', border: `1.5px solid ${selected ? color : 'rgba(44,24,16,0.08)'}`,
+                borderRadius: 10, background: selected ? `color-mix(in srgb, ${color} 12%, white)` : '#fff',
+                cursor: 'pointer', transition: 'border 0.12s ease, background 0.12s ease',
+              }}
+            >
+              <Icon size={20} weight={selected ? 'fill' : 'regular'} color={selected ? color : 'rgba(44,24,16,0.35)'} />
+              <span style={{ fontSize: 9.5, fontWeight: 600, color: selected ? color : 'rgba(44,24,16,0.5)', textAlign: 'center', lineHeight: 1.15 }}>
+                {label}
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )

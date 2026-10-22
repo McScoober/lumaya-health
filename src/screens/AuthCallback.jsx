@@ -79,14 +79,14 @@ export default function AuthCallback() {
     <div className="screen center" style={{ justifyContent: 'center' }}>
       <h1 style={{
         margin: '0 0 10px',
-        color: '#2C1810',
+        color: '#3F0824',
         fontFamily: "'Fraunces', serif",
         fontSize: 28,
         textAlign: 'center',
       }}>
         just a sec
       </h1>
-      <p style={{ margin: 0, color: '#5C3D2E', fontSize: 14, lineHeight: 1.5, textAlign: 'center' }}>
+      <p style={{ margin: 0, color: '#5E3A55', fontSize: 14, lineHeight: 1.5, textAlign: 'center' }}>
         {message}
       </p>
     </div>

@@ -7,10 +7,10 @@
 export const PHASES = ['menstrual', 'follicular', 'ovulation', 'luteal']
 
 export const PHASE_META = {
-  menstrual:  { label: 'your period',  accent: 'var(--phase-menstrual)', soft: '#FCEEF1', mood: 'Cozy and low-key' },
-  follicular: { label: 'building back up', accent: 'var(--phase-follicular)', soft: '#EFF6EA', mood: 'Rising energy' },
-  ovulation:  { label: 'peak energy',  accent: 'var(--phase-ovulation)', soft: '#FCF3DC', mood: 'Peak energy' },
-  luteal:     { label: 'winding down',     accent: 'var(--phase-luteal)', soft: '#F1ECF8', mood: 'Winding down' },
+  menstrual:  { label: 'your period',  accent: 'var(--phase-menstrual)', soft: 'color-mix(in srgb, var(--blush) 24%, white)', mood: 'Cozy and low-key' },
+  follicular: { label: 'building back up', accent: 'var(--phase-follicular)', soft: 'var(--sage-100)', mood: 'Rising energy' },
+  ovulation:  { label: 'peak energy',  accent: 'var(--phase-ovulation)', soft: 'color-mix(in srgb, var(--gold) 22%, white)', mood: 'Peak energy' },
+  luteal:     { label: 'winding down',     accent: 'var(--phase-luteal)', soft: 'var(--lavender-100)', mood: 'Winding down' },
   // BC track, neutral pink/berry tint
   bc_active:  { label: 'Steady',     accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Even keel' },
   bc_break:  { label: 'Break days',  accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Light week' },
@@ -101,6 +101,38 @@ export function phaseForDate(model, date = new Date()) {
   else if (dayOfCycle <= ovulationDay + 1) phase = 'ovulation'
   else phase = 'luteal'
   return { phase, dayOfCycle }
+}
+
+// A confirmed period log is an observation, so it takes priority over the
+// model's default five-day phase estimate. Consecutive confirmed days remain
+// one period even when bleeding lasts longer than expected.
+export function observedPeriodForDate(periodLogs = {}, date = new Date()) {
+  const key = dateKeyLocal(date)
+  if (periodLogs[key]?.period !== true) return null
+
+  let start = startOfDay(date)
+  while (periodLogs[dateKeyLocal(addDays(start, -1))]?.period === true) {
+    start = addDays(start, -1)
+  }
+
+  return {
+    startKey: dateKeyLocal(start),
+    dayOfPeriod: diffDays(date, start) + 1,
+  }
+}
+
+export function phaseForDateWithObservations(model, periodLogs = {}, date = new Date()) {
+  const predicted = phaseForDate(model, date)
+  const observedPeriod = observedPeriodForDate(periodLogs, date)
+  if (!observedPeriod) return { ...predicted, observed: false, dayOfPeriod: null }
+
+  return {
+    ...predicted,
+    phase: 'menstrual',
+    observed: true,
+    dayOfPeriod: observedPeriod.dayOfPeriod,
+    observedPeriodStart: observedPeriod.startKey,
+  }
 }
 
 // Predicted next period start + the "period window" (6.2) used for daily check-ins.

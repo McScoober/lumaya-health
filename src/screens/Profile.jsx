@@ -1,62 +1,83 @@
-// Profile.jsx — Unified Profile, Settings & Parent/Support Hub
-// Combines user identity, cycle personalization, parent/support connection,
-// notifications, and privacy controls under one cohesive tab.
-
-import { useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
+import {
+  Bell, Cake, CaretRight, CheckCircle, CloudArrowUp, Database, Info,
+  Lightbulb, PencilSimple, ShieldCheck, SlidersHorizontal, UsersThree, X,
+} from '@phosphor-icons/react'
 import { useStore } from '../state/store.jsx'
-import { TopBar, Card, Button, ChipGroup } from '../components/ui.jsx'
-import Mascot from '../components/Mascot.jsx'
-import { addDays, dateKeyLocal } from '../engine/cyclePredictor.js'
-import { supabase } from '../lib/supabase.js'
+import { Button, ChipGroup } from '../components/ui.jsx'
 import SupportAccess from '../components/SupportAccess.jsx'
+import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
+import { supabase } from '../lib/supabase.js'
 import { clearLegacyHealthStorage } from '../lib/trackerRecords.js'
 import { clearSignupDraft } from '../lib/signupDraft.js'
+import { clearGuestTracker } from '../lib/guestTracker.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
-import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
-import { CloudArrowUp, GearSix, UsersThree } from '@phosphor-icons/react'
+import {
+  profilePayloadForTrackingModules,
+  trackingModulesFromProfile,
+  visibleTrackingModules,
+} from '../lib/trackingPreferences.js'
 
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
-
-function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
-  let count = 0
-  for (let i = 0; i < days; i++) {
-    const key = dateKeyLocal(addDays(today, -i))
-    const log = dailyLogs[key]
-    if (log?.checkinCompleted || log?.mood || log?.vibe !== undefined || log?.symptoms?.length || log?.pain !== undefined || log?.impact !== undefined) {
-      count += 1
-    }
-  }
-  return count
-}
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
 
 export default function Profile() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
   const { profile, identity, notifyPrefs } = state
-  const isMinor = identity.isMinor
   const hasSavedAccount = Boolean(state.accountId)
-
-  const [activeTab, setActiveTab] = useState('settings') // 'settings' | 'support'
+  const [activeSheet, setActiveSheet] = useState(null)
+  const [sheetClosing, setSheetClosing] = useState(false)
   const [toast, setToast] = useState('')
   const [birthMonth, setBirthMonth] = useState(identity.birthMonth)
   const [birthYear, setBirthYear] = useState(identity.birthYear)
+  const triggerRef = useRef(null)
+  const closeTimerRef = useRef(null)
 
-  const ageDisplay = identity.ageBand ? `${identity.ageBand} yrs old` : 'Teen'
-  const recentLogs = recentCheckInCount(state.dailyLogs)
+  const trackingModules = useMemo(() => trackingModulesFromProfile(profile), [profile])
+  const trackingCount = Object.entries(trackingModules).filter(([id, enabled]) => id !== 'core' && enabled).length
+  const ageDisplay = identity.ageBand === '18+' ? '18+ years old' : identity.ageBand ? `${identity.ageBand} years old` : 'Teen account'
+  const birthLabel = birthMonth && birthYear ? `${MONTHS[birthMonth - 1].slice(0, 3)} ${birthYear}` : 'Add'
   const birthError = (birthMonth || birthYear) && !ageBandFromBirthMonthYear(birthMonth, birthYear)
     ? 'Maisie is for people age 13 and up.'
     : ''
 
-  function flash(msg) {
-    setToast(msg)
-    setTimeout(() => setToast(''), 1800)
+  function flash(message) {
+    setToast(message)
+    window.setTimeout(() => setToast(''), 1800)
   }
 
-  function updateProfile(payload) {
+  function openSheet(name, event) {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current)
+    triggerRef.current = event?.currentTarget || null
+    setSheetClosing(false)
+    setActiveSheet(name)
+  }
+
+  const closeSheet = useCallback(() => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current)
+    setSheetClosing(true)
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    closeTimerRef.current = window.setTimeout(() => {
+      setActiveSheet(null)
+      setSheetClosing(false)
+      triggerRef.current?.focus()
+    }, reduceMotion ? 0 : 190)
+  }, [])
+
+  useEffect(() => () => {
+    if (closeTimerRef.current) window.clearTimeout(closeTimerRef.current)
+  }, [])
+
+  function updateProfile(payload, message = 'Preferences saved') {
     dispatch({ type: 'SET_PROFILE', payload })
-    flash('Preferences saved')
+    flash(message)
   }
 
   function updateBirthMonthYear(month, year) {
@@ -67,223 +88,271 @@ export default function Profile() {
     flash('Birthday saved')
   }
 
-  async function deleteData() {
+  async function clearDeviceData() {
     const message = hasSavedAccount
       ? 'Sign out and clear Maisie data from this device? Information saved to your account will still be there when you sign in again.'
       : 'Clear your Maisie tracker from this device? Because it is not saved to an account, this cannot be undone.'
-    if (!confirm(message)) return
+    if (!window.confirm(message)) return
     if (supabase && hasSavedAccount) {
       const { error } = await supabase.auth.signOut({ scope: 'local' })
-      if (error) { flash('Could not sign out. Please try again.'); return }
+      if (error) {
+        flash('Could not sign out. Please try again.')
+        return
+      }
     }
     clearLegacyHealthStorage(localStorage)
     clearSignupDraft(localStorage)
+    clearGuestTracker(localStorage)
     dispatch({ type: 'RESET' })
     navigate('/')
   }
 
   return (
-    <div className="screen screen--pad-bottom">
-      {toast && <div className="toast">{toast}</div>}
+    <div className="screen screen--pad-bottom profile-screen">
+      {toast && <div className="toast" role="status">{toast}</div>}
 
-      <TopBar title="Profile & Account" onBack={false} />
+      <h1 className="profile-screen__title">Me</h1>
 
-      {/* User Card Header */}
-      <Card style={{ marginTop: 12, padding: 18 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <Mascot size={72} mood="happy" />
-          <div style={{ flex: 1 }}>
-            <h2 style={{ margin: 0, fontSize: 18, color: 'var(--text-primary)' }}>
-              {identity.name || 'Maisie User'}
-            </h2>
-            <p style={{ margin: '3px 0 0', fontSize: 12.5, color: 'var(--text-secondary)' }}>
-              {ageDisplay} · {identity.isMinor ? 'Teen account' : 'Independent account'}
-            </p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <span
-                style={{
-                  background: 'rgba(224, 76, 122, 0.1)',
-                  color: 'var(--pink-accent)',
-                  padding: '3px 9px',
-                  borderRadius: 12,
-                  fontSize: 11,
-                  fontWeight: 700,
-                }}
-              >
-                {recentLogs} days logged this week
-              </span>
-            </div>
-          </div>
+      <section className="profile-identity" aria-label="Your profile">
+        <div className="profile-avatar" aria-hidden="true">
+          {(identity.name || 'M').trim().charAt(0).toUpperCase()}
         </div>
-      </Card>
-
-      {/* Segmented Tab Switcher */}
-      <div className="profile-tabs">
-        <button
-          type="button"
-          className="profile-tab"
-          aria-pressed={activeTab === 'settings'}
-          onClick={() => setActiveTab('settings')}
-        >
-          <GearSix size={17} weight="bold" aria-hidden="true" />
-          Preferences
+        <div className="profile-identity__copy">
+          <h2>{identity.name || 'Maisie user'}</h2>
+          <p>{ageDisplay}</p>
+        </div>
+        <button className="profile-icon-button" type="button" aria-label="Edit profile" onClick={(event) => openSheet('profile', event)}>
+          <PencilSimple size={20} weight="regular" aria-hidden="true" />
         </button>
+      </section>
 
-        <button
-          type="button"
-          className="profile-tab"
-          aria-pressed={activeTab === 'support'}
-          onClick={() => setActiveTab('support')}
-        >
-          <UsersThree size={17} weight="bold" aria-hidden="true" />
-          {isMinor ? 'Parent sharing' : 'Support sharing'}
-        </button>
-      </div>
+      <ProfileGroup label="My Maisie">
+        <ProfileRow
+          Icon={CloudArrowUp}
+          tone="sage"
+          title={hasSavedAccount ? 'Account saved' : 'Tracker on this device'}
+          subtitle={hasSavedAccount ? 'Available across your devices.' : 'Add an email to use another device.'}
+          value={hasSavedAccount ? 'Saved' : 'Device'}
+          valueTone={hasSavedAccount ? 'success' : undefined}
+          onClick={(event) => openSheet('account', event)}
+        />
+        <ProfileRow Icon={SlidersHorizontal} tone="sage" title="What I track" subtitle="Choose your check-in areas." value={`${trackingCount} on`} onClick={(event) => openSheet('tracking', event)} />
+        <ProfileRow Icon={Lightbulb} title="Tips and preferences" subtitle="Personalize the guidance you see." onClick={(event) => openSheet('tips', event)} />
+        <ProfileRow Icon={Bell} title="Check-in reminders" subtitle="Set your reminder preference." value={notifyPrefs.periodCheckin ? 'On' : 'Off'} onClick={(event) => openSheet('reminders', event)} />
+        <ProfileRow Icon={Cake} tone="sage" title="Birthday" subtitle="Keep age guidance current." value={birthLabel} onClick={(event) => openSheet('birthday', event)} />
+      </ProfileGroup>
 
-      {/* ===================================================================== */}
-      {/* TAB 1: PREFERENCES AND NOTIFICATIONS                                  */}
-      {/* ===================================================================== */}
-      {activeTab === 'settings' && (
-        <div className="stack-16" style={{ animation: 'fadeIn 0.2s ease' }}>
-          <Card>
-            <div className="card__label">Birthday</div>
-            <div style={{ marginTop: 8 }}>
-              <BirthMonthYearFields
-                idPrefix="profile-birth"
-                birthMonth={birthMonth}
-                birthYear={birthYear}
-                onChange={updateBirthMonthYear}
-              />
-              <p className="muted" style={{ margin: '6px 0 0', fontSize: 12.5 }}>
-                Maisie uses this to keep your age current.
-              </p>
-              {birthError && (
-                <p style={{ margin: '6px 0 0', color: '#B3265A', fontSize: 12.5 }}>
-                  {birthError}
-                </p>
-              )}
-            </div>
-          </Card>
+      <ProfileGroup label="Support and privacy">
+        <ProfileRow Icon={UsersThree} tone="sage" title="People I trust" subtitle="Manage who can see support signals." value="Manage" onClick={(event) => openSheet('support', event)} />
+        <ProfileRow Icon={Database} title="My information" subtitle="Review storage and device controls." onClick={(event) => openSheet('data', event)} />
+        <ProfileRow Icon={Info} title="About Maisie" subtitle="Privacy, sources, terms, and support." onClick={(event) => openSheet('about', event)} />
+      </ProfileGroup>
 
-          {/* Lifestyle Preferences */}
-          <Card>
-            <div className="card__label">Student & Athlete Status</div>
-            <div style={{ marginTop: 8 }}>
-              <ChipGroup
-                options={SA_OPTIONS}
-                value={profile.studentAthlete}
-                onChange={(v) => updateProfile({ studentAthlete: v })}
-                columns={2}
-              />
-            </div>
+      <aside className="profile-privacy-note">
+        <span aria-hidden="true"><ShieldCheck size={19} weight="duotone" /></span>
+        <p><strong>Your daily answers stay private.</strong> Supporters only see the access level you choose.</p>
+      </aside>
 
-            <div className="card__label" style={{ marginTop: 18 }}>Sleep Habits</div>
-            <div style={{ marginTop: 8 }}>
-              <ChipGroup
-                options={SLEEP_OPTIONS}
-                value={profile.sleep}
-                onChange={(v) => updateProfile({ sleep: v })}
-                stack
-              />
-            </div>
-          </Card>
-
-          {/* Notifications */}
-          <Card>
-            <div className="card__label">Notifications</div>
-            <Toggle
-              label="Period Check-ins"
-              desc="Gentle reminders around your learned period window."
-              on={notifyPrefs.periodCheckin}
-              onChange={(v) => dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin: v } })}
+      {activeSheet && createPortal(
+        <ProfileSheet title={sheetTitle(activeSheet)} onClose={closeSheet} closing={sheetClosing} wide={activeSheet === 'support'}>
+          {activeSheet === 'profile' && (
+            <EditProfilePanel name={identity.name} onSave={(name) => {
+              dispatch({ type: 'SET_IDENTITY', payload: { name } })
+              flash('Profile saved')
+              closeSheet()
+            }} />
+          )}
+          {activeSheet === 'account' && (
+            <AccountPanel
+              email={identity.email}
+              hasSavedAccount={hasSavedAccount}
+              onAddEmail={() => navigate('/auth?next=/profile&source=post-onboarding')}
+              onOpenData={() => setActiveSheet('data')}
             />
-
-          </Card>
-
-          <Card>
-            <div className="card__label">Account & Data</div>
-            {!hasSavedAccount && (
-              <div className="account-save-row">
-                <span className="account-save-row__icon" aria-hidden="true">
-                  <CloudArrowUp size={20} weight="duotone" />
-                </span>
-                <div className="account-save-row__copy">
-                  <strong>Tracker saved on this device</strong>
-                  <span>Add an email to use it on another device.</span>
-                </div>
-                <Button
-                  variant="soft"
-                  className="account-save-row__button"
-                  onClick={() => navigate('/auth?next=/profile&source=post-onboarding')}
-                >
-                  Add email
-                </Button>
-              </div>
-            )}
-            {!hasSavedAccount && <div className="divider account-save-row__divider" />}
-            <p className="muted" style={{ margin: '4px 0 14px', fontSize: 13, lineHeight: 1.5 }}>
-              {hasSavedAccount
-                ? 'Sign out and clear Maisie data from this device. Information saved to your account stays available when you sign in again.'
-                : 'Clearing this device permanently removes your check-ins and saved information.'}
-            </p>
-            <Button variant="ghost" style={{ color: 'var(--red)' }} onClick={deleteData}>
-              {hasSavedAccount ? 'Sign out and clear this device' : 'Clear this device'}
-            </Button>
-          </Card>
-
-          <p className="muted center" style={{ fontSize: 11, marginTop: 12 }}>
-            Maisie Health · Pattern-awareness tool, not a diagnostic device
-          </p>
-        </div>
+          )}
+          {activeSheet === 'tracking' && (
+            <TrackingPanel modules={trackingModules} hideFoodContent={profile.hideFoodContent === true} onSave={(modules, hideFoodContent) => {
+              updateProfile(profilePayloadForTrackingModules(modules, { hideFoodContent }), 'Tracking preferences saved')
+              closeSheet()
+            }} />
+          )}
+          {activeSheet === 'tips' && <TipsPanel profile={profile} notifyPrefs={notifyPrefs} updateProfile={updateProfile} dispatch={dispatch} />}
+          {activeSheet === 'reminders' && (
+            <RemindersPanel enabled={notifyPrefs.periodCheckin} onChange={(periodCheckin) => {
+              dispatch({ type: 'SET_NOTIFY', payload: { periodCheckin } })
+              flash('Reminder preference saved')
+            }} />
+          )}
+          {activeSheet === 'birthday' && <BirthdayPanel birthMonth={birthMonth} birthYear={birthYear} birthError={birthError} onChange={updateBirthMonthYear} />}
+          {activeSheet === 'support' && <SupportAccess compact />}
+          {activeSheet === 'data' && <DataPanel hasSavedAccount={hasSavedAccount} onClear={clearDeviceData} />}
+          {activeSheet === 'about' && <AboutPanel />}
+        </ProfileSheet>,
+        document.body,
       )}
-
-      {/* ===================================================================== */}
-      {/* TAB 2: PARENT / SUPPORT DASHBOARD                                     */}
-      {/* ===================================================================== */}
-      {activeTab === 'support' && <SupportAccess />}
-
     </div>
   )
 }
 
-function Toggle({ label, desc, on, onChange }) {
+function sheetTitle(sheet) {
+  return {
+    profile: 'Edit profile', account: 'Account', tracking: 'What I track',
+    tips: 'Tips and preferences', reminders: 'Check-in reminders', birthday: 'Birthday',
+    support: 'People I trust', data: 'My information', about: 'About Maisie',
+  }[sheet]
+}
+
+function ProfileGroup({ label, children }) {
+  return <section className="profile-group"><p className="profile-group__label">{label}</p><div className="profile-list">{children}</div></section>
+}
+
+function ProfileRow({ Icon, tone, title, subtitle, value, valueTone, onClick }) {
   return (
-    <div className="row row--between" style={{ alignItems: 'flex-start', gap: 12 }}>
-      <div>
-        <strong style={{ fontSize: 14 }}>{label}</strong>
-        {desc && <p className="muted" style={{ margin: '2px 0 0', fontSize: 12.5 }}>{desc}</p>}
+    <button className="profile-row" type="button" onClick={onClick}>
+      <span className={`profile-row__icon ${tone === 'sage' ? 'profile-row__icon--sage' : ''}`} aria-hidden="true"><Icon size={21} weight="regular" /></span>
+      <span className="profile-row__copy"><strong>{title}</strong><span>{subtitle}</span></span>
+      {value && <span className={`profile-row__value ${valueTone === 'success' ? 'profile-row__value--success' : ''}`}>{value}</span>}
+      <CaretRight className="profile-row__caret" size={17} weight="bold" aria-hidden="true" />
+    </button>
+  )
+}
+
+function ProfileSheet({ title, onClose, children, wide = false, closing = false }) {
+  const closeRef = useRef(null)
+  useEffect(() => {
+    closeRef.current?.focus()
+    function onKeyDown(event) { if (event.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+
+  return (
+    <div className={`profile-sheet-backdrop ${closing ? 'profile-sheet-backdrop--closing' : ''}`} role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section className={`profile-sheet ${wide ? 'profile-sheet--wide' : ''} ${closing ? 'profile-sheet--closing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="profile-sheet-title">
+        <div className="profile-sheet__grabber" aria-hidden="true" />
+        <header className="profile-sheet__header">
+          <h2 id="profile-sheet-title">{title}</h2>
+          <button ref={closeRef} className="profile-sheet__close" type="button" aria-label="Close" onClick={onClose}><X size={20} weight="bold" aria-hidden="true" /></button>
+        </header>
+        <div className="profile-sheet__body">{children}</div>
+      </section>
+    </div>
+  )
+}
+
+function EditProfilePanel({ name, onSave }) {
+  const [draft, setDraft] = useState(name || '')
+  return (
+    <form className="profile-panel" onSubmit={(event) => { event.preventDefault(); onSave(draft.trim()) }}>
+      <p className="profile-panel__intro">Choose the name you want Maisie to use.</p>
+      <label className="profile-field" htmlFor="profile-name"><span>Name</span><input id="profile-name" className="input" value={draft} maxLength={60} autoComplete="name" onChange={(event) => setDraft(event.target.value)} /></label>
+      <Button block disabled={!draft.trim()}>Save changes</Button>
+    </form>
+  )
+}
+
+function AccountPanel({ email, hasSavedAccount, onAddEmail, onOpenData }) {
+  return (
+    <div className="profile-panel">
+      <div className={`profile-account-summary ${hasSavedAccount ? 'profile-account-summary--saved' : ''}`}>
+        {hasSavedAccount ? <CheckCircle size={24} weight="fill" aria-hidden="true" /> : <CloudArrowUp size={24} weight="duotone" aria-hidden="true" />}
+        <div><strong>{hasSavedAccount ? 'Saved to your account' : 'Saved on this device'}</strong><span>{hasSavedAccount ? email || 'Signed in' : 'Add an email to use Maisie on another device.'}</span></div>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        onClick={() => onChange(!on)}
-        style={{
-          width: 44,
-          height: 26,
-          borderRadius: 99,
-          border: 'none',
-          background: on ? 'var(--pink-accent)' : '#E2E8F0',
-          position: 'relative',
-          cursor: 'pointer',
-          flexShrink: 0,
-          transition: 'background 0.2s ease',
-        }}
-      >
-        <span
-          style={{
-            position: 'absolute',
-            top: 3,
-            left: on ? 21 : 3,
-            width: 20,
-            height: 20,
-            borderRadius: '50%',
-            background: '#fff',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-            transition: 'left 0.2s ease',
-          }}
-        />
-      </button>
+      {!hasSavedAccount && <Button block onClick={onAddEmail}>Add email</Button>}
+      <Button variant="ghost" block onClick={onOpenData}>My information and device controls</Button>
+    </div>
+  )
+}
+
+function TrackingPanel({ modules, hideFoodContent, onSave }) {
+  const [draft, setDraft] = useState(modules)
+  const [hideFood, setHideFood] = useState(hideFoodContent)
+  const availableModules = visibleTrackingModules()
+  return (
+    <div className="profile-panel">
+      <p className="profile-panel__intro">Choose what appears in check-ins and personalized learning. Existing entries are not removed.</p>
+      <div className="profile-toggle-list">
+        {availableModules.map((module) => module.locked
+          ? <Toggle key={module.id} label={module.label} desc={module.description} on disabled />
+          : <Toggle key={module.id} label={module.label} desc={module.description} on={draft[module.id]} onChange={(on) => setDraft((current) => ({ ...current, [module.id]: on }))} />)}
+      </div>
+      {availableModules.some((module) => module.id === 'food') && (
+        <div className="profile-toggle-list">
+          <Toggle label="I'd rather not see food stuff" desc="Hide food prompts, tips, and learning guides." on={hideFood} onChange={(on) => {
+            setHideFood(on)
+            if (on) setDraft((current) => ({ ...current, food: false }))
+          }} />
+        </div>
+      )}
+      <Button block onClick={() => onSave(draft, hideFood)}>Save changes</Button>
+    </div>
+  )
+}
+
+function TipsPanel({ profile, notifyPrefs, updateProfile, dispatch }) {
+  return (
+    <div className="profile-panel">
+      <p className="profile-panel__intro">These choices help Maisie keep guidance relevant without making assumptions.</p>
+      <div className="profile-panel__section"><h3>School and activity</h3><ChipGroup options={SA_OPTIONS} value={profile.studentAthlete} onChange={(studentAthlete) => updateProfile({ studentAthlete })} columns={2} /></div>
+      <div className="profile-panel__section"><h3>Sleep habits</h3><ChipGroup options={SLEEP_OPTIONS} value={profile.sleep} onChange={(sleep) => updateProfile({ sleep })} stack /></div>
+      <div className="profile-toggle-list">
+        <Toggle label="Phase-based tips" desc="Use your cycle timing when choosing tips." on={notifyPrefs.phaseTips} onChange={(phaseTips) => dispatch({ type: 'SET_NOTIFY', payload: { phaseTips } })} />
+      </div>
+    </div>
+  )
+}
+
+function RemindersPanel({ enabled, onChange }) {
+  return (
+    <div className="profile-panel">
+      <p className="profile-panel__intro">Choose whether Maisie should use your learned period window for reminder preferences.</p>
+      <div className="profile-toggle-list"><Toggle label="Period check-ins" desc="Keep this preference ready for private device reminders." on={enabled} onChange={onChange} /></div>
+      <p className="profile-panel__note">Native iPhone notifications are not enabled yet. Maisie will ask permission before sending any.</p>
+    </div>
+  )
+}
+
+function BirthdayPanel({ birthMonth, birthYear, birthError, onChange }) {
+  return (
+    <div className="profile-panel">
+      <p className="profile-panel__intro">Maisie uses month and year to keep age guidance current. An exact day is not needed.</p>
+      <BirthMonthYearFields idPrefix="profile-birth" birthMonth={birthMonth} birthYear={birthYear} onChange={onChange} />
+      {birthError && <p className="profile-panel__error" role="alert">{birthError}</p>}
+    </div>
+  )
+}
+
+function DataPanel({ hasSavedAccount, onClear }) {
+  return (
+    <div className="profile-panel">
+      <p className="profile-panel__intro">{hasSavedAccount ? 'Your account information stays available after you clear this device.' : 'Your tracker is stored only on this device. Clearing it cannot be undone.'}</p>
+      <div className="profile-data-note"><ShieldCheck size={22} weight="duotone" aria-hidden="true" /><p>Daily answers and pain ratings are not included in supporter access.</p></div>
+      <Button variant="ghost" block className="profile-destructive-action" onClick={onClear}>{hasSavedAccount ? 'Sign out and clear this device' : 'Clear this device'}</Button>
+      {hasSavedAccount && <p className="profile-panel__note">This signs you out and clears this device. It does not delete your account.</p>}
+    </div>
+  )
+}
+
+function AboutPanel() {
+  return (
+    <div className="profile-panel">
+      <div className="profile-about-mark" aria-hidden="true">M</div>
+      <h3 className="profile-about-title">Maisie Health</h3>
+      <p className="profile-panel__intro">Maisie helps teens understand what they are experiencing, prepare for care, and navigate what comes next.</p>
+      <div className="profile-about-list">
+        <div><strong>Not a diagnosis</strong><span>Maisie uses only what you log and does not diagnose medical conditions.</span></div>
+        <div><strong>Sources</strong><span>Educational articles include their sources where available.</span></div>
+        <div><strong>Version</strong><span>1.0.0</span></div>
+      </div>
+    </div>
+  )
+}
+
+function Toggle({ label, desc, on, onChange, disabled = false }) {
+  return (
+    <div className="profile-toggle-row">
+      <div><strong>{label}</strong>{desc && <span>{desc}</span>}</div>
+      <button className="profile-switch" type="button" role="switch" aria-checked={Boolean(on)} aria-label={label} disabled={disabled} onClick={() => onChange?.(!on)}><span /></button>
     </div>
   )
 }

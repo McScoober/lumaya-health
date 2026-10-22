@@ -7,6 +7,7 @@ import { clearLegacyHealthStorage, trackerRecords } from '../lib/trackerRecords.
 import { clearSignupDraft, readSignupDraft } from '../lib/signupDraft.js'
 import { bufferedMonthRange, monthCacheKey } from '../lib/historyWindow.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
+import { clearGuestTracker, readGuestTracker, saveGuestTracker } from '../lib/guestTracker.js'
 
 function uid() {
   // Opaque internal user id (UUID-ish). Not derived from name/email.
@@ -370,7 +371,7 @@ export function reducer(state, action) {
       const {
         dateKey, mood, vibe, vibeLabel, symptoms, pain, impact, clearPain,
         painTiming, reliefAttempted, reliefReceived, bleedingExperience, bleedingDuration,
-        clearOptionalDetails,
+        clearOptionalDetails, clearOptionalFields = [],
       } = action
       const prev = state.dailyLogs[dateKey] || {}
       const wasLogged = prev.checkinCompleted === true ||
@@ -395,15 +396,18 @@ export function reducer(state, action) {
         ...(bleedingDuration ? { bleedingDuration } : {}),
       }
       if (clearPain) delete updatedLog.pain
-      if (clearOptionalDetails) {
-        if (!painTiming) delete updatedLog.painTiming
-        if (!reliefAttempted?.length) delete updatedLog.reliefAttempted
-        if (!reliefReceived || !reliefAttempted?.some((option) => !['Nothing yet', 'Not sure', 'Prefer not to say'].includes(option))) {
-          delete updatedLog.reliefReceived
-        }
-        if (!bleedingExperience) delete updatedLog.bleedingExperience
-        if (!bleedingDuration) delete updatedLog.bleedingDuration
+      const fieldsToClear = new Set(clearOptionalDetails
+        ? ['painTiming', 'reliefAttempted', 'reliefReceived', 'bleedingExperience', 'bleedingDuration']
+        : clearOptionalFields)
+      if (fieldsToClear.has('painTiming') && !painTiming) delete updatedLog.painTiming
+      if (fieldsToClear.has('reliefAttempted') && !reliefAttempted?.length) delete updatedLog.reliefAttempted
+      if (fieldsToClear.has('reliefReceived') && (
+        !reliefReceived || !reliefAttempted?.some((option) => !['Nothing yet', 'Not sure', 'Prefer not to say'].includes(option))
+      )) {
+        delete updatedLog.reliefReceived
       }
+      if (fieldsToClear.has('bleedingExperience') && !bleedingExperience) delete updatedLog.bleedingExperience
+      if (fieldsToClear.has('bleedingDuration') && !bleedingDuration) delete updatedLog.bleedingDuration
       const dailyLogs = {
         ...state.dailyLogs,
         [dateKey]: updatedLog,
@@ -424,28 +428,32 @@ export function reducer(state, action) {
     }
 
     case 'UPDATE_PERIOD_STATUS': {
-      const { dateKey, period, periodPromptAnswered } = action
+      const { dateKey, period, periodPromptAnswered, flow } = action
       const prev = state.periodLogs[dateKey] || {}
       const { status: _status, estimatedFrom: _estimatedFrom, ...cleanPrev } = prev
       const source = action.source || 'manual'
       let periodLogs = clearPossibleDaysFromStart(state.periodLogs, dateKey)
 
+      const updatedPeriodLog = {
+        ...(period === undefined ? prev : cleanPrev),
+        ...(period !== undefined ? { period } : {}),
+        ...(period === true ? {
+          source,
+          status: 'confirmed',
+        } : {}),
+        ...(period === false ? {
+          periodStart: false,
+          source,
+          status: 'not_period',
+        } : {}),
+        ...(periodPromptAnswered !== undefined ? { periodPromptAnswered } : {}),
+        ...(period === true && flow ? { flow } : {}),
+      }
+      if (period === false || flow === '') delete updatedPeriodLog.flow
+
       periodLogs = {
         ...periodLogs,
-        [dateKey]: {
-          ...(period === undefined ? prev : cleanPrev),
-          ...(period !== undefined ? { period } : {}),
-          ...(period === true ? {
-            source,
-            status: 'confirmed',
-          } : {}),
-          ...(period === false ? {
-            periodStart: false,
-            source,
-            status: 'not_period',
-          } : {}),
-          ...(periodPromptAnswered !== undefined ? { periodPromptAnswered } : {}),
-        },
+        [dateKey]: updatedPeriodLog,
       }
 
       if (period === true) {
@@ -529,8 +537,15 @@ function isSupportOnlyRoute() {
 
 const StoreCtx = createContext(null)
 
+function initialState() {
+  const base = freshState()
+  if (typeof window === 'undefined') return base
+  const saved = readGuestTracker(window.localStorage)
+  return saved ? { ...base, ...normalizeSavedHealth(saved), accountId: null } : base
+}
+
 export function StoreProvider({ children }) {
-  const [state, dispatch] = useReducer(reducer, undefined, freshState)
+  const [state, dispatch] = useReducer(reducer, undefined, initialState)
   const [authLoading, setAuthLoading] = useState(isSupabaseConfigured)
   const [accountError, setAccountError] = useState('')
   const [historyStatus, setHistoryStatus] = useState({ key: null, error: '' })
@@ -668,6 +683,7 @@ export function StoreProvider({ children }) {
           const result = await pushToSupabase(snapshot.accountId, snapshot)
           if (revision !== epoch.current) return
           clearSignupDraft(localStorage)
+          clearGuestTracker(localStorage)
           setAccountError('')
           const currentFingerprint = JSON.stringify({ records: trackerRecords(stateRef.current), identity: stateRef.current.identity })
           if (currentFingerprint === fingerprint) dispatch({ type: 'SERVER_RESULT', result })
@@ -676,6 +692,12 @@ export function StoreProvider({ children }) {
         }
       })
     }, 700)
+    return () => clearTimeout(timer)
+  }, [fingerprint, state.accountId, authLoading])
+
+  useEffect(() => {
+    if (state.accountId || authLoading || isSupportOnlyRoute()) return
+    const timer = setTimeout(() => saveGuestTracker(localStorage, state), 250)
     return () => clearTimeout(timer)
   }, [fingerprint, state.accountId, authLoading])
 

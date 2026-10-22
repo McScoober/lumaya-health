@@ -1,4 +1,5 @@
 import { addDays, dateKeyLocal } from './cyclePredictor.js'
+import { groupLoggedSymptoms } from '../content/symptomClusters.js'
 
 export function summarizeDoctorLogs(dailyLogs = {}, now = new Date()) {
   const end = dateKeyLocal(now)
@@ -22,6 +23,7 @@ export function summarizeDoctorLogs(dailyLogs = {}, now = new Date()) {
     impactLogCount: logs.filter((log) => Array.isArray(log.impact)).length,
     impactCount: logs.filter((log) => (log.impact || []).some((impact) => impact !== 'fine')).length,
     loggedSymptoms,
+    symptomClusters: groupLoggedSymptoms(logs),
     hasLoggedSymptoms: loggedSymptoms.length > 0,
     totalLogs: logs.length,
   }

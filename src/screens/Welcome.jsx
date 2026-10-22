@@ -37,10 +37,15 @@ export default function Welcome() {
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || 'The test account could not be opened.')
 
-      const { error } = await supabase.auth.verifyOtp({
-        token_hash: payload.tokenHash,
-        type: payload.verificationType,
-      })
+      const { error } = payload.accessToken && payload.refreshToken
+        ? await supabase.auth.setSession({
+          access_token: payload.accessToken,
+          refresh_token: payload.refreshToken,
+        })
+        : await supabase.auth.verifyOtp({
+          token_hash: payload.tokenHash,
+          type: payload.verificationType,
+        })
       if (error) throw error
       navigate('/home')
     } catch (error) {
@@ -53,9 +58,8 @@ export default function Welcome() {
   return (
     <div className="screen center" style={{ justifyContent: 'center', alignItems: 'center' }}>
       <div className="spacer" />
-      <div style={{ display: 'grid', placeItems: 'center', gap: 16 }}>
-        <MaisieLogo size={120} />
-        <h1 style={{ fontSize: 36, margin: '14px 0 0', color: 'var(--text-primary)' }}>Maisie</h1>
+      <div style={{ display: 'grid', placeItems: 'center' }}>
+        <MaisieLogo variant="wordmark" width={280} />
       </div>
       <div className="spacer" />
 
@@ -89,7 +93,7 @@ export default function Welcome() {
               {testLoginLoading ? 'Opening test account...' : 'Open test account'}
             </Button>
             {testLoginError && (
-              <p role="alert" style={{ margin: '8px 0 0', color: '#B3265A', fontSize: 12.5 }}>
+              <p role="alert" style={{ margin: '8px 0 0', color: '#B42318', fontSize: 12.5 }}>
                 {testLoginError}
               </p>
             )}

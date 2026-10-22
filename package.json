@@ -3,15 +3,15 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "Maisie, a teen period health app for tracking cycle signals and obvious abnormalities without diagnosing conditions.",
+  "description": "Maisie Health, teen health navigation for understanding concerns, preparing for care, and finding the right next step without diagnosing conditions.",
   "scripts": {
-    "test": "node --test src/engine/*.test.js src/lib/*.test.js src/state/*.test.mjs",
+    "test": "node --test src/content/*.test.js src/content/learn/*.test.js src/engine/*.test.js src/lib/*.test.js src/state/*.test.mjs",
     "dev": "vite",
-    "build": "vite build",
+    "build": "node --test src/content/learn/articles.test.js && vite build",
     "preview": "vite preview",
     "ios:sync": "npm run build && cap sync ios",
     "ios:open": "cap open ios",
-    "ios:assets": "capacitor-assets generate --ios --iconBackgroundColor '#FAF6EE' --iconBackgroundColorDark '#FAF6EE' --splashBackgroundColor '#FAF6EE' --splashBackgroundColorDark '#FAF6EE' --logoSplashTargetWidth 640"
+    "ios:assets": "capacitor-assets generate --ios --iconBackgroundColor '#FAF7FB' --iconBackgroundColorDark '#FAF7FB' --splashBackgroundColor '#FAF7FB' --splashBackgroundColorDark '#FAF7FB' --logoSplashTargetWidth 640"
   },
   "dependencies": {
     "@capacitor/core": "^8.5.2",

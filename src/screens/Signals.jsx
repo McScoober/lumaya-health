@@ -28,17 +28,17 @@ export default function Signals() {
   const bodySignals = deriveBodySignals(state.dailyLogs, state.profile, {
     days: 30,
     energyColor: '#E8C86A',
-    skinColor: '#E8A0B0',
-    sleepColor: '#C4A8E0',
-    moodColor: '#A0C4A4',
+    skinColor: '#F4A5B8',
+    sleepColor: '#C8AAD9',
+    moodColor: '#A9C7AB',
   })
 
   return (
     <div style={{
       minHeight: '100%',
       padding: '18px 18px 96px',
-      background: '#FAF6F0',
-      color: '#2C1810',
+      background: '#FAF7FB',
+      color: '#3F0824',
       fontFamily: "'DM Sans', sans-serif",
       boxSizing: 'border-box',
     }}>
@@ -46,7 +46,7 @@ export default function Signals() {
         <div>
           <p style={{
             margin: '0 0 4px',
-            color: '#E0528A',
+            color: '#713666',
             fontSize: 11,
             fontWeight: 700,
             letterSpacing: '0.08em',
@@ -56,7 +56,7 @@ export default function Signals() {
           </p>
           <h1 style={{
             margin: 0,
-            color: '#2C1810',
+            color: '#3F0824',
             fontFamily: "'Fraunces', serif",
             fontSize: 26,
             lineHeight: 1.15,
@@ -68,8 +68,8 @@ export default function Signals() {
           flexShrink: 0,
           fontSize: 11,
           fontWeight: 700,
-          color: phaseMeta?.accent || '#E0528A',
-          background: phaseMeta?.soft || '#FDEEF4',
+          color: phaseMeta?.accent || '#713666',
+          background: phaseMeta?.soft || '#F3EDF7',
           padding: '7px 10px',
           borderRadius: 99,
         }}>
@@ -84,7 +84,7 @@ export default function Signals() {
         position: 'sticky',
         top: 0,
         zIndex: 20,
-        background: '#FAF6F0',
+        background: '#FAF7FB',
         paddingTop: 12,
         paddingBottom: 10,
         marginBottom: 18,
@@ -100,10 +100,10 @@ export default function Signals() {
             onClick={() => setView(key)}
             style={{
               minHeight: 40,
-              border: view === key ? '1.5px solid #E0528A' : '1px solid rgba(44,24,16,0.08)',
+              border: view === key ? '1.5px solid #713666' : '1px solid rgba(44,24,16,0.08)',
               borderRadius: 999,
-              background: view === key ? '#FDEEF4' : '#fff',
-              color: view === key ? '#E0528A' : '#5C3D2E',
+              background: view === key ? '#F3EDF7' : '#fff',
+              color: view === key ? '#713666' : '#5E3A55',
               fontSize: 13,
               fontWeight: 700,
               cursor: 'pointer',
@@ -117,9 +117,9 @@ export default function Signals() {
       {view === 'all' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16, animation: 'rise 300ms ease' }}>
           <MetabolicCard title="Energy" value={bodySignals.energy.val} color="#E8C86A" description={bodySignals.energy.desc} trendPoints={bodySignals.energy.trend} />
-          <MetabolicCard title="Skin" value={bodySignals.skin.val} color="#E8A0B0" description={bodySignals.skin.desc} trendPoints={bodySignals.skin.trend} />
-          <MetabolicCard title="Sleep" value={bodySignals.sleep.val} color="#C4A8E0" description={bodySignals.sleep.desc} trendPoints={bodySignals.sleep.trend} />
-          <MetabolicCard title="Mood" value={bodySignals.mood.val} color="#A0C4A4" description={bodySignals.mood.desc} trendPoints={bodySignals.mood.trend} />
+          <MetabolicCard title="Skin" value={bodySignals.skin.val} color="#F4A5B8" description={bodySignals.skin.desc} trendPoints={bodySignals.skin.trend} />
+          <MetabolicCard title="Sleep" value={bodySignals.sleep.val} color="#C8AAD9" description={bodySignals.sleep.desc} trendPoints={bodySignals.sleep.trend} />
+          <MetabolicCard title="Mood" value={bodySignals.mood.val} color="#A9C7AB" description={bodySignals.mood.desc} trendPoints={bodySignals.mood.trend} />
         </div>
       )}
 
@@ -135,14 +135,14 @@ export default function Signals() {
             {predictionsReady ? (
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
-                  <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#2C1810' }}>
+                  <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#3F0824' }}>
                     how you feel through your cycle
                   </h2>
                   <span style={{
                     fontSize: 11,
                     fontWeight: 700,
-                    color: phaseMeta?.accent || '#E0528A',
-                    background: phaseMeta?.soft || '#FDEEF4',
+                    color: phaseMeta?.accent || '#713666',
+                    background: phaseMeta?.soft || '#F3EDF7',
                     padding: '5px 10px',
                     borderRadius: 99,
                     whiteSpace: 'nowrap',
@@ -159,16 +159,16 @@ export default function Signals() {
                   />
                 </div>
 
-                <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>
-                  <strong style={{ color: '#2C1810' }}>About this chart:</strong> this view helps you notice timing in your own cycle history.
+                <p style={{ margin: '14px 0 0', color: '#5E3A55', fontSize: 13.5, lineHeight: 1.5 }}>
+                  <strong style={{ color: '#3F0824' }}>About this chart:</strong> this view helps you notice timing in your own cycle history.
                 </p>
               </>
             ) : (
               <>
-                <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#2C1810' }}>
+                <h2 style={{ fontFamily: "'Fraunces', serif", fontSize: 20, lineHeight: 1.15, margin: 0, color: '#3F0824' }}>
                   building your baseline
                 </h2>
-                <p style={{ margin: '10px 0 0', color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.5 }}>
+                <p style={{ margin: '10px 0 0', color: '#5E3A55', fontSize: 13.5, lineHeight: 1.5 }}>
                   Keep logging period starts and daily check-ins. Maisie will show timing-based views once there are enough full cycles to make them useful.
                 </p>
               </>

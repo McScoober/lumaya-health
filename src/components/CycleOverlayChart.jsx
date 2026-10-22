@@ -2,10 +2,10 @@
 import { useState } from 'react'
 
 const PHASES = [
-  { label: 'Period', days: 5, color: '#E8A0B0', lightColor: '#FDF0F4' },
-  { label: 'Building Up', days: 9, color: '#A0C4A4', lightColor: '#F0F7F0' },
+  { label: 'Period', days: 5, color: '#F4A5B8', lightColor: '#FDF0F4' },
+  { label: 'Building Up', days: 9, color: '#A9C7AB', lightColor: '#F0F7F0' },
   { label: 'Peak', days: 4, color: '#E8C86A', lightColor: '#FDF8EC' },
-  { label: 'Wind Down', days: 10, color: '#C4A8E0', lightColor: '#F5F0FC' },
+  { label: 'Wind Down', days: 10, color: '#C8AAD9', lightColor: '#F5F0FC' },
 ]
 const TOTAL_DAYS = PHASES.reduce((s, p) => s + p.days, 0)
 
@@ -20,21 +20,21 @@ const SIGNALS = [
   {
     key: 'skin',
     label: '✨ Skin',
-    color: '#E8A0B0',
+    color: '#F4A5B8',
     values: [3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 3, 3, 3, 3],
     insight: 'Skin can look clearer during the building-up phase. Breakouts before your period are common and not your fault.',
   },
   {
     key: 'sleep',
     label: '💤 Sleep',
-    color: '#C4A8E0',
+    color: '#C8AAD9',
     values: [3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 3, 3, 3],
     insight: 'Sleep is often best mid-cycle. Restless nights can show up in the wind-down week, so protect your sleep routine then.',
   },
   {
     key: 'mood',
     label: '💚 Mood',
-    color: '#A0C4A4',
+    color: '#A9C7AB',
     values: [2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 3],
     insight: 'Mood often lifts in the building-up and peak phases. The wind-down week can feel heavier, and tracking helps you plan ahead.',
   },
@@ -122,7 +122,7 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
               fontWeight: 600,
               border: activeKey === s.key ? `2px solid ${s.color}` : '2px solid transparent',
               background: activeKey === s.key ? '#fff' : 'rgba(44,24,16,0.08)',
-              color: activeKey === s.key ? s.color : '#5C3D2E',
+              color: activeKey === s.key ? s.color : '#5E3A55',
               cursor: 'pointer',
               transition: 'all 0.15s',
             }}
@@ -167,12 +167,12 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
         />
 
         {Number.isFinite(cycleDay) && <>
-          <line x1={todayX} y1={23} x2={todayX} y2={H} stroke="#E0528A" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.8} />
+          <line x1={todayX} y1={23} x2={todayX} y2={H} stroke="#713666" strokeWidth={1.5} strokeDasharray="4 3" opacity={0.8} />
           <circle cx={todayX} cy={(() => {
             const dayIdx = Math.max(0, Math.min(Math.round(((todayX - padX) / (W - padX * 2)) * (signal.values.length - 1)), signal.values.length - 1))
             const v = signal.values[dayIdx]
             return 14 + ((5 - v) / 5) * (H - 28)
-          })()} r={4.5} fill="#E0528A" stroke="#fff" strokeWidth={2} />
+          })()} r={4.5} fill="#713666" stroke="#fff" strokeWidth={2} />
           <g>
             <rect
               x={Math.max(padX + 2, Math.min(todayX - 29, W - padX - 60))}
@@ -180,7 +180,7 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
               width={58}
               height={17}
               rx={8.5}
-              fill="#E0528A"
+              fill="#713666"
             />
             <text
               x={Math.max(padX + 31, Math.min(todayX, W - padX - 31))}
@@ -211,7 +211,7 @@ function SignalChart({ phaseBands, todayX, todayPhase, W, H, padX, cycleDay }) {
         borderLeft: `3px solid ${signal.color}`,
         fontSize: 13,
         lineHeight: 1.5,
-        color: '#2C1810',
+        color: '#3F0824',
       }}>
         {signal.insight}
       </div>

@@ -168,7 +168,7 @@ export default function CheckIn() {
             I don't remember the exact date
           </Chip>
           {dateError && (
-            <p style={{ margin: 0, color: '#B3265A', fontSize: 12.5, lineHeight: 1.4 }}>
+            <p style={{ margin: 0, color: '#B42318', fontSize: 12.5, lineHeight: 1.4 }}>
               {dateError}
             </p>
           )}

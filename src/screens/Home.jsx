@@ -5,14 +5,17 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { addDays, dateKeyLocal, diffDays, phaseForDate, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys, hasThreeFullCycles } from '../engine/cyclePredictor.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
 import { buildTip, maisieMessage } from '../engine/tipEngine.js'
 import { deriveBodySignals } from '../engine/bodySignals.js'
+import { buildRouteSummary } from '../engine/routeSummary.js'
+import { features } from '../config/features.js'
 import { Card, Button } from '../components/ui.jsx'
 import Mascot from '../components/Mascot.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import ProgressiveCheckin from './ProgressiveCheckin.jsx'
-import { CheckCircle, Gear } from '@phosphor-icons/react'
+import MaisieLogo from '../components/MaisieLogo.jsx'
+import { ArrowRight, CheckCircle, ClipboardText, Gear } from '@phosphor-icons/react'
 
 function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
   let count = 0
@@ -36,18 +39,20 @@ export default function Home() {
   const todayKey = dateKeyLocal(now)
   const todayLog = state.dailyLogs[todayKey] || {}
   const todayPeriodLog = state.periodLogs[todayKey] || {}
+  const periodStartedToday = todayPeriodLog.period === true
   const checkedInToday = todayLog.checkinCompleted === true
 
   const periodStarts = periodStartKeys(state.periodLogs)
   const predictionsReady = state.result?.authoritative === true && state.result.patternsReady === true
-  const supportPhaseInfo = phaseForDate(cycleModel, now)
+  const supportPhaseInfo = phaseForDateWithObservations(cycleModel, state.periodLogs, now)
   const supportPhase = supportPhaseInfo.phase
   const supportCycleDay = supportPhaseInfo.dayOfCycle === null || supportPhaseInfo.dayOfCycle === undefined
     ? 1
     : supportPhaseInfo.dayOfCycle + 1
-  const { phase, dayOfCycle } = predictionsReady
-    ? phaseForDate(cycleModel, now)
+  const phaseInfo = predictionsReady || periodStartedToday
+    ? phaseForDateWithObservations(cycleModel, state.periodLogs, now)
     : { phase: null, dayOfCycle: null }
+  const { phase, dayOfCycle } = phaseInfo
   const meta = phase ? PHASE_META[phase] : null
   const prediction = predictionsReady ? predictPeriod(cycleModel, now) : null
   const inWindow = predictionsReady ? isInPeriodWindow(cycleModel, now) : false
@@ -62,7 +67,6 @@ export default function Home() {
     daysSinceLatestPeriod !== null &&
     daysSinceLatestPeriod >= 21 &&
     daysSinceLatestPeriod <= 38
-  const periodStartedToday = todayPeriodLog.period === true
   const possiblePeriodToday = todayPeriodLog.status === 'possible' && todayPeriodLog.period !== true
   const shouldShowPeriodStartCard = (possiblePeriodToday || isPeriodAskWindow || isEarlyPeriodAskWindow) &&
     (!todayPeriodLog.periodPromptAnswered || periodStartedToday || possiblePeriodToday)
@@ -76,7 +80,9 @@ export default function Home() {
   const baselineBody = latestPeriodStartKey
     ? `Last period start: ${new Date(`${latestPeriodStartKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${daysSinceLatestPeriod !== null ? ` (${Math.max(0, daysSinceLatestPeriod)} day${daysSinceLatestPeriod === 1 ? '' : 's'} ago)` : ''}. Keep logging to make Maisie more accurate.`
     : 'Log your period start and quick daily check-ins. Maisie gets more accurate as it learns your rhythm.'
-  const phaseSubtitle = meta?.mood
+  const phaseSubtitle = phaseInfo.observed
+    ? `Day ${phaseInfo.dayOfPeriod || 1}`
+    : meta?.mood
 
   const tip = useMemo(
     () => (supportPhase
@@ -96,13 +102,17 @@ export default function Home() {
     () => deriveBodySignals(state.dailyLogs, state.profile, { days: 8, today: now }),
     [state.dailyLogs, state.profile, todayKey],
   )
+  const routeSummary = useMemo(
+    () => buildRouteSummary({ dailyLogs: state.dailyLogs, periodLogs: state.periodLogs, result: state.result }),
+    [state.dailyLogs, state.periodLogs, state.result],
+  )
 
 
 
   // Phase tint variables for the screen (13.2.3)
   const tintStyle = meta
     ? { '--phase-accent': meta.accent, '--phase-soft': meta.soft }
-    : { '--phase-accent': 'var(--pink)', '--phase-soft': 'var(--pink-soft)' }
+    : { '--phase-accent': 'var(--plum-700)', '--phase-soft': 'var(--lavender-100)' }
 
   const firstName = state.identity.name?.split(' ')[0] || 'there'
   const greeting = now.getHours() < 12 ? 'Good morning' : now.getHours() < 18 ? 'Good afternoon' : 'Good evening'
@@ -124,6 +134,7 @@ export default function Home() {
       {/* Header */}
       <div className="row row--between" style={{ marginBottom: 4 }}>
         <div>
+          <MaisieLogo variant="wordmark" width={150} style={{ marginBottom: 12 }} />
           <p className="eyebrow" style={{ color: 'var(--phase-accent)' }}>{greeting}</p>
           <h1 style={{ margin: 0, fontSize: 26 }}>{firstName}</h1>
         </div>
@@ -142,7 +153,9 @@ export default function Home() {
             <div className="card__label">Right now</div>
             {meta ? (
               <>
-                <h2 style={{ margin: '2px 0 2px', color: 'var(--phase-accent)' }}>{meta.label} phase</h2>
+                <h2 style={{ margin: '2px 0 2px', color: 'var(--phase-accent)' }}>
+                  {phase === 'menstrual' ? 'Your period' : `${meta.label} phase`}
+                </h2>
                 <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>{phaseSubtitle}</p>
               </>
             ) : (
@@ -156,7 +169,11 @@ export default function Home() {
           </div>
           <Mascot size={64} mood={phase === 'luteal' || phase === 'menstrual' ? 'sleepy' : 'happy'} />
         </div>
-        {prediction && (
+        {periodStartedToday ? (
+          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
+            Periods can vary in length. Notice how your energy and comfort feel today.
+          </p>
+        ) : prediction && (
           <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
             {inWindow
               ? "📍 You're in your predicted period window."
@@ -171,7 +188,7 @@ export default function Home() {
             <div className="card__label" style={{ color: 'var(--phase-accent)' }}>Today's Tip</div>
             <h2 style={{
               margin: '4px 0 10px',
-              color: '#2C1810',
+              color: 'var(--text-primary)',
               fontFamily: "'Fraunces', serif",
               fontSize: 21,
               lineHeight: 1.2,
@@ -181,7 +198,7 @@ export default function Home() {
             {tip.actions[0] && (
               <p style={{
                 margin: '0 0 8px',
-                color: '#2C1810',
+                color: '#3F0824',
                 fontSize: 14.5,
                 fontWeight: 600,
                 lineHeight: 1.45,
@@ -191,7 +208,7 @@ export default function Home() {
             )}
             <p style={{
               margin: 0,
-              color: '#5C3D2E',
+              color: '#5E3A55',
               fontSize: 13.5,
               lineHeight: 1.5,
             }}>
@@ -212,8 +229,8 @@ export default function Home() {
                   width: 42,
                   height: 42,
                   borderRadius: '50%',
-                  background: '#F0F5F0',
-                  color: '#A0C4A4',
+                  background: 'var(--sage-100)',
+                  color: 'var(--sage-700)',
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -246,23 +263,22 @@ export default function Home() {
 
       {/* Progressive onboarding mini-cards (fast-start users only) */}
       <ProgressiveCheckin />
-      {state.result?.authoritative && state.result.flags?.length > 0 && (
-        <section style={{ marginTop: 16, padding: 16, border: '1px solid #e8a0b0', borderRadius: 8 }}>
-          <h2 style={{ fontSize: 20 }}>Signals to review</h2>
-          {state.result.flags.map((flag) => <p key={flag.id}><strong>{flag.category}:</strong> {flag.note}</p>)}
-          <p className="muted" style={{ fontSize: 12 }}>Maisie does not diagnose. These signals come from what you reported.</p>
-          <Button onClick={() => navigate('/advisor')}>Prepare for a doctor visit</Button>
-        </section>
+      {features.routeSummary && routeSummary.loggedDays >= 7 && (
+        <button type="button" className="home-route-entry" onClick={() => navigate('/route/summary')}>
+          <span className="home-route-entry__icon"><ClipboardText size={22} weight="duotone" /></span>
+          <span><strong>Your pattern so far</strong><small>{routeSummary.stage === 'flags' && routeSummary.flags.length ? `${routeSummary.flags.length} ${routeSummary.flags.length === 1 ? 'item' : 'items'} worth discussing` : `${routeSummary.loggedDays} logged days ready to review`}</small></span>
+          <ArrowRight size={19} aria-hidden="true" />
+        </button>
       )}
 
       {(shouldShowPeriodStartCard || periodPromptSaved) && (
-        <Card style={{ marginTop: 14, background: '#FDEEF4', borderColor: 'rgba(224,82,138,0.35)' }}>
+        <Card style={{ marginTop: 14, background: 'var(--lavender-100)', borderColor: 'var(--border-strong)' }}>
           {periodPromptSaved ? (
             <div role="status">
-              <p style={{ margin: '0 0 4px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
+              <p style={{ margin: '0 0 4px', color: '#3F0824', fontSize: 15, fontWeight: 700 }}>
                 {periodPromptChoice ? 'Your period is logged for today.' : 'Saved for today.'}
               </p>
-              <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.45 }}>
+              <p style={{ margin: 0, color: '#5E3A55', fontSize: 13.5, lineHeight: 1.45 }}>
                 {periodPromptChoice
                   ? 'The first marked day of this period is used as its start.'
                   : 'You can change this later from your calendar.'}
@@ -270,16 +286,16 @@ export default function Home() {
             </div>
           ) : periodStartedToday ? (
             <>
-              <p style={{ margin: '0 0 4px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
+              <p style={{ margin: '0 0 4px', color: '#3F0824', fontSize: 15, fontWeight: 700 }}>
                 Your period is logged for today.
               </p>
-              <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13.5, lineHeight: 1.45 }}>
+              <p style={{ margin: 0, color: '#5E3A55', fontSize: 13.5, lineHeight: 1.45 }}>
                 The first marked day of this period is used as its start.
               </p>
             </>
           ) : (
             <>
-              <p style={{ margin: '0 0 10px', color: '#2C1810', fontSize: 15, fontWeight: 700 }}>
+              <p style={{ margin: '0 0 10px', color: '#3F0824', fontSize: 15, fontWeight: 700 }}>
                 {possiblePeriodToday
                   ? 'Still on your period today?'
                   : predictionsReady
@@ -395,7 +411,7 @@ function SignalDetailSheet({ signal, logCount, onClose }) {
               background: '#fff',
               borderRadius: 999,
               padding: '7px 12px',
-              color: '#5C3D2E',
+              color: '#5E3A55',
               fontWeight: 700,
               cursor: 'pointer',
             }}
@@ -425,7 +441,7 @@ function DetailBlock({ label, text }) {
   return (
     <div>
       <div className="card__label" style={{ marginBottom: 3 }}>{label}</div>
-      <p style={{ margin: 0, color: '#3A2A24', fontSize: 13.5, lineHeight: 1.5 }}>
+      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.5 }}>
         {text}
       </p>
     </div>

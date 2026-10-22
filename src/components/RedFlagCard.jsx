@@ -38,7 +38,7 @@ export default function RedFlagCard({ onDismiss }) {
             margin: 0,
             fontWeight: 700,
             fontSize: 15,
-            color: '#7B1B40',
+            color: '#713666',
             lineHeight: 1.3,
           }}
         >
@@ -68,7 +68,7 @@ export default function RedFlagCard({ onDismiss }) {
             padding: '13px 16px',
             border: 'none',
             borderRadius: 12,
-            background: '#C01B50',
+            background: '#713666',
             color: '#fff',
             fontSize: 14,
             fontWeight: 700,
@@ -91,7 +91,7 @@ export default function RedFlagCard({ onDismiss }) {
             border: '1.5px solid rgba(180, 30, 75, 0.3)',
             borderRadius: 12,
             background: 'transparent',
-            color: '#7B1B40',
+            color: '#713666',
             fontSize: 14,
             fontWeight: 600,
             cursor: 'pointer',

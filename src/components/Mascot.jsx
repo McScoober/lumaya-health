@@ -5,20 +5,20 @@ export default function Mascot({ size = 96, mood = 'happy' }) {
   const eyes =
     mood === 'sleepy' ? (
       <>
-        <path d="M40 52 q6 5 12 0" stroke="#6B1E3C" strokeWidth="3" fill="none" strokeLinecap="round" />
-        <path d="M62 52 q6 5 12 0" stroke="#6B1E3C" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <path d="M40 52 q6 5 12 0" stroke="#3F0824" strokeWidth="3" fill="none" strokeLinecap="round" />
+        <path d="M62 52 q6 5 12 0" stroke="#3F0824" strokeWidth="3" fill="none" strokeLinecap="round" />
       </>
     ) : (
       <>
-        <circle cx="46" cy="54" r="4" fill="#6B1E3C" />
-        <circle cx="70" cy="54" r="4" fill="#6B1E3C" />
+        <circle cx="46" cy="54" r="4" fill="#3F0824" />
+        <circle cx="70" cy="54" r="4" fill="#3F0824" />
       </>
     )
   const mouth =
     mood === 'sad' ? (
-      <path d="M50 70 q8 -6 16 0" stroke="#6B1E3C" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M50 70 q8 -6 16 0" stroke="#3F0824" strokeWidth="3" fill="none" strokeLinecap="round" />
     ) : (
-      <path d="M49 66 q9 8 18 0" stroke="#6B1E3C" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M49 66 q9 8 18 0" stroke="#3F0824" strokeWidth="3" fill="none" strokeLinecap="round" />
     )
 
   return (

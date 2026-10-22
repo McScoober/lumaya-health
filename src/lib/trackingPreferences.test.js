@@ -1,0 +1,66 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import {
+  DEFAULT_TRACKING_MODULES,
+  profilePayloadForTrackingModules,
+  shouldShowBleedingDetails,
+  shouldShowPainRelief,
+  symptomIsEnabled,
+  trackingModulesFromProfile,
+} from './trackingPreferences.js'
+
+test('tracking preferences use safe defaults and keep food optional', () => {
+  assert.deepEqual(trackingModulesFromProfile({}), DEFAULT_TRACKING_MODULES)
+})
+
+test('legacy food preference is reflected in tracking modules', () => {
+  assert.equal(trackingModulesFromProfile({ foodModule: true }).food, true)
+})
+
+test('saving tracking preferences keeps the learn food module in sync', () => {
+  const payload = profilePayloadForTrackingModules({ ...DEFAULT_TRACKING_MODULES, food: true })
+  assert.equal(payload.foodModule, true)
+  assert.equal(payload.trackingModules.food, true)
+})
+
+test('symptoms appear when at least one related module is enabled', () => {
+  const modules = { ...DEFAULT_TRACKING_MODULES, symptoms: true, skinHair: false }
+  assert.equal(symptomIsEnabled('Cramps', modules), true)
+  assert.equal(symptomIsEnabled('Skin breakout', modules), false)
+})
+
+test('core stays enabled even when optional modules are all disabled', () => {
+  const payload = profilePayloadForTrackingModules(Object.fromEntries(
+    Object.keys(DEFAULT_TRACKING_MODULES).map((key) => [key, false]),
+  ))
+  assert.equal(payload.trackingModules.core, true)
+})
+
+test('food opt-out disables the module and its content preference', () => {
+  const payload = profilePayloadForTrackingModules({ ...DEFAULT_TRACKING_MODULES, food: true }, { hideFoodContent: true })
+  assert.equal(payload.trackingModules.food, false)
+  assert.equal(payload.foodModule, false)
+  assert.equal(payload.hideFoodContent, true)
+})
+
+test('legacy module choices migrate without dropping pain or bleeding details', () => {
+  const modules = trackingModulesFromProfile({ trackingModules: { pain: true, period: true, sleep: false, skin: true } })
+  assert.equal(modules.painRelief, true)
+  assert.equal(modules.bleedingDetail, true)
+  assert.equal(modules.sleep, false)
+  assert.equal(modules.skinHair, true)
+})
+
+test('pain relief starts at pain 4 and respects the module preference', () => {
+  assert.equal(shouldShowPainRelief({ painRelief: true }, 3), false)
+  assert.equal(shouldShowPainRelief({ painRelief: true }, 4), true)
+  assert.equal(shouldShowPainRelief({ painRelief: false }, 8), false)
+})
+
+test('bleeding details only appear with current or previously entered bleeding context', () => {
+  const modules = { bleedingDetail: true }
+  assert.equal(shouldShowBleedingDetails(modules, {}), false)
+  assert.equal(shouldShowBleedingDetails(modules, { period: true }), true)
+  assert.equal(shouldShowBleedingDetails(modules, { spotting: true }), true)
+  assert.equal(shouldShowBleedingDetails({ bleedingDetail: false }, { period: true }), false)
+})

@@ -8,21 +8,22 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { TopBar, Card, Button, Badge } from '../components/ui.jsx'
-import MetabolicCard from '../components/MetabolicCard.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
-import { deriveBodySignals } from '../engine/bodySignals.js'
 import { summarizeDoctorLogs } from '../engine/doctorSummary.js'
+import { buildPatternEvidence, buildRouteSignals } from '../engine/patternInsights.js'
+import { groupLoggedSymptoms } from '../content/symptomClusters.js'
 import { monthCacheKey } from '../lib/historyWindow.js'
+import { ArrowRight, CalendarBlank, ChartLineUp, FileText, FirstAidKit, PencilSimple, X } from '@phosphor-icons/react'
 import {
   buildCycleModel,
   phaseForDate,
+  phaseForDateWithObservations,
   PHASE_META,
   dateKeyLocal,
   addDays,
   diffDays,
   startOfDay,
   periodStartKeys,
-  hasThreeFullCycles,
 } from '../engine/cyclePredictor.js'
 
 const PHASE_LABELS = {
@@ -55,8 +56,6 @@ export default function Patterns({ initialTab }) {
   // Tab State: 'calendar' | 'signals'
   const tabFromUrl = searchParams.get('tab')
   const [activeTab, setActiveTab] = useState(tabFromUrl || initialTab || 'calendar')
-  const [signalsSubView, setSignalsSubView] = useState('cycle') // 'cycle' | 'trends'
-
   const [showDoctorModal, setShowDoctorModal] = useState(false)
   const [copied, setCopied] = useState(false)
   const [selectedDateKey, setSelectedDateKey] = useState(dateKeyLocal(new Date()))
@@ -93,7 +92,7 @@ export default function Patterns({ initialTab }) {
   // Current Phase Info for Signals View
   const now = new Date()
   const predictionsReady = state.result?.authoritative === true && state.result.patternsReady === true
-  const phaseInfo = phaseForDate(cycleModel, now)
+  const phaseInfo = phaseForDateWithObservations(cycleModel, state.periodLogs, now)
   const currentPhase = phaseInfo.phase || 'follicular'
   const cycleDay = phaseInfo.dayOfCycle === null || phaseInfo.dayOfCycle === undefined ? 14 : phaseInfo.dayOfCycle + 1
   const phaseMeta = PHASE_META[currentPhase] || PHASE_META.follicular
@@ -102,18 +101,6 @@ export default function Patterns({ initialTab }) {
   // Count real logs & check if today is logged
   const todayKey = dateKeyLocal(now)
   const isTodayLogged = !!state.dailyLogs[todayKey]
-  const bodySignals = useMemo(
-    () => deriveBodySignals(state.dailyLogs, state.profile, {
-      days: 30,
-      today: now,
-      energyColor: '#E8C86A',
-      skinColor: '#E8A0B0',
-      sleepColor: '#C4A8E0',
-      moodColor: '#A0C4A4',
-    }),
-    [state.dailyLogs, state.profile, todayKey],
-  )
-
   // Only show entries the user actually logged. Predicted phase/period shading
   // can appear on the calendar, but symptoms, pain, and impacts must be real.
   const activeLogs = state.dailyLogs || {}
@@ -185,29 +172,26 @@ export default function Patterns({ initialTab }) {
     calendarDays.find((c) => c.isToday) ||
     calendarDays[0]
 
-  // Clinical highlights come only from the authoritative server result.
-  const patternInsights = useMemo(() => {
-    const flags = state.result?.authoritative ? state.result.flags || [] : []
-    if (!flags.length) return [{
-      id: 'tracking', icon: '', title: state.result ? 'Keep tracking' : 'Your logged observations',
-      body: state.result ? 'No screening signal was identified from the available information. This is not a medical assessment.'
-        : state.accountId ? 'Screening updates after your changes are saved.' : 'Save your tracker to receive screening results. Your tips remain available.',
-      actionText: state.accountId ? null : 'Save tracker', onAction: () => navigate('/auth?next=/patterns&source=post-onboarding'),
-      badge: null,
-    }]
-    return flags.map((flag) => ({
-      id: flag.id, icon: '', title: flag.category, body: flag.note,
-      actionText: 'Prepare for a doctor visit', onAction: () => navigate('/advisor'),
-      badge: flag.displaySeverity === 'URGENT' ? 'Urgent' : flag.displaySeverity === 'SOFT' ? 'Mild' : 'Moderate',
-      evidence: flag.supportingData, version: flag.ruleVersion,
-    }))
-  }, [state.result, state.accountId, navigate])
+  const patternEvidence = useMemo(
+    () => buildPatternEvidence(state.dailyLogs, state.periodLogs, now, 90),
+    [state.dailyLogs, state.periodLogs, todayKey],
+  )
+  const routeSignals = useMemo(
+    () => buildRouteSignals(state.result, patternEvidence),
+    [state.result, patternEvidence],
+  )
 
   // Doctor Summary Report Text
   const doctorReportText = useMemo(() => {
     const name = state.identity.name || 'Maisie User'
     const summary = summarizeDoctorLogs(activeLogs, now)
     const reportStart = addDays(now, -29)
+
+    const symptomSections = summary.symptomClusters.length
+      ? summary.symptomClusters
+          .map((cluster) => `${cluster.label}: ${cluster.symptoms.map((symptom) => `${symptom.name} (${symptom.count} ${symptom.count === 1 ? 'day' : 'days'})`).join(', ')}`)
+          .join('\n')
+      : 'No symptoms logged.'
 
     return `MAISIE HEALTH — 30-DAY PATTERN REPORT
 --------------------------------------------------
@@ -220,11 +204,14 @@ METRICS:
 • Activity Impact Days: ${summary.impactCount} days
 • Observed Cycle Length: ${state.result?.cycleLength ? `${state.result.cycleLength} days` : 'Not available'}
 
+SYMPTOMS BY AREA:
+${symptomSections}
+
 PATTERNS DETECTED:
-${patternInsights.map((p) => `• ${p.title}: ${p.body}`).join('\n')}
+${routeSignals.length ? routeSignals.map((p) => `• ${p.category}: ${p.note}`).join('\n') : '• No clinician discussion signals are ready from the available information.'}
 
 Maisie does not diagnose. This summary reflects reported information, not a medical assessment.`
-  }, [state.identity.name, activeLogs, state.result?.cycleLength, patternInsights, todayKey])
+  }, [state.identity.name, activeLogs, state.result?.cycleLength, routeSignals, todayKey])
 
   const handleCopyReport = () => {
     navigator.clipboard?.writeText(doctorReportText)
@@ -258,7 +245,8 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               gap: 4,
             }}
           >
-            Doctor Report 📄
+            <FileText size={15} weight="bold" aria-hidden="true" />
+            Visit summary
           </button>
         }
       />
@@ -297,7 +285,8 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             gap: 6,
           }}
         >
-          <span>📅</span> 30-Day Grid
+          <CalendarBlank size={17} weight="bold" aria-hidden="true" />
+          History
         </button>
         <button
           id="patterns-tab-signals"
@@ -320,7 +309,8 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             gap: 6,
           }}
         >
-          <span>⚡</span> Body Signals
+          <ChartLineUp size={17} weight="bold" aria-hidden="true" />
+          Patterns
         </button>
       </div>
 
@@ -336,10 +326,10 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 marginBottom: 12,
                 padding: '10px 14px',
                 borderRadius: 12,
-                background: 'linear-gradient(135deg, #FFF5F7 0%, #F5EBFB 100%)',
-                border: '1px solid rgba(224, 76, 122, 0.2)',
+                background: 'linear-gradient(135deg, #F3EDF7 0%, #E9F1EA 100%)',
+                border: '1px solid var(--border-light)',
                 fontSize: 12,
-                color: '#7B1B40',
+                color: '#713666',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
@@ -367,8 +357,8 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               ) : (
                 <span
                   style={{
-                    background: 'rgba(75, 175, 107, 0.15)',
-                    color: '#2B7A41',
+                    background: 'var(--sage-100)',
+                    color: 'var(--sage-700)',
                     padding: '4px 10px',
                     borderRadius: 8,
                     fontSize: 11,
@@ -426,7 +416,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     height: 30,
                     borderRadius: '50%',
                     border: '1px solid rgba(0,0,0,0.08)',
-                    background: canGoNextMonth ? '#fff' : '#F4F1EF',
+                    background: canGoNextMonth ? '#fff' : 'var(--lavender-100)',
                     color: canGoNextMonth ? 'var(--text-primary)' : 'var(--text-secondary)',
                     fontSize: 18,
                     fontWeight: 800,
@@ -444,7 +434,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             {(isLoadingVisibleMonth || historyStatus.error) && (
               <p
                 role={historyStatus.error ? 'alert' : 'status'}
-                style={{ margin: '-6px 0 10px', fontSize: 11, color: historyStatus.error ? '#8F2439' : 'var(--text-secondary)' }}
+                style={{ margin: '-6px 0 10px', fontSize: 11, color: historyStatus.error ? 'var(--danger)' : 'var(--text-secondary)' }}
               >
                 {historyStatus.error || 'Loading saved days...'}
               </p>
@@ -452,7 +442,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
 
             <div className="cal">
               {DOW.map((d, i) => (
-                <div key={i} className="cal__dow" style={{ fontSize: 11, fontWeight: 700, color: '#888' }}>
+                <div key={i} className="cal__dow" style={{ fontSize: 11, fontWeight: 700, color: '#6B4C63' }}>
                   {d}
                 </div>
               ))}
@@ -464,24 +454,24 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
 
                 const isSelected = cell.key === selectedDateKey
 
-                let cellBg = '#F9F8F6'
-                let textColor = '#555'
+                let cellBg = '#FAF7FB'
+                let textColor = '#6B4C63'
                 let borderStyle = '1px solid rgba(0,0,0,0.06)'
 
                 if (cell.isPeriodDay) {
-                  cellBg = '#FDE8ED'
-                  textColor = '#991B1B'
+                  cellBg = '#F4A5B8'
+                  textColor = '#3F0824'
                 } else if (cell.isPossiblePeriodDay) {
-                  cellBg = '#FFF7FA'
-                  textColor = '#9F1239'
-                  borderStyle = '1.5px dashed #F43F5E'
+                  cellBg = '#F3EDF7'
+                  textColor = '#713666'
+                  borderStyle = '1.5px dashed #EB587B'
                 } else if (cell.isLogged) {
-                  cellBg = '#EFF8F0'
-                  textColor = '#2B7A41'
+                  cellBg = '#E9F1EA'
+                  textColor = '#4E7554'
                 }
 
                 if (isSelected) {
-                  borderStyle = '2.5px solid #2B211E'
+                  borderStyle = '2.5px solid #3F0824'
                 } else if (cell.isToday) {
                   borderStyle = '2.5px solid var(--pink-accent)'
                 }
@@ -521,7 +511,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                           width: 5,
                           height: 5,
                           borderRadius: '50%',
-                          background: '#2B7A41',
+                          background: '#4E7554',
                         }}
                       />
                     )}
@@ -546,36 +536,64 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               }}
             >
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#FDE8ED', border: '1px solid #F43F5E' }} /> Period
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#F4A5B8', border: '1px solid #EB587B' }} /> Period
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#FFF7FA', border: '1px dashed #F43F5E' }} /> Possible period
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#F3EDF7', border: '1px dashed #EB587B' }} /> Possible period
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#EFF8F0', border: '1px solid #2B7A41' }} /> Logged
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#E9F1EA', border: '1px solid #4E7554' }} /> Logged
               </span>
             </div>
           </Card>
 
           {/* Day Inspector Card */}
           {selectedCell && (
-            <Card style={{ marginTop: 14, background: '#FAF9F6' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Card style={{ marginTop: 14, background: '#FAF7FB' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
                 <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
                   {selectedCell.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                   {selectedCell.isToday && <span style={{ marginLeft: 6, color: 'var(--pink-accent)', fontSize: 12 }}>(Today)</span>}
                 </p>
-                <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
-                  {selectedCell.isPeriodDay
-                    ? 'Period logged'
-                    : selectedCell.isPossiblePeriodDay
+                {(selectedCell.isLogged || selectedCell.isPeriodDay) ? (
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    {selectedCell.isLogged && (
+                      <button
+                        type="button"
+                        aria-label="Edit daily check-in"
+                        title="Edit daily check-in"
+                        onClick={() => navigate(`/log?date=${selectedCell.key}&from=patterns`)}
+                        style={{ minHeight: 30, borderRadius: 999, border: '1px solid #DECFE0', background: '#F3EDF7', color: '#5E2954', padding: '4px 9px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <PencilSimple size={14} weight="bold" aria-hidden="true" /> Edit
+                      </button>
+                    )}
+                    {selectedCell.isPeriodDay && (
+                      <button
+                        type="button"
+                        aria-label="Remove period from this day"
+                        title="Remove period from this day"
+                        onClick={() => dispatch({
+                          type: 'UPDATE_PERIOD_STATUS',
+                          dateKey: selectedCell.key,
+                          period: false,
+                          periodPromptAnswered: true,
+                        })}
+                        style={{ minHeight: 30, borderRadius: 999, border: '1px solid #F1C5CF', background: '#fff', color: '#8F3651', padding: '4px 9px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Remove period
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
+                    {selectedCell.isPossiblePeriodDay
                       ? 'Possible period'
-                    : predictionsReady && selectedCell.phase
-                      ? `${selectedCell.phase} phase`
-                      : selectedCell.isLogged
-                        ? 'Logged day'
+                      : predictionsReady && selectedCell.phase
+                        ? `${selectedCell.phase} phase`
                         : 'No log'}
-                </span>
+                  </span>
+                )}
               </div>
 
               {selectedCell.log ? (
@@ -600,22 +618,26 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     </div>
                   )}
                   {selectedCell.log.symptoms && selectedCell.log.symptoms.length > 0 && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                      <strong style={{ fontSize: 12 }}>Symptoms:</strong>
-                      {selectedCell.log.symptoms.map((s) => (
-                        <span
-                          key={s}
-                          style={{
-                            padding: '2px 8px',
-                            borderRadius: 10,
-                            background: 'rgba(224,76,122,0.1)',
-                            color: 'var(--pink-accent)',
-                            fontSize: 11,
-                            fontWeight: 600,
-                          }}
-                        >
-                          {s}
-                        </span>
+                    <div style={{ display: 'grid', gap: 7 }}>
+                      {groupLoggedSymptoms([selectedCell.log]).map((cluster) => (
+                        <div key={cluster.id} style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <strong style={{ fontSize: 12 }}>{cluster.label}:</strong>
+                          {cluster.symptoms.map((symptom) => (
+                            <span
+                              key={symptom.name}
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: 10,
+                                background: 'rgba(224,76,122,0.1)',
+                                color: 'var(--pink-accent)',
+                                fontSize: 11,
+                                fontWeight: 600,
+                              }}
+                            >
+                              {symptom.name}
+                            </span>
+                          ))}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -629,7 +651,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                             padding: '2px 8px',
                             borderRadius: 10,
                             background: '#FEF3C7',
-                            color: '#B45309',
+                            color: '#713666',
                             fontSize: 11,
                             fontWeight: 600,
                           }}
@@ -654,27 +676,6 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 </p>
               )}
 
-              {selectedCell.isLogged && (
-                <button
-                  type="button"
-                  onClick={() => navigate(`/log?date=${selectedCell.key}&from=patterns`)}
-                  style={{
-                    marginTop: 12,
-                    minHeight: 40,
-                    width: '100%',
-                    borderRadius: 999,
-                    border: '1.5px solid var(--pink-mid)',
-                    background: 'var(--pink-light)',
-                    color: 'var(--text-primary)',
-                    fontSize: 13,
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Edit daily check-in
-                </button>
-              )}
-
               {selectedCell.isPossiblePeriodDay ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
                   <button
@@ -688,9 +689,9 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     style={{
                       minHeight: 38,
                       borderRadius: 999,
-                      border: '1.5px solid #F43F5E',
-                      background: '#FDE8ED',
-                      color: '#991B1B',
+                      border: '1.5px solid #EB587B',
+                      background: '#F4A5B8',
+                      color: '#3F0824',
                       fontSize: 12.5,
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -711,7 +712,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                       borderRadius: 999,
                       border: '1px solid rgba(0,0,0,0.1)',
                       background: '#fff',
-                      color: '#5C3D2E',
+                      color: '#5E3A55',
                       fontSize: 12.5,
                       fontWeight: 700,
                       cursor: 'pointer',
@@ -720,13 +721,13 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     Not today
                   </button>
                 </div>
-              ) : (
+              ) : !selectedCell.isPeriodDay ? (
                 <button
                   type="button"
                   onClick={() => dispatch({
                     type: 'UPDATE_PERIOD_STATUS',
                     dateKey: selectedCell.key,
-                    period: !selectedCell.isPeriodDay,
+                    period: true,
                     periodPromptAnswered: true,
                   })}
                   style={{
@@ -734,92 +735,51 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     minHeight: 38,
                     width: '100%',
                     borderRadius: 999,
-                    border: selectedCell.isPeriodDay ? '1px solid rgba(153, 27, 27, 0.22)' : '1.5px solid #F43F5E',
-                    background: selectedCell.isPeriodDay ? '#fff' : '#FDE8ED',
-                    color: '#991B1B',
+                    border: '1.5px solid #EB587B',
+                    background: '#F4A5B8',
+                    color: '#3F0824',
                     fontSize: 13,
                     fontWeight: 700,
                     cursor: 'pointer',
                   }}
                 >
-                  {selectedCell.isPeriodDay ? 'Remove period from this day' : 'Mark as period day'}
+                  Mark as period day
                 </button>
-              )}
+              ) : null}
             </Card>
           )}
 
-          {/* Shortcut Card to Body Signals */}
-          <div
+          {/* Shortcut to the interpretation view */}
+          <button
+            type="button"
             onClick={() => handleTabChange('signals')}
             style={{
+              width: '100%',
               marginTop: 16,
               borderRadius: 16,
               padding: '14px 16px',
-              background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
-              border: '1.5px solid rgba(245, 158, 11, 0.25)',
+              background: '#E9F1EA',
+              border: '1.5px solid #A9C7AB',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               cursor: 'pointer',
+              textAlign: 'left',
             }}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 22 }}>⚡</span>
+              <ChartLineUp size={23} weight="duotone" color="#4E7554" aria-hidden="true" />
               <div>
-                <strong style={{ fontSize: 13.5, color: '#92400E', display: 'block' }}>
-                  Explore Body Signals
+                <strong style={{ fontSize: 13.5, color: '#713666', display: 'block' }}>
+                  See your patterns
                 </strong>
-                <span style={{ fontSize: 12, color: '#B45309' }}>
-                  Energy, sleep, skin & mood curves through your cycle
+                <span style={{ fontSize: 12, color: '#713666' }}>
+                  Review repeating observations and what may be worth discussing.
                 </span>
               </div>
             </div>
-            <span style={{ fontSize: 16, color: '#92400E', fontWeight: 800 }}>→</span>
-          </div>
-
-          {/* Pattern Highlights */}
-          <div className="stack-16" style={{ marginTop: 20 }}>
-            <p className="eyebrow" style={{ margin: 0 }}>Pattern Highlights</p>
-
-            {patternInsights.map((insight) => (
-              <Card key={insight.id} style={{ padding: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 18 }}>{insight.icon}</span>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>
-                      {insight.title}
-                    </p>
-                  </div>
-                  {insight.badge && <Badge level={insight.badge} />}
-                </div>
-
-                <p style={{ margin: '0 0 10px', fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  {insight.body}
-                </p>
-
-                {insight.actionText && (
-                  <button
-                    type="button"
-                    onClick={insight.onAction}
-                    style={{
-                      border: 'none',
-                      background: 'transparent',
-                      padding: 0,
-                      color: 'var(--pink-accent)',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    {insight.actionText} →
-                  </button>
-                )}
-              </Card>
-            ))}
-          </div>
+            <ArrowRight size={18} weight="bold" color="#713666" aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -828,126 +788,166 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
       {/* ========================================================================= */}
       {activeTab === 'signals' && (
         <div style={{ animation: 'fadeIn 0.2s ease' }}>
-          {/* Subview Toggle: Through Cycle vs Last 30 Days */}
+          {/* Cycle context */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>
-              How You're Feeling
+              Through your cycle
             </span>
             <span
               style={{
                 fontSize: 11,
                 fontWeight: 700,
-                color: phaseMeta?.accent || '#E0528A',
-                background: phaseMeta?.soft || '#FDEEF4',
+                color: phaseMeta?.accent || '#713666',
+                background: phaseMeta?.soft || '#F3EDF7',
                 padding: '4px 9px',
                 borderRadius: 99,
               }}
             >
-              {predictionsReady ? `Day ${cycleDay} · ${phaseLabel}` : 'Early cycle view'}
+              {phaseInfo.observed
+                ? `Period day ${phaseInfo.dayOfPeriod} logged`
+                : predictionsReady
+                  ? `Day ${cycleDay} · ${phaseLabel}`
+                  : 'Early cycle view'}
             </span>
           </div>
 
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 6,
-              marginBottom: 16,
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => setSignalsSubView('cycle')}
-              style={{
-                minHeight: 38,
-                borderRadius: 999,
-                border: signalsSubView === 'cycle' ? '1.5px solid var(--pink-accent)' : '1px solid rgba(0,0,0,0.08)',
-                background: signalsSubView === 'cycle' ? '#FDEEF4' : '#fff',
-                color: signalsSubView === 'cycle' ? 'var(--pink-accent)' : 'var(--text-primary)',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Through Your Cycle
-            </button>
-            <button
-              type="button"
-              onClick={() => setSignalsSubView('trends')}
-              style={{
-                minHeight: 38,
-                borderRadius: 999,
-                border: signalsSubView === 'trends' ? '1.5px solid var(--pink-accent)' : '1px solid rgba(0,0,0,0.08)',
-                background: signalsSubView === 'trends' ? '#FDEEF4' : '#fff',
-                color: signalsSubView === 'trends' ? 'var(--pink-accent)' : 'var(--text-primary)',
-                fontSize: 12,
-                fontWeight: 700,
-                cursor: 'pointer',
-              }}
-            >
-              Last 30 Days Cards
-            </button>
-          </div>
+          <Card style={{ padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
+                Cycle context
+              </h3>
+              <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>General guide</span>
+            </div>
 
-          {/* SubView 1: Cycle Overlay Chart */}
-          {signalsSubView === 'cycle' && (
-            <Card style={{ padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>
-                  Cycle Wave Curves
-                </h3>
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Energy, Mood, Skin, Sleep</span>
-              </div>
-
-              <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                <CycleOverlayChart
-                  cycleDay={predictionsReady ? cycleDay : null}
-                  cycleLength={cycleModel.cycleLength}
-                />
-              </div>
-
-              <p style={{ margin: '14px 0 0', color: '#5C3D2E', fontSize: 13, lineHeight: 1.5 }}>
-                <strong style={{ color: '#2C1810' }}>About this chart:</strong>{' '}
-                {predictionsReady
-                  ? 'These illustrative curves are general education, not measurements or predictions of your symptoms.'
-                  : 'These illustrative curves are general education. Keep logging to build your personal history.'}
-              </p>
-            </Card>
-          )}
-
-          {/* SubView 2: 4 Metabolic Cards */}
-          {signalsSubView === 'trends' && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <MetabolicCard
-                title="Energy"
-                value={bodySignals.energy.val}
-                color={bodySignals.energy.color}
-                description={bodySignals.energy.desc}
-                trendPoints={bodySignals.energy.trend}
-              />
-              <MetabolicCard
-                title="Skin"
-                value={bodySignals.skin.val}
-                color={bodySignals.skin.color}
-                description={bodySignals.skin.desc}
-                trendPoints={bodySignals.skin.trend}
-              />
-              <MetabolicCard
-                title="Sleep"
-                value={bodySignals.sleep.val}
-                color={bodySignals.sleep.color}
-                description={bodySignals.sleep.desc}
-                trendPoints={bodySignals.sleep.trend}
-              />
-              <MetabolicCard
-                title="Mood"
-                value={bodySignals.mood.val}
-                color={bodySignals.mood.color}
-                description={bodySignals.mood.desc}
-                trendPoints={bodySignals.mood.trend}
+            <div style={{ marginTop: 10, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
+              <CycleOverlayChart
+                cycleDay={predictionsReady ? cycleDay : null}
+                cycleLength={cycleModel.cycleLength}
               />
             </div>
-          )}
+
+            <p style={{ margin: '14px 0 0', color: '#5E3A55', fontSize: 13, lineHeight: 1.5 }}>
+              {predictionsReady
+                ? 'This is general cycle education, not a measurement or prediction of your symptoms.'
+                : 'Keep logging to build your personal cycle history.'}
+            </p>
+          </Card>
+
+          <section style={{ marginTop: 22 }} aria-labelledby="recurring-patterns-title">
+            <div style={{ marginBottom: 10 }}>
+              <p className="eyebrow" style={{ margin: '0 0 4px' }}>Your observations</p>
+              <h2 id="recurring-patterns-title" style={{ margin: 0, fontSize: 20 }}>Recurring patterns</h2>
+              <p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 12.5 }}>
+                Based on {patternEvidence.checkInCount} check-in{patternEvidence.checkInCount === 1 ? '' : 's'} from the last {patternEvidence.days} days.
+              </p>
+            </div>
+
+            {patternEvidence.recurring.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {patternEvidence.recurring.map((item) => (
+                  <Card key={item.id} style={{ padding: '14px 16px' }}>
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{item.title}</p>
+                    <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45 }}>{item.body}</p>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card style={{ padding: '14px 16px', background: '#FAF7FB' }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Not enough repeated observations yet</p>
+                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45 }}>
+                  A pattern appears here only after the same observation is logged on at least two days.
+                </p>
+              </Card>
+            )}
+          </section>
+
+          <section style={{ marginTop: 22 }} aria-labelledby="route-title">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 10 }}>
+              <span style={{ width: 36, height: 36, borderRadius: 8, background: '#E9F1EA', display: 'grid', placeItems: 'center', flexShrink: 0 }}>
+                <FirstAidKit size={21} weight="duotone" color="#4E7554" aria-hidden="true" />
+              </span>
+              <div>
+                <p className="eyebrow" style={{ margin: '0 0 2px', color: '#4E7554' }}>Route</p>
+                <h2 id="route-title" style={{ margin: 0, fontSize: 20 }}>Worth discussing</h2>
+              </div>
+            </div>
+
+            {routeSignals.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {routeSignals.map((signal) => (
+                  <Card key={signal.id} style={{ padding: '16px', borderColor: signal.early ? '#E1D7DE' : '#A9C7AB' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'flex-start' }}>
+                      <div>
+                        <p style={{ margin: 0, color: signal.early ? '#713666' : '#4E7554', fontSize: 11, fontWeight: 800, textTransform: 'uppercase' }}>
+                          {signal.label}
+                        </p>
+                        <h3 style={{ margin: '5px 0 0', fontSize: 17 }}>{signal.category}</h3>
+                      </div>
+                      {!signal.early && (
+                        <Badge level={signal.displaySeverity === 'URGENT' ? 'Urgent' : 'Moderate'} />
+                      )}
+                    </div>
+                    <p style={{ margin: '8px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45 }}>{signal.note}</p>
+                    <p style={{ margin: '8px 0 0', color: '#6B4C63', fontSize: 11.5, fontWeight: 600 }}>{signal.basis}</p>
+
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginTop: 13 }}>
+                      {!signal.early && (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/advisor')}
+                          style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--pink-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                        >
+                          Prepare for a visit <ArrowRight size={15} weight="bold" aria-hidden="true" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => navigate('/checkin?from=patterns')}
+                        style={{ border: 'none', background: 'transparent', padding: 0, color: '#6B4C63', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                      >
+                        <PencilSimple size={15} weight="bold" aria-hidden="true" /> This isn't right
+                      </button>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <Card style={{ padding: '14px 16px', background: '#F4F8F4', borderColor: '#C7DAC9' }}>
+                <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Nothing to prepare right now</p>
+                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45 }}>
+                  {state.result?.authoritative
+                    ? patternEvidence.checkInCount < 7
+                      ? `Log ${7 - patternEvidence.checkInCount} more ${7 - patternEvidence.checkInCount === 1 ? 'day' : 'days'} to start a useful Route summary.`
+                      : patternEvidence.fullCycleCount < 2
+                        ? 'Your observations are ready. Maisie waits for two completed cycles before showing discussion signals.'
+                        : 'No discussion signal was identified from your available answers. This is not a medical assessment.'
+                    : state.accountId
+                      ? 'This section will update after your saved answers are checked.'
+                      : 'Save your tracker to keep your information across devices and receive updated results.'}
+                </p>
+                {!state.accountId && (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/auth?next=/patterns&source=post-onboarding')}
+                    style={{ border: 'none', background: 'transparent', padding: 0, marginTop: 10, color: 'var(--pink-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
+                  >
+                    Save tracker
+                  </button>
+                )}
+              </Card>
+            )}
+          </section>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange('calendar')}
+            style={{ width: '100%', marginTop: 18, minHeight: 48, borderRadius: 8, border: '1px solid #E1D7DE', background: '#fff', color: 'var(--text-primary)', fontSize: 13.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}
+          >
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <CalendarBlank size={19} weight="duotone" aria-hidden="true" /> Review and edit your history
+            </span>
+            <ArrowRight size={17} weight="bold" aria-hidden="true" />
+          </button>
         </div>
       )}
 
@@ -978,12 +978,16 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)' }}>Doctor & Parent Report 📄</h3>
+              <h3 style={{ margin: 0, fontSize: 16, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+                <FileText size={19} weight="duotone" aria-hidden="true" /> Visit summary
+              </h3>
               <button
+                type="button"
+                aria-label="Close visit summary"
                 onClick={() => setShowDoctorModal(false)}
-                style={{ border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer' }}
+                style={{ width: 36, height: 36, borderRadius: '50%', border: 'none', background: '#F3EDF7', color: '#713666', cursor: 'pointer', display: 'grid', placeItems: 'center' }}
               >
-                ✕
+                <X size={18} weight="bold" aria-hidden="true" />
               </button>
             </div>
 
@@ -1011,7 +1015,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <Button variant="primary" block onClick={handleCopyReport}>
-                {copied ? '✓ Copied to Clipboard!' : 'Copy Summary to Clipboard 📋'}
+                {copied ? 'Copied' : 'Copy visit summary'}
               </Button>
               <Button
                 variant="secondary"
@@ -1021,7 +1025,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                   navigate('/advisor')
                 }}
               >
-                Show me what to say in person 💬
+                Show me what to say
               </Button>
             </div>
           </div>

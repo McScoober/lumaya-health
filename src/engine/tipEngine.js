@@ -7,26 +7,29 @@
 // ============================================================
 
 import { PHASE_CARDS, MODIFIER_ACTIONS, sportAction } from '../data/tips.js'
+import { foodContentIsEnabled, trackingModulesFromProfile } from '../lib/trackingPreferences.js'
 
 function modifierTagsFor(profile = {}) {
   const tags = []
+  const modules = trackingModulesFromProfile(profile)
   const sa = profile.studentAthlete
   if (sa === 'Student' || sa === 'Both' || profile.isStudent) tags.push('student')
-  if (sa === 'Athlete' || sa === 'Both') tags.push('athlete')
+  if (modules.movement && (sa === 'Athlete' || sa === 'Both')) tags.push('athlete')
 
   const ATHLETE_ACTS = ['team-sport', 'solo-sport', 'dance', 'cheer-gym', 'martial-arts']
-  if (profile.activities && profile.activities.some(act => ATHLETE_ACTS.includes(act))) {
+  if (modules.movement && profile.activities && profile.activities.some(act => ATHLETE_ACTS.includes(act))) {
     if (!tags.includes('athlete')) tags.push('athlete')
   }
 
-  if (profile.sleep === 'Night owl') tags.push('nightOwl')
-  if (profile.sleep === 'Early to bed, early to rise') tags.push('earlyBird')
+  if (modules.sleep && profile.sleep === 'Night owl') tags.push('nightOwl')
+  if (modules.sleep && profile.sleep === 'Early to bed, early to rise') tags.push('earlyBird')
   if (profile.onBirthControl) tags.push('onBirthControl')
   return tags
 }
 
 export function maisieMessage(phase, cycleDay, profile = {}) {
   const tags = modifierTagsFor(profile)
+  const foodEnabled = foodContentIsEnabled(profile)
   const isAthlete = tags.includes('athlete')
   const isStudent = tags.includes('student')
   const activity = profile.activityText || null
@@ -51,7 +54,9 @@ export function maisieMessage(phase, cycleDay, profile = {}) {
       isAthlete && activity
         ? `Reduce ${activity} intensity if fatigue or other symptoms affect training.`
         : 'Energy and mood can change during the luteal phase.',
-      'Track cravings, fatigue, or mood changes to learn whether they repeat.',
+      foodEnabled
+        ? 'Track cravings, fatigue, or mood changes to learn whether they repeat.'
+        : 'Track fatigue or mood changes to learn whether they repeat.',
     ],
     bc_active: [
       'Steady hormone levels today. Notice how you feel compared to last week.',
@@ -97,7 +102,14 @@ export function buildTip(phase, profile = {}) {
     if (!existing || a.p > existing.p) byText.set(a.text, a)
   }
 
-  const merged = [...byText.values()].sort((x, y) => y.p - x.p).slice(0, 3)
+  const modules = trackingModulesFromProfile(profile)
+  const foodEnabled = foodContentIsEnabled(profile)
+  const merged = [...byText.values()]
+    .filter((action) => foodEnabled || !/food|fuel|meal|protein|iron-rich|underfed|craving/i.test(action.text))
+    .filter((action) => modules.movement || !/movement|training|workout|sport/i.test(action.text))
+    .filter((action) => modules.sleep || !/sleep|bedtime|bed earlier/i.test(action.text))
+    .sort((x, y) => y.p - x.p)
+    .slice(0, 3)
 
   return {
     phase,

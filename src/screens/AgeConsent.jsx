@@ -78,7 +78,7 @@ export default function AgeConsent() {
             }}
           />
           {showError('birth') && birthError && (
-            <p style={{ margin: '6px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
+            <p style={{ margin: '6px 0 0', color: '#B42318', fontSize: 12.5, lineHeight: 1.35 }}>
               {birthError}
             </p>
           )}
@@ -98,7 +98,7 @@ export default function AgeConsent() {
               placeholder="What should we call you?"
             />
             {showError('name') && nameError && (
-              <p style={{ margin: '6px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
+              <p style={{ margin: '6px 0 0', color: '#B42318', fontSize: 12.5, lineHeight: 1.35 }}>
                 {nameError}
               </p>
             )}
@@ -116,7 +116,7 @@ export default function AgeConsent() {
                 <span>I am at least 13. I understand Maisie uses my answers to show health signals, and sharing with a trusted adult is optional.</span>
               </label>
               {submitted && consentError && (
-                <p style={{ margin: '8px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
+                <p style={{ margin: '8px 0 0', color: '#B42318', fontSize: 12.5, lineHeight: 1.35 }}>
                   {consentError}
                 </p>
               )}
@@ -135,7 +135,7 @@ export default function AgeConsent() {
                 <span>I agree to Maisie's privacy policy.</span>
               </label>
               {submitted && ackError && (
-                <p style={{ margin: '8px 0 0', color: '#B3265A', fontSize: 12.5, lineHeight: 1.35 }}>
+                <p style={{ margin: '8px 0 0', color: '#B42318', fontSize: 12.5, lineHeight: 1.35 }}>
                   {ackError}
                 </p>
               )}

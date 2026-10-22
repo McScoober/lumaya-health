@@ -35,9 +35,9 @@ export default function MetabolicCard({ title, value, color, description, trendP
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 12, height: 12, borderRadius: '50%', backgroundColor: color }} />
-          <h3 style={{ margin: 0, color: '#2C1810', fontSize: 16 }}>{title}</h3>
+          <h3 style={{ margin: 0, color: '#3F0824', fontSize: 16 }}>{title}</h3>
         </div>
-        <span style={{ color: '#2C1810', fontWeight: 600, fontSize: 14 }}>{value}</span>
+        <span style={{ color: '#3F0824', fontWeight: 600, fontSize: 14 }}>{value}</span>
       </div>
       
       {trendPoints.length > 0 && (
@@ -58,7 +58,7 @@ export default function MetabolicCard({ title, value, color, description, trendP
         </div>
       )}
       
-      <p style={{ margin: 0, color: '#5C3D2E', fontSize: 13, lineHeight: 1.4 }}>
+      <p style={{ margin: 0, color: '#5E3A55', fontSize: 13, lineHeight: 1.4 }}>
         {description}
       </p>
     </Wrapper>

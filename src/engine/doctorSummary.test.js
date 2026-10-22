@@ -27,3 +27,14 @@ test('old flag IDs never establish symptom recurrence', () => {
   assert.equal(result.level, 'Mild')
   assert.equal(scoreCheckIn(answers, { observedFullCycleCount: 2 }).flags.length, 0)
 })
+
+test('visit summary groups symptoms under the shared headings', () => {
+  const result = summarizeDoctorLogs({
+    '2026-09-29': { symptoms: ['Fatigue', 'Nausea'] },
+    '2026-09-30': { symptoms: ['Fatigue'] },
+  }, now)
+  assert.deepEqual(result.symptomClusters, [
+    { id: 'mood-energy', label: 'Mood and energy', symptoms: [{ name: 'Fatigue', count: 2 }] },
+    { id: 'tummy-other', label: 'Tummy and other', symptoms: [{ name: 'Nausea', count: 1 }] },
+  ])
+})

@@ -37,7 +37,7 @@ export default function Personalization() {
     if (idx < questions.length - 1) {
       setIdx(idx + 1)
     } else {
-      navigate('/checkin')
+      navigate('/personalize/tracking')
     }
   }
 
@@ -77,7 +77,7 @@ export default function Personalization() {
             </Button>
           )}
           <Button block disabled={!canNext} onClick={next}>
-            {idx < total - 1 ? 'Continue' : 'Start check-in'}
+            {idx < total - 1 ? 'Continue' : 'Choose what to track'}
           </Button>
         </div>
       </div>

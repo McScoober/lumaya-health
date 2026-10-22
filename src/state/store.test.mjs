@@ -114,6 +114,19 @@ test('optional daily observations can be saved and cleared without changing unre
   assert.equal('bleedingDuration' in state.dailyLogs[dateKey], false)
   assert.equal(state.dailyLogs[dateKey].period, true)
 })
+
+test('daily period status can keep a neutral flow observation', () => {
+  const dateKey = '2026-10-22'
+  const logged = reducer(freshState(), {
+    type: 'UPDATE_PERIOD_STATUS', dateKey, period: true, flow: 'medium', periodPromptAnswered: true,
+  })
+  assert.equal(logged.periodLogs[dateKey].flow, 'medium')
+
+  const removed = reducer(logged, {
+    type: 'UPDATE_PERIOD_STATUS', dateKey, period: false, periodPromptAnswered: true,
+  })
+  assert.equal('flow' in removed.periodLogs[dateKey], false)
+})
 test('a later period never confirms questionnaire flags in the browser', () => {
   const before = { ...freshState(), pendingTier2: ['PAIN-01'] }
   const after = reducer(before, { type: 'UPDATE_PERIOD_STATUS', dateKey: '2026-09-11', period: true })
