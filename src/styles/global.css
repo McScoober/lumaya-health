@@ -281,6 +281,59 @@ button {
 
 .screen--pad-bottom { padding-bottom: max(28px, calc(16px + var(--safe-bottom))); }
 
+.mood-pms-questions { display: grid; gap: 16px; margin-top: 18px; }
+.mood-pms-questions__intro { display: grid; gap: 3px; }
+.mood-pms-questions__intro strong { color: var(--ink); font-size: 14px; }
+.mood-pms-questions__intro span { color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.mood-pms-item { min-width: 0; margin: 0; padding: 0; border: 0; }
+.mood-pms-item legend { margin-bottom: 8px; color: var(--ink); font-size: 13px; font-weight: 700; }
+.mood-pms-scale { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.mood-pms-scale button {
+  min-width: 0;
+  min-height: 58px;
+  padding: 7px 3px;
+  border: 1.5px solid rgba(63, 8, 36, 0.12);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.mood-pms-scale button[aria-pressed='true'] { border-color: var(--accent); background: var(--lavender-100); color: var(--accent); }
+.mood-pms-scale button span { display: block; font-size: 16px; font-weight: 750; }
+.mood-pms-scale button small { display: block; margin-top: 3px; font-size: 9.5px; line-height: 1.15; overflow-wrap: anywhere; }
+.mood-safety-choice {
+  width: 100%; min-height: 48px; padding: 11px 14px;
+  border: 1.5px solid rgba(180, 35, 24, 0.28); border-radius: 12px;
+  background: #fff; color: #8f2d25; font: inherit; font-weight: 700;
+  display: flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer;
+}
+.mood-safety-choice--selected { border-color: #b42318; background: #fff4f2; color: #8d1d14; }
+.mood-safety-card {
+  display: grid; grid-template-columns: 38px minmax(0, 1fr); gap: 12px;
+  padding: 16px; border: 1.5px solid rgba(180, 35, 24, 0.34); border-radius: 12px;
+  background: #fff4f2; color: #5f1b16; text-align: left;
+}
+.mood-safety-card__icon { width: 38px; height: 38px; border-radius: 9px; background: #fff; display: grid; place-items: center; color: #b42318; }
+.mood-safety-card h2 { margin: 0; color: #7b2018; font-family: var(--font-body); font-size: 17px; }
+.mood-safety-card p { margin: 5px 0 12px; font-size: 13px; line-height: 1.5; }
+.mood-safety-card small { display: block; margin-top: 10px; color: #76504c; font-size: 10.5px; line-height: 1.4; }
+.mood-safety-card__actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.mood-safety-card__actions a {
+  min-height: 40px; padding: 8px 10px; border: 1px solid rgba(180, 35, 24, 0.24); border-radius: 9px;
+  background: #fff; color: #8d1d14; text-decoration: none; font-size: 12px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.mood-safety-card--compact { margin-top: -5px; grid-template-columns: 1fr; }
+.mood-safety-card--compact .mood-safety-card__icon { display: none; }
+
+@media (max-width: 390px) {
+  .mood-pms-scale { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mood-pms-scale button { min-height: 48px; }
+  .mood-safety-card { grid-template-columns: 1fr; }
+  .mood-safety-card__icon { display: none; }
+  .mood-safety-card__actions a { flex: 1 1 130px; }
+}
+
 .library-category-scroll {
   display: flex;
   flex: 0 0 auto;
@@ -968,6 +1021,20 @@ button {
 .profile-account-summary span { margin-top: 2px; color: var(--text-secondary); font-size: 12px; line-height: 1.4; }
 .profile-data-note p { margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
 .profile-destructive-action { color: var(--danger); }
+.profile-delete-confirm {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--danger) 28%, var(--line));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--danger) 5%, white);
+}
+.profile-delete-confirm h3 { margin: 0; font-family: var(--font-body); font-size: 15px; color: var(--danger); }
+.profile-delete-confirm p { margin: 4px 0 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.5; }
+.profile-delete-confirm__actions { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 8px; }
+.profile-delete-confirm__actions .btn { min-width: 0; padding-inline: 10px; font-size: 13px; }
+.profile-delete-confirm__button { background: var(--danger); }
+.profile-delete-confirm__button:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 88%, black); }
 .profile-about-mark {
   width: 54px;
   height: 54px;
@@ -1539,6 +1606,11 @@ button {
 .route-question-list button[aria-pressed='true'] { color: var(--accent-ink); background: var(--accent-soft); border-color: var(--accent-ink); font-weight: 700; }
 .route-script { margin: 0; padding: 14px; color: var(--ink); background: var(--sage-100); border-left: 3px solid var(--sage-700); font-size: 14px; line-height: 1.55; }
 .route-copy-button { min-height: 44px; display: inline-flex; align-items: center; gap: 7px; margin-top: 8px; padding: 8px 0; border: 0; background: transparent; color: var(--accent-ink); font-size: 13px; font-weight: 700; }
+.route-background-link { min-height: 62px; display: grid; grid-template-columns: minmax(0, 1fr) 18px; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 13px; color: var(--ink); background: var(--sage-100); border: 1px solid var(--sage-400); border-radius: 12px; text-decoration: none; }
+.route-background-link > span { display: grid; gap: 2px; }
+.route-background-link strong { font-size: 12.5px; }
+.route-background-link small { color: var(--ink-soft); font-size: 11px; line-height: 1.35; }
+.route-background-link > svg { color: var(--sage-700); }
 .route-guidance-list { display: grid; gap: 0; border-top: 1px solid var(--line); }
 .route-guidance-list section { padding: 14px 2px; border-bottom: 1px solid var(--line); }
 .route-guidance-list strong { font-size: 14px; }
@@ -1655,6 +1727,78 @@ button {
 .learn-route-entry strong { font-size: 13.5px; }
 .home-route-entry small,
 .learn-route-entry small { color: var(--ink-soft); font-size: 11.5px; line-height: 1.35; }
+
+/* ---- Health background ---- */
+.home-personalize {
+  width: 100%; min-height: 82px; display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px;
+  align-items: center; gap: 11px; margin-top: 14px; padding: 13px; color: var(--ink); text-align: left;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow-sm);
+}
+.home-personalize__icon { width: 40px; height: 40px; display: grid; place-items: center; color: var(--accent-ink); background: var(--accent-soft); border-radius: 11px; }
+.home-personalize__copy { min-width: 0; display: grid; gap: 4px; overflow-wrap: anywhere; }
+.home-personalize__copy strong { font-size: 13.5px; line-height: 1.25; }
+.home-personalize__copy .progress { width: 100%; height: 5px; margin: 2px 0 0; }
+.home-personalize__count { display: block; color: var(--ink-soft); font-size: 10.5px; line-height: 1.2; }
+.health-background {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-padding-bottom: calc(32px + env(safe-area-inset-bottom));
+  padding: 16px 20px calc(32px + env(safe-area-inset-bottom));
+  background: var(--surface);
+}
+.health-background__topbar { min-height: 46px; display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; margin-bottom: 14px; }
+.health-background__topbar strong { text-align: center; font-family: var(--font-heading); font-size: 17px; }
+.health-background__topbar button { width: 44px; height: 44px; display: grid; place-items: center; padding: 0; color: var(--accent-ink); background: transparent; border: 0; border-radius: 50%; }
+.health-background__progress-copy { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--ink-soft); font-size: 10.5px; font-weight: 600; }
+.health-background > .progress { height: 6px; }
+.health-background__intro { padding: 25px 0 18px; }
+.health-background__intro .eyebrow { margin: 0 0 6px; color: var(--sage-700); }
+.health-background__intro h1 { margin: 0; font-size: 25px; line-height: 1.2; }
+.health-background__personalizes { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; margin-top: 15px; padding: 12px; color: var(--sage-700); background: var(--sage-100); border-radius: 12px; }
+.health-background__personalizes > div { min-width: 0; display: grid; gap: 2px; }
+.health-background__personalizes > div > span { color: var(--ink-soft); font-size: 11.5px; line-height: 1.45; }
+.health-background__personalizes strong { color: var(--sage-700); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+.health-background__personalizes details { display: contents; }
+.health-background__personalizes summary { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 4px; color: var(--sage-700); font-size: 11px; font-weight: 700; cursor: pointer; list-style: none; }
+.health-background__personalizes summary::-webkit-details-marker { display: none; }
+.health-background__personalizes details[open] summary { color: var(--plum-700); }
+.health-background__personalizes details > p { grid-column: 1 / -1; margin: 2px 0 0; padding-top: 10px; border-top: 1px solid rgba(76, 112, 83, 0.18); color: var(--ink-soft); font-size: 11.5px; line-height: 1.5; }
+.health-background__questions { display: grid; gap: 12px; }
+.health-question { min-width: 0; margin: 0; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+.health-question legend { width: 100%; display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; padding: 0; color: var(--ink); font-size: 14px; font-weight: 700; line-height: 1.4; }
+.health-question legend > span { width: 22px; height: 22px; display: grid; place-items: center; color: var(--accent-ink); background: var(--accent-soft); border-radius: 50%; font-size: 10px; }
+.health-question > p { margin: 7px 0 10px 32px; color: var(--ink-soft); font-size: 11.5px; line-height: 1.4; }
+.health-question .chips, .health-question .stack-12, .health-question__slider { margin-top: 12px; }
+.health-question .chip { min-height: 44px; }
+.health-question__slider { display: grid; gap: 10px; }
+.health-question__slider > div:first-child { display: flex; align-items: baseline; gap: 9px; }
+.health-question__slider > div:first-child strong { color: var(--accent-ink); font-size: 24px; }
+.health-question__slider > div:first-child span, .health-question__slider small { color: var(--ink-soft); font-size: 11.5px; }
+.health-question__anchors { display: flex; justify-content: space-between; color: var(--ink-soft); font-size: 10px; }
+.health-question__family { display: grid; gap: 13px; margin-top: 12px; }
+.health-question__family .chips { margin-top: 0; }
+.health-question__family-note { display: grid; gap: 7px; }
+.health-question__family-note > span { color: var(--ink); font-size: 12px; font-weight: 700; }
+.health-question__family-note > span small { color: var(--ink-soft); font-weight: 500; }
+.health-question__family-note textarea { min-height: 86px; resize: vertical; line-height: 1.45; }
+.health-question__family-note > small { color: var(--ink-soft); font-size: 10px; text-align: right; }
+.health-background__empty { padding: 18px; color: var(--ink-soft); text-align: center; background: var(--sage-100); border-radius: 12px; font-size: 13px; }
+.health-background__actions { display: grid; gap: 5px; padding-top: 18px; }
+.health-background__later { min-height: 44px; color: var(--ink-soft); background: transparent; border: 0; font-size: 12.5px; font-weight: 700; }
+.health-background--complete { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.health-background__complete-icon { width: 64px; height: 64px; display: grid; place-items: center; margin-bottom: 16px; color: var(--sage-700); background: var(--sage-100); border-radius: 50%; }
+.health-background--complete .eyebrow { margin: 0; color: var(--sage-700); }
+.health-background--complete h1 { max-width: 330px; margin: 7px 0 9px; font-size: 27px; }
+.health-background--complete > p { max-width: 360px; margin: 0; color: var(--ink-soft); font-size: 13.5px; line-height: 1.55; }
+.health-background__privacy { max-width: 360px; display: flex; align-items: flex-start; gap: 8px; margin: 18px 0; padding: 12px; color: var(--ink-soft); text-align: left; background: var(--accent-soft); border-radius: 12px; font-size: 11.5px; line-height: 1.45; }
+.health-background__privacy svg { flex-shrink: 0; color: var(--accent-ink); }
+.health-background--complete .btn { max-width: 360px; }
 
 @media (max-width: 390px) {
   .tabbar__item { font-size: 10px; padding-inline: 2px; }

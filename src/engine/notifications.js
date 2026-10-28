@@ -12,7 +12,7 @@ import { predictPeriod, phaseForDate, addDays, diffDays, startOfDay } from './cy
 import { tipSms } from './tipEngine.js'
 
 // Build the upcoming notification schedule for the next `days` days.
-export function buildSchedule(model, profile, { days = 30, from = new Date() } = {}) {
+export function buildSchedule(model, profile, { days = 30, from = new Date(), phaseTips = true } = {}) {
   const out = []
   if (!model.hasData) return out
   if (!model.predictionsReady) return out
@@ -34,7 +34,7 @@ export function buildSchedule(model, profile, { days = 30, from = new Date() } =
       })
     }
 
-    if (!model.onBirthControl) {
+    if (phaseTips && !model.onBirthControl) {
       // 2. Weekly phase check-in — fire on the first day of a new phase.
       if (phase && phase !== lastPhaseSeen && phase !== 'menstrual') {
         out.push({
@@ -59,7 +59,7 @@ export function buildSchedule(model, profile, { days = 30, from = new Date() } =
         }
       }
       lastPhaseSeen = phase
-    } else {
+    } else if (phaseTips) {
       // BC users: a lighter weekly steady-state touch.
       if (i % 7 === 0 && i > 0) {
         out.push({
@@ -96,8 +96,8 @@ function dedupePerDay(items) {
 }
 
 // The "next message" the user should see today (for the home inbox).
-export function todaysMessages(model, profile, from = new Date()) {
-  const schedule = buildSchedule(model, profile, { days: 2, from })
+export function todaysMessages(model, profile, from = new Date(), preferences = {}) {
+  const schedule = buildSchedule(model, profile, { days: 2, from, phaseTips: preferences.phaseTips !== false })
   const key = startOfDay(from).toISOString().slice(0, 10)
   return schedule.filter((m) => m.date.toISOString().slice(0, 10) === key)
 }

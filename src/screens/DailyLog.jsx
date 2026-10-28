@@ -24,17 +24,19 @@ import { groupSymptomOptions, SYMPTOM_CLUSTERS } from '../content/symptomCluster
 import { TopBar, Chip } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
+import MoodSafetyCard from '../components/MoodSafetyCard.jsx'
+import { MOOD_ITEM_DEFINITIONS, MOOD_SEVERITY_OPTIONS, moodSafetyStatus } from '../engine/moodPms.js'
 import {
   SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank,
   BookOpen, PersonSimpleRun, CalendarBlank, Bed, CheckCircle, CaretDown,
-  BowlFood, DotsThreeCircle, Drop, Heartbeat, Sparkle,
+  BowlFood, DotsThreeCircle, Drop, Heartbeat, Sparkle, WarningCircle,
 } from '@phosphor-icons/react'
 
 // ── Data ──────────────────────────────────────────────────────────────────
 const SYMPTOMS = [
   'Cramps', 'Headache', 'Bloating', 'Fatigue',
   'Back pain', 'Breast tenderness', 'Mood changes', 'Skin breakout',
-  'Nausea', 'Dizziness', 'Spotting', 'Discharge changes', 'Sleep trouble',
+  'Nausea', 'Dizziness', 'Discharge changes', 'Sleep trouble',
 ]
 
 const PAIN_TIMING_OPTIONS = [
@@ -153,7 +155,10 @@ function hasDailyAnswers(log = {}) {
     log.fuel !== undefined ||
     log.bleeding !== undefined ||
     log.medicineTaken !== undefined ||
-    log.medicineRelief !== undefined
+    log.medicineRelief !== undefined ||
+    log.moodItems !== undefined ||
+    log.functionalImpact !== undefined ||
+    log.safetyConcern !== undefined
 }
 
 // ── Practical post-log guidance ───────────────────────────────────────────
@@ -232,7 +237,9 @@ export default function DailyLog() {
   })
   const [flow, setFlow] = useState(() => existingPeriodLog.flow || '')
   const [pain,    setPain]    = useState(() => typeof existingLog.pain === 'number' ? existingLog.pain : null)
-  const [symptoms, setSymptoms] = useState(() => [...(existingLog.symptoms || [])])
+  const existingSpotting = (existingLog.symptoms || []).includes('Spotting')
+  const [spotting, setSpotting] = useState(() => existingSpotting ? true : null)
+  const [symptoms, setSymptoms] = useState(() => (existingLog.symptoms || []).filter((symptom) => symptom !== 'Spotting'))
   const [impacts,  setImpacts]  = useState(() => [...(existingLog.impact || [])])
   const [painTiming, setPainTiming] = useState(() => existingLog.painTiming || '')
   const [medicineTaken, setMedicineTaken] = useState(() => existingLog.medicineTaken ?? (
@@ -246,6 +253,9 @@ export default function DailyLog() {
   const [sleepHours, setSleepHours] = useState(() => existingLog.sleepHours || '')
   const [rested, setRested] = useState(() => existingLog.rested || '')
   const [movement, setMovement] = useState(() => existingLog.movement || '')
+  const [moodItems, setMoodItems] = useState(() => ({ ...(existingLog.moodItems || {}) }))
+  const [functionalImpact, setFunctionalImpact] = useState(() => existingLog.functionalImpact || '')
+  const [safetyConcern, setSafetyConcern] = useState(() => existingLog.safetyConcern === true)
   const [fuel, setFuel] = useState(() => ({
     meals: '', appetite: '', cravings: [], ironFood: null, water: '', ...(existingLog.fuel || {}),
   }))
@@ -262,8 +272,7 @@ export default function DailyLog() {
   const painReliefActive = shouldShowPainRelief(trackingModules, pain)
   const bleedingDetailActive = shouldShowBleedingDetails(trackingModules, {
     period: periodToday === true,
-    spotting: symptoms.includes('Spotting'),
-    hasExistingDetails: Boolean(existingLog.bleeding || existingLog.bleedingExperience || existingLog.bleedingDuration),
+    spotting: periodToday !== true && spotting === true,
   })
   const showIronFoodQuestion = periodToday === true || Object.values(state.periodLogs).some((log) => log?.flow === 'heavy')
 
@@ -303,6 +312,7 @@ export default function DailyLog() {
   function choosePeriod(value) {
     setPeriodToday((current) => current === value ? null : value)
     if (value === false) setFlow('')
+    if (value === true) setSpotting(null)
   }
 
   const clusterCards = SYMPTOM_CLUSTERS.map((cluster) => {
@@ -310,7 +320,7 @@ export default function DailyLog() {
     const showsPainDetails = cluster.id === 'pain-cramps' && painReliefActive
     const showsBleedingDetails = cluster.id === 'period-bleeding' && bleedingDetailActive
     const moduleVisible = {
-      'period-bleeding': trackingModules.symptoms || showsBleedingDetails,
+      'period-bleeding': trackingModules.bleedingDetail && periodToday !== null,
       'pain-cramps': true,
       'mood-energy': true,
       sleep: trackingModules.sleep,
@@ -319,39 +329,57 @@ export default function DailyLog() {
       'food-fuel': trackingModules.food && !foodSensitive,
     }[cluster.id]
     const visible = moduleVisible && (symptomOptions.length > 0 || showsPainDetails || showsBleedingDetails ||
-      ['pain-cramps', 'mood-energy', 'sleep', 'food-fuel'].includes(cluster.id))
+      ['period-bleeding', 'pain-cramps', 'mood-energy', 'sleep', 'food-fuel'].includes(cluster.id))
     const selectedSymptoms = symptomOptions.filter((symptom) => symptoms.includes(symptom)).length
     const detailCount = cluster.id === 'pain-cramps'
       ? Number(pain !== null) + Number(impacts.length > 0) + Number(Boolean(painTiming)) + Number(medicineTaken !== null) + Number(Boolean(medicineRelief))
       : cluster.id === 'period-bleeding'
-        ? Number(periodToday !== null) + Number(Boolean(flow)) + Number(Boolean(bleedingDuration)) +
+        ? Number(periodToday === false && spotting !== null) + Number(Boolean(bleedingDuration)) +
           Number(Boolean(bleeding.clots)) + Number(bleeding.flooding !== null) + Number(Object.values(bleeding.productFullness).some(Boolean))
         : cluster.id === 'mood-energy'
-          ? Number(vibe !== null) + Number(energy !== null) + Number(Boolean(movement))
+          ? Number(vibe !== null) + Number(energy !== null) + Number(Boolean(movement)) +
+            Object.keys(moodItems).length + Number(Boolean(functionalImpact)) + Number(safetyConcern)
           : cluster.id === 'sleep'
             ? Number(Boolean(sleepHours)) + Number(Boolean(rested))
             : cluster.id === 'food-fuel'
               ? Number(Boolean(fuel.meals)) + Number(Boolean(fuel.appetite)) + Number(fuel.cravings.length > 0) + Number(fuel.ironFood !== null) + Number(Boolean(fuel.water))
               : 0
-    return { ...cluster, symptomOptions, showsPainDetails, showsBleedingDetails, visible, count: selectedSymptoms + detailCount }
+    const description = cluster.id === 'period-bleeding'
+      ? periodToday === true
+        ? 'Flow, protection, clots, soaking, and duration.'
+        : periodToday === false
+          ? 'Spotting or unexpected bleeding.'
+          : 'Flow, spotting, and bleeding details.'
+      : cluster.description
+    return { ...cluster, description, symptomOptions, showsPainDetails, showsBleedingDetails, visible, count: selectedSymptoms + detailCount }
   }).filter((cluster) => cluster.visible)
 
   function handleLogIt() {
     const clearOptionalFields = []
     if (painReliefActive) clearOptionalFields.push('painTiming', 'medicineTaken', 'medicineRelief')
-    if (bleedingDetailActive) clearOptionalFields.push('bleeding', 'bleedingDuration')
+    if (bleedingDetailActive || (
+      trackingModules.bleedingDetail && periodToday === false && spotting === false &&
+      Boolean(existingLog.bleeding || existingLog.bleedingExperience || existingLog.bleedingDuration)
+    )) clearOptionalFields.push('bleeding', 'bleedingDuration')
     clearOptionalFields.push('energy')
     if (trackingModules.sleep) clearOptionalFields.push('sleepHours', 'rested')
     if (trackingModules.movement) clearOptionalFields.push('movement')
     if (trackingModules.food && !foodSensitive) clearOptionalFields.push('fuel')
+    if (trackingModules.moodPms) clearOptionalFields.push('moodItems', 'functionalImpact', 'safetyConcern')
     const editedAt = isEditing || !isToday ? new Date().toISOString() : undefined
+    const symptomsToSave = [...symptoms]
+    if (trackingModules.bleedingDetail) {
+      if (periodToday !== true && spotting === true) symptomsToSave.push('Spotting')
+    } else if (existingSpotting) {
+      symptomsToSave.push('Spotting')
+    }
     dispatch({
       type: 'LOG_DAILY',
       dateKey,
       mood: vibe?.label,
       vibe: vibe?.value,
       vibeLabel: vibe?.key,
-      symptoms,
+      symptoms: symptomsToSave,
       pain: pain ?? undefined,
       clearPain: isEditing && pain === null,
       impact: impacts.filter((id) => id !== 'fine'),
@@ -359,6 +387,7 @@ export default function DailyLog() {
       ...(trackingModules.sleep ? { sleepHours, rested } : {}),
       ...(trackingModules.movement ? { movement } : {}),
       ...(trackingModules.food && !foodSensitive ? { fuel } : {}),
+      ...(trackingModules.moodPms ? { moodItems, functionalImpact, safetyConcern } : {}),
       ...(painReliefActive ? { painTiming, medicineTaken, medicineRelief } : {}),
       ...(bleedingDetailActive ? { bleeding, bleedingDuration } : {}),
       editedAt,
@@ -379,8 +408,12 @@ export default function DailyLog() {
   }
 
   const dailyTip      = getDailyTip({ symptoms, pain: pain ?? 0, impacts, vibe, foodEnabled: trackingModules.food && !foodSensitive })
+  const moodSafety = moodSafetyStatus({
+    ...state.dailyLogs,
+    [dateKey]: { ...existingLog, moodItems, functionalImpact, safetyConcern },
+  }, todayKey)
   const isHighPain    = (pain ?? 0) >= 8
-  const hasSpotting   = symptoms.includes('Spotting')
+  const hasSpotting   = periodToday !== true && spotting === true
   const showRedFlag   = isHighPain || (hasSpotting && (pain ?? 0) >= 6)
 
   // ── Post-log confirmation + instant tip ──────────────────────────────
@@ -400,7 +433,9 @@ export default function DailyLog() {
         </div>
 
         {/* Red flag takes priority */}
-        {showRedFlag ? (
+        {moodSafety.active ? (
+          <div style={{ marginTop: 20 }}><MoodSafetyCard /></div>
+        ) : showRedFlag ? (
           <RedFlagCard onDismiss={() => navigate(returnTo)} />
         ) : (
           /* Instant tip payoff */
@@ -466,6 +501,7 @@ export default function DailyLog() {
     (trackingModules.sleep && Boolean(sleepHours || rested)) ||
     (trackingModules.movement && Boolean(movement)) ||
     (trackingModules.food && !foodSensitive && Boolean(fuel.meals || fuel.appetite || fuel.cravings.length || fuel.ironFood !== null || fuel.water)) ||
+    (trackingModules.moodPms && Boolean(Object.keys(moodItems).length || functionalImpact || safetyConcern)) ||
     (painReliefActive && Boolean(painTiming || medicineTaken !== null || medicineRelief)) ||
     (bleedingDetailActive && Boolean(bleedingDuration || bleeding.clots || bleeding.flooding !== null || Object.values(bleeding.productFullness).some(Boolean)))
 
@@ -604,6 +640,16 @@ export default function DailyLog() {
                     {trackingModules.movement && (
                       <OptionalChoice label="How much did you move?" options={MOVEMENT_OPTIONS} value={movement} onChange={(value) => setMovement(value === movement ? '' : value)} />
                     )}
+                    {trackingModules.moodPms && (
+                      <MoodPmsQuestions
+                        values={moodItems}
+                        onChange={setMoodItems}
+                        functionalImpact={functionalImpact}
+                        onImpactChange={setFunctionalImpact}
+                        safetyConcern={safetyConcern}
+                        onSafetyChange={setSafetyConcern}
+                      />
+                    )}
                   </>
                 )}
 
@@ -611,6 +657,15 @@ export default function DailyLog() {
                   <OptionalChoice label="About how long did you sleep?" options={SLEEP_HOURS_OPTIONS} value={sleepHours} onChange={(value) => setSleepHours(value === sleepHours ? '' : value)} />
                   <OptionalChoice label="How rested did you feel?" options={RESTED_OPTIONS} value={rested} onChange={(value) => setRested(value === rested ? '' : value)} />
                 </>}
+
+                {cluster.id === 'period-bleeding' && periodToday === false && (
+                  <ValueChoice
+                    label="Did you notice spotting or unexpected bleeding?"
+                    options={[{ value: true, label: 'Yes' }, { value: false, label: 'No' }]}
+                    value={spotting}
+                    onChange={(value) => setSpotting(value === spotting ? null : value)}
+                  />
+                )}
 
                 {cluster.symptomOptions.length > 0 && (
                   <div className="chips" style={{ marginTop: cluster.id === 'mood-energy' ? 18 : 0 }}>
@@ -658,7 +713,7 @@ export default function DailyLog() {
 
                 {cluster.showsBleedingDetails && <>
                   <div style={{ marginTop: 18 }}>
-                    <p style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 700 }}>Protection used today</p>
+                    <p style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 700 }}>{isToday ? 'Protection used today' : 'Protection used that day'}</p>
                     <p className="muted" style={{ margin: '0 0 9px', fontSize: 12 }}>Add how full each pad, tampon, cup, or underwear was when changed.</p>
                     <div style={{ display: 'grid', gap: 8 }}>
                       {[
@@ -776,6 +831,60 @@ function SymptomClusterCard({ cluster, open, onToggle, children }) {
         </div>
       )}
     </section>
+  )
+}
+
+function MoodPmsQuestions({ values, onChange, functionalImpact, onImpactChange, safetyConcern, onSafetyChange }) {
+  return (
+    <div className="mood-pms-questions">
+      <div className="mood-pms-questions__intro">
+        <strong>Mood details</strong>
+        <span>Optional. These help compare how you feel before and after your period.</span>
+      </div>
+      {MOOD_ITEM_DEFINITIONS.map((item) => (
+        <fieldset className="mood-pms-item" key={item.id}>
+          <legend>{item.label}</legend>
+          <div className="mood-pms-scale">
+            {MOOD_SEVERITY_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={values[item.id] === option.value}
+                onClick={() => onChange((current) => {
+                  const next = { ...current }
+                  if (next[item.id] === option.value) delete next[item.id]
+                  else next[item.id] = option.value
+                  return next
+                })}
+              >
+                <span>{option.value}</span>
+                <small>{option.label}</small>
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      ))}
+      <ValueChoice
+        label="Did these feelings get in the way today?"
+        options={[
+          { value: 'none', label: 'Not at all' },
+          { value: 'some', label: 'A little' },
+          { value: 'a_lot', label: 'A lot' },
+        ]}
+        value={functionalImpact}
+        onChange={(value) => onImpactChange(value === functionalImpact ? '' : value)}
+      />
+      <button
+        type="button"
+        className={`mood-safety-choice${safetyConcern ? ' mood-safety-choice--selected' : ''}`}
+        aria-pressed={safetyConcern}
+        onClick={() => onSafetyChange((current) => !current)}
+      >
+        <WarningCircle size={20} weight="duotone" aria-hidden="true" />
+        I am not feeling safe
+      </button>
+      {safetyConcern && <MoodSafetyCard compact />}
+    </div>
   )
 }
 

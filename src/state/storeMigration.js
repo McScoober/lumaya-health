@@ -22,6 +22,8 @@ export const DEFAULT_NUTRITION_V3 = Object.freeze({ dietPattern: Object.freeze([
 export const DEFAULT_HISTORY_V3 = Object.freeze({
   conditions: Object.freeze([]),
   family: Object.freeze([]),
+  familyStatus: null,
+  familyText: '',
   medications: Object.freeze([]),
   consentedAt: null,
   shareInExport: Object.freeze({ history: false, suppressed: false }),
@@ -145,6 +147,8 @@ export function migrateStoreV3(input = {}, options = {}) {
     history: {
       conditions: array(source.history?.conditions),
       family: array(source.history?.family),
+      familyStatus: ['yes', 'no', 'unsure', 'skipped'].includes(source.history?.familyStatus) ? source.history.familyStatus : null,
+      familyText: typeof source.history?.familyText === 'string' ? source.history.familyText.slice(0, 200) : '',
       medications: array(source.history?.medications),
       consentedAt: source.history?.consentedAt || null,
       shareInExport: { ...DEFAULT_HISTORY_V3.shareInExport, ...object(source.history?.shareInExport) },

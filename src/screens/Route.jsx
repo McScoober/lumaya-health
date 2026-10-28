@@ -26,6 +26,7 @@ import { features } from '../config/features.js'
 import { buildRouteSummary, ROUTE_WINDOWS } from '../engine/routeSummary.js'
 import { useStore } from '../state/store.jsx'
 import { OHIP_NOTE, ONTARIO_CARE_OPTIONS, ROUTE_CARE_REVIEW, URGENT_CARE_OPTIONS } from '../content/route/care.js'
+import { healthBackgroundProgress, healthBackgroundValues } from '../lib/healthBackground.js'
 
 const CARE_GROUPS = [
   { id: 'care-soon', title: 'Care and advice', description: 'For a concern you want help with now.', ids: ['walk-in'] },
@@ -249,6 +250,7 @@ export function RouteSummary() {
           <SummarySection title="Mood">
             <Metric label="Mood entries" value={summary.metrics.moodLogCount || 'None logged'} />
             <Metric label="Average" value={summary.metrics.averageMood === null ? 'Not enough data' : `${summary.metrics.averageMood}/5`} />
+            <Metric label="Timing across cycles" value={summary.metrics.moodPattern.comparedCycles ? `${summary.metrics.moodPattern.comparedCycles} compared` : 'Still collecting'} detail={summary.metrics.moodPattern.summary} />
           </SummarySection>
           <SummarySection title="Symptoms by area">
             {summary.metrics.symptomClusters.length ? summary.metrics.symptomClusters.map((cluster) => (
@@ -283,7 +285,10 @@ function summaryText(summary, identity, preferences) {
   if (preferences.exportSections.cycles && summary.metrics.averageCycleDays) lines.push(`Average completed cycle: ${summary.metrics.averageCycleDays} days`)
   if (preferences.exportSections.pain) lines.push(`Highest logged pain: ${summary.metrics.worstPain === null ? 'not logged' : `${summary.metrics.worstPain}/10`}`)
   if (preferences.exportSections.impact) lines.push(`Days affected: ${summary.metrics.impactDays}`)
-  if (preferences.exportSections.mood) lines.push(`Mood entries: ${summary.metrics.moodLogCount}`)
+  if (preferences.exportSections.mood) {
+    lines.push(`Mood entries: ${summary.metrics.moodLogCount}`)
+    lines.push(`Mood timing: ${summary.metrics.moodPattern.summary}`)
+  }
   if (preferences.exportSections.symptoms) {
     for (const cluster of summary.metrics.symptomClusters) {
       lines.push(`${cluster.label}: ${cluster.symptoms.map((item) => `${item.name} (${item.count})`).join(', ')}`)
@@ -360,7 +365,7 @@ export function RouteExport() {
         {preferences.exportSections.cycles && <SummarySection title="Cycles"><Metric label="Completed cycles" value={summary.completedCycles} /><Metric label="Average cycle" value={summary.metrics.averageCycleDays ? `${summary.metrics.averageCycleDays} days` : 'Not enough data'} /></SummarySection>}
         {preferences.exportSections.pain && <SummarySection title="Pain"><Metric label="Highest logged" value={summary.metrics.worstPain === null ? 'Not logged' : `${summary.metrics.worstPain}/10`} /><Metric label="Severe pain days" value={summary.metrics.highPainDays} /></SummarySection>}
         {preferences.exportSections.impact && <SummarySection title="Daily impact"><Metric label="Days affected" value={summary.metrics.impactDays} /></SummarySection>}
-        {preferences.exportSections.mood && <SummarySection title="Mood"><Metric label="Mood entries" value={summary.metrics.moodLogCount} /></SummarySection>}
+        {preferences.exportSections.mood && <SummarySection title="Mood"><Metric label="Mood entries" value={summary.metrics.moodLogCount} /><Metric label="Timing across cycles" value={summary.metrics.moodPattern.comparedCycles ? `${summary.metrics.moodPattern.comparedCycles} compared` : 'Still collecting'} detail={summary.metrics.moodPattern.summary} /></SummarySection>}
         {preferences.exportSections.symptoms && <SummarySection title="Symptoms by area">
           {summary.metrics.symptomClusters.length ? summary.metrics.symptomClusters.map((cluster) => (
             <div className="route-cluster-summary" key={cluster.id}>
@@ -397,6 +402,7 @@ export function RouteExport() {
 
 export function RouteTalk() {
   if (!features.routeSummary) return <Navigate to="/home" replace />
+  const { state } = useStore()
   const [preferences, updatePreferences] = useRoutePreferences()
   const [activeTab, setActiveTab] = useState('before')
   const [copied, setCopied] = useState(false)
@@ -418,6 +424,10 @@ export function RouteTalk() {
     <div className="screen screen--pad-bottom route-screen">
       <TopBar title="Talk to a clinician" />
       <p className="route-lede">A little preparation can make it easier to explain what has been changing and what you need.</p>
+      <Link className="route-background-link" to="/me/health-background" state={{ from: 'route' }}>
+        <span><strong>My health background</strong><small>{healthBackgroundProgress(healthBackgroundValues(state.answers, state.history)).complete ? 'Review the context Maisie uses to personalize visit preparation.' : 'Add context that can make visit preparation more useful.'}</small></span>
+        <ArrowRight size={18} aria-hidden="true" />
+      </Link>
       <div className="route-segments route-segments--three" aria-label="Visit timing">
         {TALK_TABS.map((item) => <button key={item.id} type="button" aria-pressed={activeTab === item.id} onClick={() => setActiveTab(item.id)}>{item.label}</button>)}
       </div>

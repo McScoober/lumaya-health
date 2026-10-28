@@ -9,12 +9,14 @@ import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, predictP
 import { maisieMessage, selectDailyTips } from '../engine/tipEngine.js'
 import { deriveBodySignals } from '../engine/bodySignals.js'
 import { buildRouteSummary } from '../engine/routeSummary.js'
+import { moodSafetyStatus } from '../engine/moodPms.js'
 import { features } from '../config/features.js'
 import { Card, Button } from '../components/ui.jsx'
 import MetabolicCard from '../components/MetabolicCard.jsx'
 import ProgressiveCheckin from './ProgressiveCheckin.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import FoodSupportCard from '../components/FoodSupportCard.jsx'
+import MoodSafetyCard from '../components/MoodSafetyCard.jsx'
 import { foodSensitiveModeIsActive } from '../lib/trackingPreferences.js'
 import { ArrowRight, CalendarBlank, CheckCircle, ClipboardText, Gear, MapPin } from '@phosphor-icons/react'
 
@@ -87,11 +89,13 @@ export default function Home() {
 
   const tipSelection = useMemo(() => selectDailyTips({
     phase: supportPhase,
+    phaseTips: state.notifyPrefs.phaseTips,
     profile: state.profile,
     dailyLogs: state.dailyLogs,
+    periodLogs: state.periodLogs,
     tipHistory: state.tipHistory,
     date: now,
-  }), [supportPhase, state.profile, state.dailyLogs, state.tipHistory, todayKey])
+  }), [supportPhase, state.notifyPrefs.phaseTips, state.profile, state.dailyLogs, state.periodLogs, state.tipHistory, todayKey])
   const tip = tipSelection.primary
   const foodSensitive = useMemo(
     () => foodSensitiveModeIsActive(state.profile, state.dailyLogs),
@@ -103,8 +107,10 @@ export default function Home() {
     }
   }, [dispatch, state.tipHistory, tipSelection.ids, todayKey])
   const todayMaisieMsg = useMemo(
-    () => (supportPhase ? maisieMessage(supportPhase, supportCycleDay, state.profile) : 'Your body is telling you something every day. Maisie helps you hear it.'),
-    [supportPhase, supportCycleDay, state.profile]
+    () => (state.notifyPrefs.phaseTips && supportPhase
+      ? maisieMessage(supportPhase, supportCycleDay, state.profile)
+      : 'Your recent check-ins can help you notice what supports you day to day.'),
+    [state.notifyPrefs.phaseTips, supportPhase, supportCycleDay, state.profile]
   )
   const signals = useMemo(
     () => deriveBodySignals(state.dailyLogs, state.profile, { days: 8, today: now }),
@@ -114,6 +120,7 @@ export default function Home() {
     () => buildRouteSummary({ dailyLogs: state.dailyLogs, periodLogs: state.periodLogs, result: state.result }),
     [state.dailyLogs, state.periodLogs, state.result],
   )
+  const moodSafety = useMemo(() => moodSafetyStatus(state.dailyLogs, now), [state.dailyLogs, todayKey])
 
 
 
@@ -194,6 +201,8 @@ export default function Home() {
           </p>
         )}
       </Card>
+
+      {moodSafety.active && <div style={{ marginTop: 14 }}><MoodSafetyCard /></div>}
 
       {tip && (
         <div style={{ marginTop: 14 }}>

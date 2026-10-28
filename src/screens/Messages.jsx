@@ -32,8 +32,8 @@ export default function Messages() {
   }, [])
 
   const schedule = useMemo(
-    () => buildSchedule(cycleModel, state.profile, { days: 21 }),
-    [cycleModel, state.profile],
+    () => buildSchedule(cycleModel, state.profile, { days: 21, phaseTips: state.notifyPrefs.phaseTips }),
+    [cycleModel, state.notifyPrefs.phaseTips, state.profile],
   )
 
   return (
@@ -43,7 +43,9 @@ export default function Messages() {
         <span className="pill-tag">via SMS</span>
       </div>
       <p className="muted" style={{ fontSize: 13 }}>
-        Maisie texts you — daily during your period, about weekly the rest of the month.
+        {state.notifyPrefs.phaseTips
+          ? 'Maisie texts you daily during your period and about weekly the rest of the month.'
+          : 'Maisie texts you during your learned period window.'}
       </p>
 
       {state.messages.length > 0 && (

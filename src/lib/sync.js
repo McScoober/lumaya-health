@@ -137,6 +137,7 @@ export async function pushToSupabase(userId, state) {
 }
 
 export const listSupportAccess = () => rpc('list_support_access')
+export const deleteCurrentAccount = () => rpc('delete_my_account', { confirmation: 'DELETE' })
 export const pendingSupportInvitations = () => rpc('pending_support_invitations')
 export const acceptSupportInvitation = (id) => rpc('accept_support_invitation', { invitation_id: id })
 export const manageSupportAccess = (id, kind, mode = null) => rpc('manage_support_access', { record_id: id, record_kind: kind, mode })

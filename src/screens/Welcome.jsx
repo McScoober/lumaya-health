@@ -3,8 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { Button } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
+import InlineDropdown from '../components/InlineDropdown.jsx'
 import { supabase } from '../lib/supabase.js'
 import { Wrench } from '@phosphor-icons/react'
+import { LOCAL_TEST_PROFILES } from '../config/localTestProfiles.js'
 
 const LOCAL_TEST_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]'])
 
@@ -15,7 +17,8 @@ function canUseLocalTestLogin() {
 export default function Welcome() {
   const navigate = useNavigate()
   const { state } = useStore()
-  const [testLoginLoading, setTestLoginLoading] = useState(false)
+  const [selectedTestProfile, setSelectedTestProfile] = useState(LOCAL_TEST_PROFILES[0].id)
+  const [testLoginLoading, setTestLoginLoading] = useState('')
   const [testLoginError, setTestLoginError] = useState('')
   const showLocalTestLogin = canUseLocalTestLogin()
 
@@ -25,12 +28,12 @@ export default function Welcome() {
     }
   }, [state.onboarded, navigate])
 
-  async function openTestAccount() {
+  async function openTestAccount(profileId) {
     if (!showLocalTestLogin || !supabase || testLoginLoading) return
-    setTestLoginLoading(true)
+    setTestLoginLoading(profileId)
     setTestLoginError('')
     try {
-      const response = await fetch('/__maisie/test-login', {
+      const response = await fetch(`/__maisie/test-login?profile=${encodeURIComponent(profileId)}`, {
         method: 'POST',
         headers: { 'x-maisie-local-test': '1' },
       })
@@ -51,7 +54,7 @@ export default function Welcome() {
     } catch (error) {
       setTestLoginError(error?.message || 'The test account could not be opened.')
     } finally {
-      setTestLoginLoading(false)
+      setTestLoginLoading('')
     }
   }
 
@@ -87,10 +90,18 @@ export default function Welcome() {
         </button>
 
         {showLocalTestLogin && (
-          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 2 }}>
-            <Button variant="soft" block disabled={testLoginLoading} onClick={openTestAccount}>
+          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 12, marginTop: 2, display: 'grid', gap: 8 }}>
+            <label htmlFor="local-test-profile" style={{ color: 'var(--text-secondary)', fontSize: 12, fontWeight: 700 }}>Test profile</label>
+            <InlineDropdown
+              id="local-test-profile"
+              value={selectedTestProfile}
+              options={LOCAL_TEST_PROFILES.map((profile) => ({ value: profile.id, label: profile.label }))}
+              onChange={setSelectedTestProfile}
+              disabled={Boolean(testLoginLoading)}
+            />
+            <Button variant="soft" block disabled={Boolean(testLoginLoading)} onClick={() => openTestAccount(selectedTestProfile)}>
               <Wrench size={18} weight="bold" aria-hidden="true" />
-              {testLoginLoading ? 'Opening test account...' : 'Open test account'}
+              {testLoginLoading ? 'Opening profile...' : 'Open test profile'}
             </Button>
             {testLoginError && (
               <p role="alert" style={{ margin: '8px 0 0', color: '#B42318', fontSize: 12.5 }}>

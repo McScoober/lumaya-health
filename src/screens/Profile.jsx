@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import {
-  Bell, Cake, CaretRight, CheckCircle, CloudArrowUp, Database, Info,
-  DownloadSimple, Lightbulb, PencilSimple, ShieldCheck, SlidersHorizontal, UsersThree, X,
+  Bell, Cake, CaretRight, CheckCircle, CloudArrowUp, Database, IdentificationCard, Info,
+  DownloadSimple, Lightbulb, PencilSimple, ShieldCheck, SlidersHorizontal, Trash, UsersThree, X,
 } from '@phosphor-icons/react'
 import { useStore } from '../state/store.jsx'
 import { Button, Chip, ChipGroup } from '../components/ui.jsx'
@@ -14,6 +14,7 @@ import { supabase } from '../lib/supabase.js'
 import { clearLegacyHealthStorage } from '../lib/trackerRecords.js'
 import { clearSignupDraft } from '../lib/signupDraft.js'
 import { clearGuestTracker } from '../lib/guestTracker.js'
+import { deleteCurrentAccount } from '../lib/sync.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
 import {
   profilePayloadForTrackingModules,
@@ -23,6 +24,7 @@ import {
   trackingModulesFromProfile,
   visibleTrackingModules,
 } from '../lib/trackingPreferences.js'
+import { healthBackgroundProgress, healthBackgroundValues } from '../lib/healthBackground.js'
 
 const SA_OPTIONS = ['Student', 'Athlete', 'Both', 'Neither']
 const SLEEP_OPTIONS = ['Early to bed, early to rise', 'Night owl', 'All over the place']
@@ -46,6 +48,10 @@ export default function Profile() {
 
   const trackingModules = useMemo(() => trackingModulesFromProfile(profile), [profile])
   const trackingCount = Object.entries(trackingModules).filter(([id, enabled]) => id !== 'core' && enabled).length
+  const backgroundProgress = useMemo(
+    () => healthBackgroundProgress(healthBackgroundValues(state.answers, state.history)),
+    [state.answers, state.history],
+  )
   const ageDisplay = identity.ageBand === '18+' ? '18+ years old' : identity.ageBand ? `${identity.ageBand} years old` : 'Teen account'
   const birthLabel = birthMonth && birthYear ? `${MONTHS[birthMonth - 1].slice(0, 3)} ${birthYear}` : 'Add'
   const birthError = (birthMonth || birthYear) && !ageBandFromBirthMonthYear(birthMonth, birthYear)
@@ -111,6 +117,17 @@ export default function Profile() {
     navigate('/')
   }
 
+  async function deleteSavedAccount() {
+    if (!supabase || !hasSavedAccount) throw new Error('Account deletion is not available right now.')
+    await deleteCurrentAccount()
+    await supabase.auth.signOut({ scope: 'local' }).catch(() => {})
+    clearLegacyHealthStorage(localStorage)
+    clearSignupDraft(localStorage)
+    clearGuestTracker(localStorage)
+    dispatch({ type: 'RESET' })
+    navigate('/', { replace: true })
+  }
+
   function downloadData() {
     const exportData = {
       version: 1,
@@ -170,6 +187,7 @@ export default function Profile() {
           onClick={(event) => openSheet('account', event)}
         />
         <ProfileRow Icon={SlidersHorizontal} tone="sage" title="What I track" subtitle="Choose your check-in areas." value={`${trackingCount} on`} onClick={(event) => openSheet('tracking', event)} />
+        <ProfileRow Icon={IdentificationCard} title="My health background" subtitle="Review what personalizes Maisie." value={backgroundProgress.complete ? 'Review' : `${Math.round(backgroundProgress.ratio * 100)}%`} onClick={() => navigate('/me/health-background', { state: { from: 'me' } })} />
         <ProfileRow Icon={Lightbulb} title="Tips and preferences" subtitle="Personalize the guidance you see." onClick={(event) => openSheet('tips', event)} />
         <ProfileRow Icon={Bell} title="Check-in reminders" subtitle="Set your reminder preference." value={notifyPrefs.periodCheckin ? 'On' : 'Off'} onClick={(event) => openSheet('reminders', event)} />
         <ProfileRow Icon={Cake} tone="sage" title="Birthday" subtitle="Keep age guidance current." value={birthLabel} onClick={(event) => openSheet('birthday', event)} />
@@ -204,8 +222,8 @@ export default function Profile() {
             />
           )}
           {activeSheet === 'tracking' && (
-            <TrackingPanel profile={profile} dailyLogs={state.dailyLogs} modules={trackingModules} hideFoodContent={profile.hideFoodContent === true} onSave={(modules, hideFoodContent, context) => {
-              updateProfile({ ...profilePayloadForTrackingModules(modules, { hideFoodContent }), ...context }, 'Tracking preferences saved')
+            <TrackingPanel profile={profile} dailyLogs={state.dailyLogs} modules={trackingModules} hideFoodContent={profile.hideFoodContent === true} onSave={(modules, hideFoodContent, context, restoreFoodContent) => {
+              updateProfile({ ...profilePayloadForTrackingModules(modules, { hideFoodContent, restoreFoodContent }), ...context }, 'Tracking preferences saved')
               closeSheet()
             }} />
           )}
@@ -218,7 +236,7 @@ export default function Profile() {
           )}
           {activeSheet === 'birthday' && <BirthdayPanel birthMonth={birthMonth} birthYear={birthYear} birthError={birthError} onChange={updateBirthMonthYear} />}
           {activeSheet === 'support' && <SupportAccess compact />}
-          {activeSheet === 'data' && <DataPanel hasSavedAccount={hasSavedAccount} onDownload={downloadData} onClear={clearDeviceData} />}
+          {activeSheet === 'data' && <DataPanel hasSavedAccount={hasSavedAccount} onDownload={downloadData} onClear={clearDeviceData} onDelete={deleteSavedAccount} />}
           {activeSheet === 'about' && <AboutPanel />}
         </ProfileSheet>,
         document.body,
@@ -300,6 +318,7 @@ function AccountPanel({ email, hasSavedAccount, onAddEmail, onOpenData }) {
 function TrackingPanel({ profile, dailyLogs, modules, hideFoodContent, onSave }) {
   const [draft, setDraft] = useState(modules)
   const [hideFood, setHideFood] = useState(hideFoodContent)
+  const [restoreFoodContent, setRestoreFoodContent] = useState(false)
   const [dietPreferences, setDietPreferences] = useState(profile.dietPreferences || [])
   const [periodProducts, setPeriodProducts] = useState(profile.periodProducts || [])
   const availableModules = visibleTrackingModules()
@@ -310,22 +329,24 @@ function TrackingPanel({ profile, dailyLogs, modules, hideFoodContent, onSave })
     if (exclusive.has(value)) return setCurrent([value])
     setCurrent([...current.filter((item) => !exclusive.has(item)), value])
   }
+  function toggleModule(moduleId, on) {
+    setDraft((current) => ({ ...current, [moduleId]: on }))
+    if (moduleId !== 'food') return
+    if (on) {
+      setHideFood(false)
+      setRestoreFoodContent(true)
+    } else {
+      setRestoreFoodContent(false)
+    }
+  }
   return (
     <div className="profile-panel">
       <p className="profile-panel__intro">Choose what appears in check-ins and personalized learning. Existing entries are not removed.</p>
       <div className="profile-toggle-list">
         {availableModules.map((module) => module.locked
           ? <Toggle key={module.id} label={module.label} desc={module.description} on disabled />
-          : <Toggle key={module.id} label={module.label} desc={module.description} on={draft[module.id]} onChange={(on) => setDraft((current) => ({ ...current, [module.id]: on }))} />)}
+          : <Toggle key={module.id} label={module.label} desc={module.description} on={draft[module.id]} onChange={(on) => toggleModule(module.id, on)} />)}
       </div>
-      {availableModules.some((module) => module.id === 'food') && (
-        <div className="profile-toggle-list">
-          <Toggle label="I'd rather not see food stuff" desc="Hide food prompts, tips, and learning guides." on={hideFood} onChange={(on) => {
-            setHideFood(on)
-            if (on) setDraft((current) => ({ ...current, food: false }))
-          }} />
-        </div>
-      )}
       {draft.food && !hideFood && !foodSensitive && (
         <div className="profile-panel__section">
           <h3>Diet preferences</h3>
@@ -339,7 +360,7 @@ function TrackingPanel({ profile, dailyLogs, modules, hideFoodContent, onSave })
         </div>
       )}
       {foodSensitive && <FoodSupportCard compact />}
-      <Button block onClick={() => onSave(draft, hideFood, { dietPreferences, periodProducts })}>Save changes</Button>
+      <Button block onClick={() => onSave(draft, hideFood, { dietPreferences, periodProducts }, restoreFoodContent)}>Save changes</Button>
     </div>
   )
 }
@@ -378,7 +399,24 @@ function BirthdayPanel({ birthMonth, birthYear, birthError, onChange }) {
   )
 }
 
-function DataPanel({ hasSavedAccount, onDownload, onClear }) {
+function DataPanel({ hasSavedAccount, onDownload, onClear, onDelete }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+
+  async function deleteAccount() {
+    if (deleting) return
+    setDeleting(true)
+    setDeleteError('')
+    try {
+      await onDelete()
+    } catch (error) {
+      if (import.meta.env.DEV) console.error('Account deletion failed', error)
+      setDeleteError('Your account could not be deleted. Please try again.')
+      setDeleting(false)
+    }
+  }
+
   return (
     <div className="profile-panel">
       <p className="profile-panel__intro">{hasSavedAccount ? 'Your account information stays available after you clear this device.' : 'Your tracker is stored only on this device. Clearing it cannot be undone.'}</p>
@@ -386,6 +424,26 @@ function DataPanel({ hasSavedAccount, onDownload, onClear }) {
       <Button variant="secondary" block onClick={onDownload}><DownloadSimple size={19} weight="bold" aria-hidden="true" /> Download my data</Button>
       <Button variant="ghost" block className="profile-destructive-action" onClick={onClear}>{hasSavedAccount ? 'Sign out and clear this device' : 'Clear this device'}</Button>
       {hasSavedAccount && <p className="profile-panel__note">This signs you out and clears this device. It does not delete your account.</p>}
+      {hasSavedAccount && !confirmingDelete && (
+        <Button variant="ghost" block className="profile-destructive-action" onClick={() => setConfirmingDelete(true)}>
+          <Trash size={19} weight="bold" aria-hidden="true" /> Delete my account
+        </Button>
+      )}
+      {hasSavedAccount && confirmingDelete && (
+        <section className="profile-delete-confirm" aria-labelledby="delete-account-title">
+          <div>
+            <h3 id="delete-account-title">Delete account permanently?</h3>
+            <p>This removes your account and saved Maisie information. It cannot be undone.</p>
+          </div>
+          {deleteError && <p className="profile-panel__error" role="alert">{deleteError}</p>}
+          <div className="profile-delete-confirm__actions">
+            <Button variant="ghost" disabled={deleting} onClick={() => { setConfirmingDelete(false); setDeleteError('') }}>Cancel</Button>
+            <Button className="profile-delete-confirm__button" disabled={deleting} onClick={deleteAccount}>
+              {deleting ? 'Deleting...' : 'Delete permanently'}
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   )
 }

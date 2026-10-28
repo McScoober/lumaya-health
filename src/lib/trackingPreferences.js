@@ -58,13 +58,16 @@ export function trackingModulesFromProfile(profile = {}) {
 
 export function profilePayloadForTrackingModules(modules, options = {}) {
   const normalized = { ...DEFAULT_TRACKING_MODULES, ...modules, core: true }
-  const hideFoodContent = options.hideFoodContent === true
+  const restoreFoodContent = options.restoreFoodContent === true
+  const hideFoodContent = !restoreFoodContent && options.hideFoodContent === true
   normalized.food = features.food && !hideFoodContent && normalized.food
-  return {
+  const payload = {
     trackingModules: normalized,
     foodModule: normalized.food,
     hideFoodContent,
   }
+  if (restoreFoodContent && normalized.food) payload.sensitiveFoodMode = false
+  return payload
 }
 
 const SYMPTOM_MODULES = {
@@ -78,7 +81,7 @@ const SYMPTOM_MODULES = {
   'Skin breakout': ['skinHair'],
   Nausea: ['symptoms'],
   Dizziness: ['symptoms'],
-  Spotting: ['symptoms'],
+  Spotting: ['bleedingDetail'],
   'Discharge changes': ['symptoms'],
   'Sleep trouble': ['sleep'],
 }

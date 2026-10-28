@@ -1,5 +1,6 @@
 import { addDays, dateKeyLocal, diffDays, fullCycleCount, periodStartKeys } from './cyclePredictor.js'
 import { groupLoggedSymptoms } from '../content/symptomClusters.js'
+import { analyzeMoodPattern } from './moodPms.js'
 
 export const ROUTE_WINDOWS = Object.freeze({
   '30': { label: '30 days', days: 30 },
@@ -83,6 +84,9 @@ export function buildRouteSummary({
   const moodValues = logs
     .map(({ log }) => log.vibe)
     .filter((value) => typeof value === 'number' && Number.isFinite(value))
+  const moodLogCount = logs.filter(({ log }) => (
+    typeof log.vibe === 'number' || Object.keys(log.moodItems || {}).length > 0
+  )).length
   const bleedingDays = Object.entries(periodLogs)
     .filter(([key, entry]) => key >= startKey && key <= endKey && entry?.period === true)
     .length
@@ -98,6 +102,8 @@ export function buildRouteSummary({
     }
   }).filter((cycle) => cycle.start >= startKey || cycle.start === starts.at(-2))
 
+  const moodPattern = analyzeMoodPattern(Object.fromEntries(entries), periodLogs)
+
   const flags = stage === 'flags' && result?.authoritative
     ? (result.flags || []).map((flag) => ({
         id: flag.id,
@@ -106,6 +112,14 @@ export function buildRouteSummary({
         severity: flag.displaySeverity || flag.severity,
       }))
     : []
+  if (stage === 'flags' && moodPattern.worthDiscussing) {
+    flags.push({
+      id: 'mood-timing',
+      title: 'Mood timing worth discussing',
+      note: moodPattern.summary,
+      severity: moodPattern.highImpact ? 'recommend_clinical_review' : 'flagged',
+    })
+  }
 
   return {
     window,
@@ -130,8 +144,9 @@ export function buildRouteSummary({
       highPainDays: painValues.filter((value) => value >= 7).length,
       impactDays: impactRows.length,
       impacts: tally(impactRows.flatMap(({ log }) => log.impact || [])),
-      moodLogCount: moodValues.length,
+      moodLogCount,
       averageMood: average(moodValues),
+      moodPattern,
       symptoms: symptomCounts,
       symptomClusters,
     },

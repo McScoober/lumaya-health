@@ -38,6 +38,8 @@ test('symptoms appear when at least one related module is enabled', () => {
   const modules = { ...DEFAULT_TRACKING_MODULES, symptoms: true, skinHair: false }
   assert.equal(symptomIsEnabled('Cramps', modules), true)
   assert.equal(symptomIsEnabled('Skin breakout', modules), false)
+  assert.equal(symptomIsEnabled('Spotting', { ...modules, symptoms: false, bleedingDetail: true }), true)
+  assert.equal(symptomIsEnabled('Spotting', { ...modules, symptoms: true, bleedingDetail: false }), false)
 })
 
 test('core stays enabled even when optional modules are all disabled', () => {
@@ -52,6 +54,17 @@ test('food opt-out disables the module and its content preference', () => {
   assert.equal(payload.trackingModules.food, false)
   assert.equal(payload.foodModule, false)
   assert.equal(payload.hideFoodContent, true)
+})
+
+test('explicitly restoring food clears conflicting food visibility preferences', () => {
+  const payload = profilePayloadForTrackingModules(
+    { ...DEFAULT_TRACKING_MODULES, food: true },
+    { hideFoodContent: true, restoreFoodContent: true },
+  )
+  assert.equal(payload.trackingModules.food, true)
+  assert.equal(payload.foodModule, true)
+  assert.equal(payload.hideFoodContent, false)
+  assert.equal(payload.sensitiveFoodMode, false)
 })
 
 test('legacy module choices migrate without dropping pain or bleeding details', () => {

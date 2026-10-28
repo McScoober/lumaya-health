@@ -47,6 +47,28 @@ test('allows authoritative flags at two completed cycles', () => {
   assert.equal(summary.flags.length, 1)
 })
 
+test('summarizes repeated mood timing and adds a non-diagnostic discussion item', () => {
+  const detailedMood = (score, functionalImpact = 'none') => ({
+    checkinCompleted: true,
+    vibe: 2,
+    moodItems: { irritable: score, anxious: score },
+    functionalImpact,
+  })
+  const logs = {
+    ...dailyLogs(7),
+    '2026-08-17': detailedMood(3, 'some'),
+    '2026-08-18': detailedMood(4, 'some'),
+    '2026-08-21': detailedMood(1),
+    '2026-09-14': detailedMood(3, 'some'),
+    '2026-09-15': detailedMood(4, 'a_lot'),
+    '2026-09-18': detailedMood(1),
+  }
+  const summary = buildRouteSummary({ dailyLogs: logs, periodLogs: twoCycles, result: { authoritative: true, flags: [] }, now, window: 'all' })
+  assert.equal(summary.metrics.moodPattern.repeated, true)
+  assert.equal(summary.flags.some((flag) => flag.id === 'mood-timing'), true)
+  assert.doesNotMatch(summary.metrics.moodPattern.summary, /diagnos/i)
+})
+
 test('distinguishes no pain logged from zero pain', () => {
   const withZero = buildRouteSummary({ dailyLogs: { ...dailyLogs(7), '2026-10-18': { checkinCompleted: true, pain: 0 } }, periodLogs: twoCycles, now })
   assert.ok(withZero.metrics.painLogCount > 0)

@@ -83,6 +83,7 @@ import Patterns from './screens/Patterns.jsx'
 
 import { LearnArticle, LearnCategory, LearnHome, LegacyLearnRedirect } from './screens/Learn.jsx'
 import Profile from './screens/Profile.jsx'
+import HealthBackground from './screens/HealthBackground.jsx'
 
 export default function App() {
   const { pathname } = useLocation()
@@ -90,7 +91,8 @@ export default function App() {
   
   // UX RULE: Nav hidden during the log screen.
   const isLogScreen = pathname === '/log'
-  const showTabs = APP_TABS.some((t) => pathname.startsWith(t)) && !isLogScreen
+  const isFocusedFlow = pathname === '/me/health-background'
+  const showTabs = APP_TABS.some((t) => pathname.startsWith(t)) && !isLogScreen && !isFocusedFlow
 
   return (
     <div className="app-frame">
@@ -117,6 +119,7 @@ export default function App() {
           <Route path="/library" element={<Navigate to="/learn" replace />} />
           <Route path="/library/:slug" element={<RequireOnboarded><LegacyLearnRedirect /></RequireOnboarded>} />
           <Route path="/me" element={<RequireOnboarded><Profile /></RequireOnboarded>} />
+          <Route path="/me/health-background" element={<RequireOnboarded><HealthBackground /></RequireOnboarded>} />
           <Route path="/profile" element={<Navigate to="/me" replace />} />
           <Route path="/route" element={<RequireOnboarded><RouteHome /></RequireOnboarded>} />
           <Route path="/route/summary" element={<RequireOnboarded><RouteSummary /></RequireOnboarded>} />

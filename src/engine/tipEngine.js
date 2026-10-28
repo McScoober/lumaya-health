@@ -8,6 +8,7 @@
 
 import { PHASE_CARDS, MODIFIER_ACTIONS, sportAction } from '../data/tips.js'
 import { foodContentIsEnabled, foodSensitiveModeIsActive, trackingModulesFromProfile } from '../lib/trackingPreferences.js'
+import { moodPatternTipTrigger } from './moodPms.js'
 
 export const TIP_V2 = [
   {
@@ -52,6 +53,20 @@ export const TIP_V2 = [
     why: 'Pain affected several recent days.',
     trigger: ({ recent }) => recent.slice(0, 30).filter(([, log]) => Number(log.pain) >= 7).length >= 3,
   },
+  {
+    id: 'mood-gentle-01', category: 'care', priority: 84, cooldownDays: 4, requires: 'moodPms',
+    headline: 'Make today a little lighter.',
+    action: 'Choose one small thing you can postpone, share, or ask for help with.',
+    why: 'Your recent check-ins show that mood has been getting in the way.',
+    trigger: ({ recent }) => recent.slice(0, 4).filter(([, log]) => ['some', 'a_lot'].includes(log.functionalImpact)).length >= 2,
+  },
+  {
+    id: 'mood-timing-01', category: 'nudge', priority: 86, cooldownDays: 14, requires: 'moodPms',
+    headline: 'Your mood timing is worth reviewing.',
+    action: 'Open Route to see the before-and-after pattern and prepare what you want to ask.',
+    why: 'Mood changes appeared before a logged period and affected your day.',
+    trigger: ({ dailyLogs, periodLogs }) => moodPatternTipTrigger(dailyLogs, periodLogs),
+  },
 ]
 
 function asDateKey(value = new Date()) {
@@ -69,7 +84,7 @@ function stableRank(id, dateKey) {
   return hash >>> 0
 }
 
-export function selectDailyTips({ phase, profile = {}, dailyLogs = {}, tipHistory = {}, date = new Date() }) {
+export function selectDailyTips({ phase, phaseTips = true, profile = {}, dailyLogs = {}, periodLogs = {}, tipHistory = {}, date = new Date() }) {
   const dateKey = asDateKey(date)
   const modules = trackingModulesFromProfile(profile)
   const foodSensitive = foodSensitiveModeIsActive(profile, dailyLogs)
@@ -77,7 +92,7 @@ export function selectDailyTips({ phase, profile = {}, dailyLogs = {}, tipHistor
   const recent = Object.entries(dailyLogs)
     .filter(([key, log]) => key <= dateKey && log?.checkinCompleted === true)
     .sort(([left], [right]) => right.localeCompare(left))
-  const context = { recent, profile, modules, phase, dateKey }
+  const context = { recent, profile, modules, phase, dateKey, dailyLogs, periodLogs }
 
   const candidates = TIP_V2
     .filter((tip) => !tip.requires || (tip.requires === 'food' ? foodEnabled : modules[tip.requires]))
@@ -89,7 +104,7 @@ export function selectDailyTips({ phase, profile = {}, dailyLogs = {}, tipHistor
     .sort((left, right) => right.priority - left.priority || stableRank(left.id, dateKey) - stableRank(right.id, dateKey))
     .map((tip) => ({ ...tip, actions: [tip.action] }))
 
-  const primary = candidates.find((tip) => tip.category === 'care') || (phase ? buildTip(phase, profile) : {
+  const primary = candidates.find((tip) => tip.category === 'care') || (phaseTips && phase ? buildTip(phase, profile) : {
     id: 'baseline-start', category: 'care', headline: 'Start with what you notice.',
     why: 'A few check-ins will help Maisie show more useful patterns.',
     actions: [foodEnabled ? 'Drink some water, choose something steady to eat, and log what stands out.' : 'Drink some water and log what stands out.'],

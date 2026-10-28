@@ -26,6 +26,7 @@ import {
 } from '../content/learn/articles.js'
 import { learnLogCard } from '../content/learn/logCards.js'
 import { features } from '../config/features.js'
+import { recommendedLearnSlugs } from '../lib/healthBackground.js'
 
 const SAVED_KEY = 'maisie.savedArticles'
 const SHOW_CONTENT_REVIEW = import.meta.env.VITE_SHOW_LEARN_CONTENT_REVIEW === 'true'
@@ -163,6 +164,10 @@ export function LearnHome() {
   const { saved, toggle } = useSavedArticles()
   const [filter, setFilter] = useState('all')
   const articles = useMemo(() => visibleLearnArticles(state), [state])
+  const recommended = useMemo(
+    () => recommendedLearnSlugs(state.answers).map((slug) => LEARN_ARTICLE_BY_SLUG[slug]).filter((article) => article && articles.some((visible) => visible.slug === article.slug)),
+    [articles, state.answers],
+  )
   const featured = LEARN_ARTICLE_BY_SLUG['period-101']
   const filters = [
     { id: 'all', label: 'All' },
@@ -188,6 +193,21 @@ export function LearnHome() {
           <span><strong>Getting ready to talk to someone?</strong><small>Turn what you learned into questions for a visit.</small></span>
           <ArrowRight size={18} />
         </Link>
+      )}
+
+      {recommended.length > 0 && (
+        <section style={{ margin: '0 0 20px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'end', gap: 12, marginBottom: 9 }}>
+            <div>
+              <p className="eyebrow" style={{ margin: '0 0 2px', color: colors.sage700 }}>For you</p>
+              <p style={{ margin: 0, color: colors.textSecondary, fontSize: 12 }}>Based on topics in your health background.</p>
+            </div>
+            <Link to="/me/health-background" state={{ from: 'learn' }} style={{ color: colors.plum700, fontSize: 11.5, fontWeight: 700, textDecoration: 'none' }}>Change</Link>
+          </div>
+          <div style={{ display: 'grid', gap: 8 }}>
+            {recommended.map((article) => <ArticleCard key={article.slug} article={article} saved={saved} onToggle={toggle} compact />)}
+          </div>
+        </section>
       )}
 
       <Link to={`/learn/${featured.slug}`} style={{ display: 'block', flex: '0 0 auto', textDecoration: 'none', color: 'inherit' }}>

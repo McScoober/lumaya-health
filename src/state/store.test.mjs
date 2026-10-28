@@ -139,6 +139,7 @@ test('structured tracking fields and edit metadata are stored without removing o
     fuel: { meals: 'most', appetite: 'About usual', cravings: ['Salty'], ironFood: true, water: 'Some' },
     bleeding: { productFullness: { light: 1, moderate: 2, full: 0 }, clots: 'Small', flooding: false },
     medicineTaken: true, medicineRelief: 'partial',
+    moodItems: { irritable: 3, anxious: 2, hopeless: 1 }, functionalImpact: 'some', safetyConcern: false,
   })
   const log = state.dailyLogs[dateKey]
   assert.equal(log.editedAt, editedAt)
@@ -146,6 +147,9 @@ test('structured tracking fields and edit metadata are stored without removing o
   assert.equal(log.fuel.ironFood, true)
   assert.equal(log.bleeding.productFullness.moderate, 2)
   assert.equal(log.medicineRelief, 'partial')
+  assert.equal(log.moodItems.irritable, 3)
+  assert.equal(log.functionalImpact, 'some')
+  assert.equal('safetyConcern' in log, false)
   assert.equal('reliefAttempted' in log, false)
   assert.deepEqual(log.symptoms, ['Cramps'])
 })
@@ -184,4 +188,29 @@ test('foundation and Route preference actions update synchronized state structur
   assert.equal(state.periodicCheckins[0].id, 'pc-1')
   assert.equal(state.checklists.talkToDoctor.summary, true)
   assert.equal(state.routePreferences.personalNote, 'Ask about pain.')
+})
+
+test('health background answers update together and keep birth control context synchronized', () => {
+  const before = { ...freshState(), answers: { started: 'Yes', flow: 'Light' }, result: { authoritative: true } }
+  const after = reducer(before, {
+    type: 'SAVE_HEALTH_BACKGROUND',
+    answers: { flow: 'Moderate', birthControl: 'Yes', signs: ['Neither'] },
+  })
+
+  assert.equal(after.answers.started, 'Yes')
+  assert.equal(after.answers.flow, 'Moderate')
+  assert.equal(after.answers.birthControl, 'Yes')
+  assert.deepEqual(after.answers.signs, ['Neither'])
+  assert.equal(after.profile.onBirthControl, true)
+  assert.equal(after.result, null)
+})
+
+test('optional family history stays in synchronized history state', () => {
+  const state = reducer(freshState(), {
+    type: 'SET_HISTORY',
+    payload: { familyStatus: 'yes', familyText: 'A parent has very heavy periods.' },
+  })
+  assert.equal(state.history.familyStatus, 'yes')
+  assert.equal(state.history.familyText, 'A parent has very heavy periods.')
+  assert.equal(state.answers.familyStatus, undefined)
 })

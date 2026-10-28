@@ -69,6 +69,8 @@ export function freshState() {
     history: {
       conditions: [...DEFAULT_HISTORY_V3.conditions],
       family: [...DEFAULT_HISTORY_V3.family],
+      familyStatus: DEFAULT_HISTORY_V3.familyStatus,
+      familyText: DEFAULT_HISTORY_V3.familyText,
       medications: [...DEFAULT_HISTORY_V3.medications],
       consentedAt: null,
       shareInExport: { ...DEFAULT_HISTORY_V3.shareInExport },
@@ -435,11 +437,25 @@ export function reducer(state, action) {
       }
     }
 
+    case 'SAVE_HEALTH_BACKGROUND': {
+      const updatedAnswers = { ...state.answers, ...action.answers }
+      return {
+        ...state,
+        answers: updatedAnswers,
+        profile: { ...state.profile, onBirthControl: updatedAnswers.birthControl === 'Yes' },
+        result: null,
+        progressiveQIndex: Object.values(updatedAnswers).filter((value) =>
+          Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== '',
+        ).length,
+      }
+    }
+
     case 'LOG_DAILY': {
       const {
         dateKey, mood, vibe, vibeLabel, symptoms, pain, impact, clearPain,
         painTiming, reliefAttempted, reliefReceived, bleedingExperience, bleedingDuration,
         energy, sleepHours, rested, movement, fuel, bleeding, medicineTaken, medicineRelief,
+        moodItems, functionalImpact, safetyConcern,
         editedAt,
         clearOptionalDetails, clearOptionalFields = [],
       } = action
@@ -473,6 +489,9 @@ export function reducer(state, action) {
         ...(bleeding ? { bleeding } : {}),
         ...(medicineTaken !== undefined ? { medicineTaken } : {}),
         ...(medicineRelief ? { medicineRelief } : {}),
+        ...(moodItems && Object.keys(moodItems).length ? { moodItems } : {}),
+        ...(functionalImpact ? { functionalImpact } : {}),
+        ...(safetyConcern !== undefined ? { safetyConcern } : {}),
         ...(savedEditedAt ? { editedAt: savedEditedAt } : {}),
       }
       if (clearPain) delete updatedLog.pain
@@ -488,19 +507,20 @@ export function reducer(state, action) {
       }
       if (fieldsToClear.has('bleedingExperience') && !bleedingExperience) delete updatedLog.bleedingExperience
       if (fieldsToClear.has('bleedingDuration') && !bleedingDuration) delete updatedLog.bleedingDuration
-      for (const field of ['energy', 'sleepHours', 'rested', 'movement', 'fuel', 'bleeding', 'medicineTaken', 'medicineRelief']) {
+      for (const field of ['energy', 'sleepHours', 'rested', 'movement', 'fuel', 'bleeding', 'medicineTaken', 'medicineRelief', 'moodItems', 'functionalImpact', 'safetyConcern']) {
         if (!fieldsToClear.has(field)) continue
-        const value = { energy, sleepHours, rested, movement, fuel, bleeding, medicineTaken, medicineRelief }[field]
+        const value = { energy, sleepHours, rested, movement, fuel, bleeding, medicineTaken, medicineRelief, moodItems, functionalImpact, safetyConcern }[field]
         const emptyObject = value && typeof value === 'object' && !Array.isArray(value) && Object.values(value).every((item) => (
           item === '' || item === null || item === undefined ||
           (typeof item === 'object' && Object.values(item).every((nested) => !nested))
         ))
-        if (value === '' || value === null || value === undefined || emptyObject) delete updatedLog[field]
+        if (value === '' || value === null || value === undefined || value === false || emptyObject) delete updatedLog[field]
       }
       if (medicineTaken !== undefined || medicineRelief) {
         delete updatedLog.reliefAttempted
         delete updatedLog.reliefReceived
       }
+      if (safetyConcern === false) delete updatedLog.safetyConcern
       if (bleeding) delete updatedLog.bleedingExperience
       const dailyLogs = {
         ...state.dailyLogs,

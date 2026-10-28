@@ -1,4 +1,5 @@
 import { addDays, dateKeyLocal, fullCycleCount } from './cyclePredictor.js'
+import { analyzeMoodPattern } from './moodPms.js'
 
 function isCheckIn(log) {
   return Boolean(
@@ -31,6 +32,7 @@ export function buildPatternEvidence(dailyLogs = {}, periodLogs = {}, now = new 
   }).length
 
   const recurring = []
+  const moodPattern = analyzeMoodPattern(Object.fromEntries(rows.map(({ date, log }) => [date, log])), periodLogs)
   if (painDays >= 2) {
     recurring.push({
       id: 'pain',
@@ -58,19 +60,27 @@ export function buildPatternEvidence(dailyLogs = {}, periodLogs = {}, now = new 
       body: `Fatigue was logged on ${plural(fatigueDays, 'day')} in this view.`,
     })
   }
+  if (moodPattern.matchedCycles > 0) {
+    recurring.push({
+      id: 'mood-timing',
+      title: moodPattern.repeated ? 'Mood timing has repeated' : 'Mood timing to keep tracking',
+      body: moodPattern.summary,
+    })
+  }
 
   return {
     checkInCount: rows.length,
     fullCycleCount: fullCycleCount(periodLogs),
     recurring,
+    moodPattern,
     days,
   }
 }
 
 export function buildRouteSignals(result, evidence) {
-  if (!result?.authoritative || evidence.checkInCount < 7 || evidence.fullCycleCount < 2) return []
+  if (evidence.checkInCount < 7 || evidence.fullCycleCount < 2) return []
 
-  return (result.flags || []).map((flag) => {
+  const signals = (result?.authoritative ? result.flags || [] : []).map((flag) => {
     const early = flag.displaySeverity === 'SOFT' || (flag.tier === 2 && !flag.confirmed)
     const basis = flag.tier === 2
         ? `Based on ${plural(evidence.fullCycleCount, 'full cycle')} and ${plural(evidence.checkInCount, 'check-in')}.`
@@ -83,4 +93,15 @@ export function buildRouteSignals(result, evidence) {
       basis,
     }
   })
+  if (evidence.moodPattern?.worthDiscussing) {
+    signals.push({
+      id: 'mood-timing',
+      category: 'Mood timing',
+      note: evidence.moodPattern.summary,
+      early: false,
+      label: 'Worth discussing',
+      basis: `Based on ${plural(evidence.moodPattern.matchedCycles, 'logged cycle')}.`,
+    })
+  }
+  return signals
 }

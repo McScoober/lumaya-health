@@ -1,10 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import { localTestProfile } from './src/config/localTestProfiles.js'
 
 const LOCAL_TEST_LOGIN_PATH = '/__maisie/test-login'
 const LOCAL_ORIGINS = new Set(['http://localhost:5180', 'http://127.0.0.1:5180'])
-const DEFAULT_TEST_EMAIL = 'local-test@maisiehealth.com'
 
 function isLoopback(address = '') {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
@@ -30,11 +30,11 @@ async function findOrCreateTestUser(admin, configuredUserId, email) {
   return data.user
 }
 
-async function seedTestAccount(admin, user) {
+async function seedTestAccount(admin, user, testProfile) {
   const birthYear = new Date().getFullYear() - 16
   const profileResult = await admin.from('profiles').upsert({
     user_id: user.id,
-    name: 'Maisie Test',
+    name: testProfile.name,
     email: user.email,
     age_band: '16',
     birth_month: 1,
@@ -124,6 +124,65 @@ function buildSampleTrackerChanges(today = new Date()) {
   }
 }
 
+function buildFlaggedHeavyFlowTrackerChanges(today = new Date()) {
+  const sample = buildSampleTrackerChanges(today)
+  const dailyLogs = { ...sample.dailyLogs }
+  const periodLogs = {}
+  const cycleStarts = [87, 59, 31, 3]
+
+  cycleStarts.forEach((startDaysAgo, cycleIndex) => {
+    for (let periodDay = 0; periodDay < 7; periodDay += 1) {
+      const daysAgo = startDaysAgo - periodDay
+      if (daysAgo < 0) continue
+      const key = dateKeyDaysAgo(daysAgo, today)
+      const harderDay = periodDay <= 1
+      periodLogs[key] = {
+        period: true,
+        periodStart: periodDay === 0,
+        periodPromptAnswered: true,
+        flow: harderDay ? 'heavy' : 'medium',
+        source: 'test-seed',
+        status: 'confirmed',
+      }
+      dailyLogs[key] = {
+        checkinCompleted: true,
+        mood: harderDay ? 'Low' : 'Okay',
+        vibe: harderDay ? 2 : 3,
+        vibeLabel: harderDay ? 'low' : 'okay',
+        pain: harderDay ? 5 : 3,
+        energy: harderDay ? 2 : 3,
+        symptoms: harderDay ? ['Cramps', 'Fatigue', 'Dizziness'] : ['Fatigue'],
+        impact: harderDay && cycleIndex < 3 ? ['school'] : [],
+        bleeding: {
+          clots: 'Small',
+          flooding: harderDay,
+          productFullness: { light: 0, moderate: harderDay ? 1 : 2, full: harderDay ? 4 : 1 },
+        },
+      }
+    }
+  })
+
+  return {
+    dailyLogs,
+    periodLogs,
+    answers: {
+      ...sample.answers,
+      flow: 'Heavy',
+      changes: 'More than 6',
+      clots: 'Small clots',
+      painWorst: 5,
+      missedDays: '1',
+      relievers: 'Somewhat',
+    },
+  }
+}
+
+function trackerChangesForProfile(profileId) {
+  return profileId === 'flagged-heavy-flow'
+    ? buildFlaggedHeavyFlowTrackerChanges()
+    : buildSampleTrackerChanges()
+}
+
 async function onlyMissingSampleData(client, userId, sample) {
   const [dailyResult, periodResult, answerResult] = await Promise.all([
     client.from('daily_logs').select('log_date').eq('user_id', userId),
@@ -172,7 +231,6 @@ function localTestLogin(env) {
         const anonKey = env.VITE_SUPABASE_ANON_KEY
         const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY
         const testUserId = env.LOCAL_TEST_USER_ID
-        const testEmail = (env.LOCAL_TEST_USER_EMAIL || DEFAULT_TEST_EMAIL).trim().toLowerCase()
         if (!supabaseUrl || !anonKey || !serviceRoleKey) {
           res.statusCode = 503
           res.end(JSON.stringify({ error: 'Local test login is not configured.' }))
@@ -180,11 +238,18 @@ function localTestLogin(env) {
         }
 
         try {
+          const requestUrl = new URL(req.url || '/', 'http://localhost')
+          const requestedProfile = requestUrl.searchParams.get('profile') || 'typical'
+          const testProfile = localTestProfile(requestedProfile)
           const admin = createClient(supabaseUrl, serviceRoleKey, {
             auth: { autoRefreshToken: false, persistSession: false },
           })
-          const user = await findOrCreateTestUser(admin, testUserId, testEmail)
-          await seedTestAccount(admin, user)
+          const configuredEmail = testProfile.id === 'typical'
+            ? (env.LOCAL_TEST_USER_EMAIL || testProfile.defaultEmail)
+            : testProfile.defaultEmail
+          const configuredId = testProfile.id === 'typical' ? testUserId : null
+          const user = await findOrCreateTestUser(admin, configuredId, configuredEmail.trim().toLowerCase())
+          await seedTestAccount(admin, user, testProfile)
 
           const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email: user.email })
           if (error || !data?.properties?.hashed_token) throw error || new Error('No test token was returned.')
@@ -198,14 +263,31 @@ function localTestLogin(env) {
           })
           if (sessionError || !sessionData.session) throw sessionError || new Error('No test session was returned.')
 
-          const sampleChanges = await onlyMissingSampleData(localClient, user.id, buildSampleTrackerChanges())
+          const sampleChanges = await onlyMissingSampleData(localClient, user.id, trackerChangesForProfile(testProfile.id))
 
           const { error: settingsError } = await localClient.rpc('save_tracker_changes', {
             changes: {
               ...sampleChanges,
               settings: {
                 onboarded: true,
-                profile: { studentAthlete: null, sleep: null, sport: '', onBirthControl: false },
+                profile: {
+                  studentAthlete: null,
+                  sleep: null,
+                  sport: '',
+                  onBirthControl: false,
+                  trackingModules: {
+                    core: true,
+                    symptoms: true,
+                    sleep: true,
+                    skinHair: true,
+                    food: false,
+                    movement: true,
+                    painRelief: true,
+                    bleedingDetail: true,
+                    moodPms: false,
+                    labs: false,
+                  },
+                },
                 preferences: { periodCheckin: true, phaseTips: true },
               },
             },
@@ -217,6 +299,7 @@ function localTestLogin(env) {
           res.end(JSON.stringify({
             accessToken: sessionData.session.access_token,
             refreshToken: sessionData.session.refresh_token,
+            profileId: testProfile.id,
           }))
         } catch (error) {
           server.config.logger.error(`Local test login failed: ${error?.message || 'unknown error'}`)

@@ -14,12 +14,13 @@ export default function TrackingSetup() {
   const { state, dispatch } = useStore()
   const [modules, setModules] = useState(() => trackingModulesFromProfile(state.profile))
   const [hideFoodContent, setHideFoodContent] = useState(state.profile.hideFoodContent === true)
+  const [restoreFoodContent, setRestoreFoodContent] = useState(false)
   const availableModules = visibleTrackingModules()
 
   function continueToCheckin() {
     dispatch({
       type: 'SET_PROFILE',
-      payload: profilePayloadForTrackingModules(modules, { hideFoodContent }),
+      payload: profilePayloadForTrackingModules(modules, { hideFoodContent, restoreFoodContent }),
     })
     navigate('/checkin')
   }
@@ -49,7 +50,14 @@ export default function TrackingSetup() {
                 aria-checked={Boolean(enabled)}
                 aria-label={module.label}
                 disabled={module.locked}
-                onClick={() => setModules((current) => ({ ...current, [module.id]: !current[module.id] }))}
+                onClick={() => {
+                  const next = !modules[module.id]
+                  setModules((current) => ({ ...current, [module.id]: next }))
+                  if (module.id === 'food') {
+                    setRestoreFoodContent(next)
+                    if (next) setHideFoodContent(false)
+                  }
+                }}
                 style={{
                   width: 52, height: 32, padding: 3, border: 0, borderRadius: 999,
                   background: enabled ? colors.sage700 : colors.lavender100,
@@ -63,22 +71,6 @@ export default function TrackingSetup() {
           )
         })}
       </div>
-
-      {availableModules.some((module) => module.id === 'food') && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, color: colors.textSecondary, fontSize: 13.5 }}>
-          <input
-            type="checkbox"
-            checked={hideFoodContent}
-            onChange={(event) => {
-              const hidden = event.target.checked
-              setHideFoodContent(hidden)
-              if (hidden) setModules((current) => ({ ...current, food: false }))
-            }}
-            style={{ width: 20, height: 20, accentColor: colors.plum700 }}
-          />
-          I'd rather not see food stuff
-        </label>
-      )}
 
       <div className="screen__actions">
         <Button block onClick={continueToCheckin}>Continue</Button>

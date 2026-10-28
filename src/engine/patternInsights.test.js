@@ -49,6 +49,25 @@ test('confirmed signals can be prepared for a clinician conversation', () => {
   assert.match(signal.basis, /saved answers and 7 check-ins/)
 })
 
+test('repeated mood timing becomes a clinician conversation signal without a diagnosis label', () => {
+  const mood = (score, functionalImpact = 'none') => ({ checkinCompleted: true, moodItems: { irritable: score, anxious: score }, functionalImpact })
+  const dailyLogs = {
+    '2026-08-12': mood(3, 'some'), '2026-08-13': mood(4, 'some'), '2026-08-16': mood(1),
+    '2026-09-12': mood(3, 'some'), '2026-09-13': mood(4, 'a_lot'), '2026-09-16': mood(1),
+    '2026-10-01': { checkinCompleted: true },
+  }
+  const periodLogs = {
+    '2026-07-15': { period: true },
+    '2026-08-15': { period: true },
+    '2026-09-15': { period: true },
+  }
+  const evidence = buildPatternEvidence(dailyLogs, periodLogs, new Date('2026-10-02T12:00:00'), 90)
+  const signals = buildRouteSignals({ authoritative: true, flags: [] }, evidence)
+  assert.equal(evidence.moodPattern.repeated, true)
+  assert.equal(signals.some((signal) => signal.id === 'mood-timing'), true)
+  assert.doesNotMatch(signals.map((signal) => signal.note).join(' '), /diagnos/i)
+})
+
 test('all flags stay hidden until seven days and two cycles are observed', () => {
   const result = {
     authoritative: true,

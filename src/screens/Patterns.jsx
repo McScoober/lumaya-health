@@ -11,6 +11,7 @@ import { TopBar, Card, Button, Badge } from '../components/ui.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
 import { summarizeDoctorLogs } from '../engine/doctorSummary.js'
 import { buildPatternEvidence, buildRouteSignals } from '../engine/patternInsights.js'
+import { MOOD_ITEM_DEFINITIONS } from '../engine/moodPms.js'
 import { groupLoggedSymptoms } from '../content/symptomClusters.js'
 import { monthCacheKey } from '../lib/historyWindow.js'
 import { ArrowRight, CalendarBlank, ChartLineUp, FileText, FirstAidKit, PencilSimple, X } from '@phosphor-icons/react'
@@ -605,6 +606,22 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                       {selectedCell.pain !== null ? `${selectedCell.pain}/10` : 'Not logged'}
                     </span>
                   </div>
+                  {Object.keys(selectedCell.log.moodItems || {}).length > 0 && (
+                    <div style={{ display: 'grid', gap: 4 }}>
+                      <strong style={{ fontSize: 12 }}>Mood details:</strong>
+                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {MOOD_ITEM_DEFINITIONS
+                          .filter((item) => selectedCell.log.moodItems[item.id])
+                          .map((item) => `${item.label} ${selectedCell.log.moodItems[item.id]}/4`)
+                          .join(' · ')}
+                      </span>
+                      {selectedCell.log.functionalImpact && selectedCell.log.functionalImpact !== 'none' && (
+                        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                          Daily impact: {selectedCell.log.functionalImpact === 'a_lot' ? 'A lot' : 'A little'}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {selectedCell.isPeriodDay && (
                     <div>
                       <strong style={{ fontSize: 12 }}>Period:</strong>{' '}
