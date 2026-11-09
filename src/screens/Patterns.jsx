@@ -551,6 +551,9 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                   <button
                     key={cell.key}
                     type="button"
+                    className="cal__date"
+                    aria-pressed={isSelected}
+                    aria-current={cell.isToday ? 'date' : undefined}
                     onClick={() => setSelectedDateKey(cell.key)}
                     style={{
                       aspectRatio: '1',
@@ -566,8 +569,6 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
-                      transition: 'transform 0.15s ease',
-                      transform: isSelected ? 'scale(1.12)' : 'scale(1)',
                     }}
                   >
                     {cell.dayNum}

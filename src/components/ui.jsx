@@ -75,7 +75,7 @@ export function TopBar({ title, onBack, right }) {
           ‹
         </button>
       )}
-      {title && <h3 style={{ margin: 0, flex: 1 }}>{title}</h3>}
+      {title && <h3 style={{ margin: 0, flex: 1, minWidth: 0 }}>{title}</h3>}
       {right}
     </div>
   )

@@ -2135,6 +2135,8 @@ button {
 
 /* ---- Calendar ---- */
 .cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal__date { width: 100%; min-width: 0; }
+.cal__date:focus-visible { outline: 2px solid var(--plum-700); outline-offset: -4px; z-index: 1; }
 .cal__dow { text-align: center; font-size: 11px; font-weight: 600; color: var(--ink-soft); padding: 4px 0; }
 .cal__day {
   aspect-ratio: 1; border-radius: 12px;
