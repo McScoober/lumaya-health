@@ -35,7 +35,7 @@ export default function TrackingSetup() {
         <p className="muted">Keep this quick or add more detail. You can change these choices later.</p>
       </div>
 
-      <div style={{ display: 'grid', gap: 1, marginTop: 18, border: `1px solid ${colors.border}`, borderRadius: 14, overflow: 'hidden', background: colors.border }}>
+      <div style={{ flex: '0 0 auto', display: 'grid', gap: 1, marginTop: 18, border: `1px solid ${colors.border}`, borderRadius: 14, overflow: 'hidden', background: colors.border }}>
         {availableModules.map((module) => {
           const enabled = module.locked || modules[module.id]
           return (

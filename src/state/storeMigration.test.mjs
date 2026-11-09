@@ -49,7 +49,12 @@ test('all foundation structures survive guest-to-account conversion and settings
     history: { conditions: [{ code: 'hx_test', status: 'unknown' }] },
     periodicCheckins: [{ id: 'pc-1', type: 'androgen', date: '2026-10-01', answers: { skin: 2 }, score: 2 }],
     tipHistory: { 'sleep-reset-01': '2026-10-01' },
-  }, { routePreferences: STORE_V2_FIXTURES[0].routePreferences })
+  }, { routePreferences: {
+    ...STORE_V2_FIXTURES[0].routePreferences,
+    selectedObservations: ['pain', 'bleeding-fatigue'],
+    supportChoice: 'yes',
+    visitNotes: { room: 'Ask about timing.', plan: 'Follow up in one month.', followUpDate: '2026-11-22' },
+  } })
   const account = accountStateFromGuest(guest, 'account-1', 'teen@example.com')
   const preferences = synchronizedPreferences(account)
   const restored = stateFromSynchronizedPreferences(preferences, account.profile)
@@ -59,4 +64,8 @@ test('all foundation structures survive guest-to-account conversion and settings
   for (const key of ['tracking', 'nutrition', 'history', 'periodicCheckins', 'tipHistory', 'checklists', 'routePreferences']) {
     assert.deepEqual(restored[key], account[key], `${key} did not survive synchronization`)
   }
+  assert.deepEqual(restored.routePreferences.selectedObservations, ['pain', 'bleeding-fatigue'])
+  assert.equal(restored.routePreferences.supportChoice, 'yes')
+  assert.equal(restored.routePreferences.visitNotes.plan, 'Follow up in one month.')
+  assert.equal(restored.routePreferences.visitNotes.followUpDate, '2026-11-22')
 })

@@ -42,10 +42,10 @@ test('loading an older month merges observations without replacing recent state'
   assert.equal(after.dailyLogs['2025-02-10'].pain, 7)
   assert.equal(after.periodLogs['2025-02-10'].period, true)
 })
-test('a changed symptom invalidates stale results until the server recalculates', () => {
+test('a changed symptom is immediately recalculated by the shared local engine', () => {
   const before = { ...freshState(), result: { authoritative: true, level: 'Clear' } }
   const after = reducer(before, { type: 'LOG_DAILY', dateKey: '2026-09-11', pain: 8 })
-  assert.equal(after.result, null)
+  assert.equal(after.result.authority, 'local-rules-engine')
   assert.equal(after.dailyLogs['2026-09-11'].pain, 8)
 })
 test('editing a daily log replaces its answers without removing unrelated fields', () => {
@@ -164,11 +164,11 @@ test('tip history is bounded and keeps the latest display date', () => {
   assert.equal(Object.keys(state.tipHistory).length, 60)
   assert.equal(state.tipHistory['tip-64'], latestDate)
 })
-test('a later period never confirms questionnaire flags in the browser', () => {
+test('a later period recalculates without treating saved ids as recurrence evidence', () => {
   const before = { ...freshState(), pendingTier2: ['PAIN-01'] }
   const after = reducer(before, { type: 'UPDATE_PERIOD_STATUS', dateKey: '2026-09-11', period: true })
   assert.deepEqual(after.confirmedTier2, [])
-  assert.equal(after.result, null)
+  assert.equal(after.result.authority, 'local-rules-engine')
 })
 
 test('foundation and Route preference actions update synchronized state structures', () => {
@@ -178,7 +178,7 @@ test('foundation and Route preference actions update synchronized state structur
   state = reducer(state, { type: 'SET_HISTORY', payload: { consentedAt: '2026-10-22T12:00:00.000Z' } })
   state = reducer(state, { type: 'ADD_PERIODIC_CHECKIN', checkin: { id: 'pc-1', type: 'leaf', date: '2026-10-22', answers: {}, score: null } })
   state = reducer(state, { type: 'SET_CHECKLISTS', payload: { talkToDoctor: { summary: true } } })
-  state = reducer(state, { type: 'SET_ROUTE_PREFERENCES', payload: { personalNote: 'Ask about pain.' } })
+  state = reducer(state, { type: 'SET_ROUTE_PREFERENCES', payload: { personalNote: 'Ask about pain.', selectedObservations: ['pain'] } })
 
   assert.equal(state.version, 3)
   assert.equal(state.tracking.modules.fuel, true)
@@ -188,6 +188,7 @@ test('foundation and Route preference actions update synchronized state structur
   assert.equal(state.periodicCheckins[0].id, 'pc-1')
   assert.equal(state.checklists.talkToDoctor.summary, true)
   assert.equal(state.routePreferences.personalNote, 'Ask about pain.')
+  assert.deepEqual(state.routePreferences.selectedObservations, ['pain'])
 })
 
 test('health background answers update together and keep birth control context synchronized', () => {
@@ -202,7 +203,8 @@ test('health background answers update together and keep birth control context s
   assert.equal(after.answers.birthControl, 'Yes')
   assert.deepEqual(after.answers.signs, ['Neither'])
   assert.equal(after.profile.onBirthControl, true)
-  assert.equal(after.result, null)
+  assert.equal(after.result.authority, 'local-rules-engine')
+  assert.equal(after.result.onBirthControl, true)
 })
 
 test('optional family history stays in synchronized history state', () => {

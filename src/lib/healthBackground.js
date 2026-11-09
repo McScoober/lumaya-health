@@ -1,4 +1,10 @@
-import { DEEP_QUESTIONS } from '../data/questions.js'
+import {
+  DEEP_QUESTIONS,
+  birthControlMethodFromAnswers,
+  lifestyleSignals,
+  normalizeLifestyleAnswer,
+} from '../data/questions.js'
+import { ruleValue } from '../engine/rules/config.js'
 
 const QUESTION_BY_KEY = new Map(DEEP_QUESTIONS.map((question) => [question.key, question]))
 const FAMILY_HISTORY_QUESTION = {
@@ -46,8 +52,8 @@ export const HEALTH_BACKGROUND_SECTIONS = [
     title: 'Health background',
     description: 'Optional context that can make your questions and summaries more useful.',
     whyItMatters: 'Adds context that can make health conversations more complete.',
-    science: 'Medicines, exercise, eating patterns, and family experiences can affect periods or guide a health professional’s next questions. Maisie does not use family history to identify a condition.',
-    keys: ['birthControl', 'lifestyle', 'familyStatus'],
+    science: 'Birth control methods can affect bleeding and cycle timing in different ways. Why a method is used can also help explain which changes matter to you. Exercise, eating patterns, and family experiences may guide a health professional’s next questions; none of these answers identifies a condition on its own.',
+    keys: ['birthControlMethod', 'birthControlReasons', 'lifestyle', 'familyStatus'],
   },
 ].map((section) => ({
   ...section,
@@ -57,6 +63,9 @@ export const HEALTH_BACKGROUND_SECTIONS = [
 export function healthBackgroundValues(answers = {}, history = {}) {
   return {
     ...answers,
+    birthControlMethod: birthControlMethodFromAnswers(answers),
+    birthControlReasons: Array.isArray(answers.birthControlReasons) ? answers.birthControlReasons : [],
+    lifestyle: normalizeLifestyleAnswer(answers.lifestyle),
     familyStatus: history.familyStatus || null,
     familyText: history.familyText || '',
   }
@@ -90,12 +99,62 @@ export function firstIncompleteHealthSection(answers = {}) {
   return index === -1 ? 0 : index
 }
 
+function healthBackgroundAnswerSummary(key, value) {
+  const labels = {
+    flow: `${value} flow`,
+    changes: value === 'More than once/hour' ? 'Changes more than once an hour' : `${value} changes on the heaviest day`,
+    clots: value,
+    painWorst: `${value}/10 pain at worst`,
+    painBetween: `${value}/10 between periods`,
+    painTrend: `Pain is ${String(value).toLowerCase()}`,
+    relievers: `Pain relief: ${String(value).toLowerCase()}`,
+    missedDays: value === '0' ? 'No days missed' : `${value} days missed`,
+    bathroomPain: `Bathroom pain: ${String(value).toLowerCase()}`,
+    nausea: `Nausea: ${String(value).toLowerCase()}`,
+    acne: `${value} acne`,
+    birthControlMethod: value === 'None' ? 'No birth control method' : value,
+    lifestyle: value,
+    familyStatus: {
+      yes: 'Family experience added',
+      no: 'No known family history',
+      unsure: 'Family history not known',
+      skipped: 'Family history skipped',
+    }[value],
+  }
+  if (key === 'signs') return Array.isArray(value) && value.includes('Neither') ? 'No listed hair or skin changes' : Array.isArray(value) ? value.join(', ') : ''
+  if (key === 'birthControlReasons') {
+    if (!Array.isArray(value) || !value.length) return ''
+    if (value.includes('Prefer not to say')) return 'Purpose not shared'
+    return value.length === 1 ? `Used for: ${value[0].toLowerCase()}` : `${value.length} purposes added`
+  }
+  if (key === 'lifestyle' && value === 'Neither') return 'No listed lifestyle factors'
+  return labels[key] || (Array.isArray(value) ? value.join(', ') : String(value))
+}
+
+export function healthBackgroundSectionStatus(section, answers = {}) {
+  const questions = applicableHealthQuestions(section, answers)
+  const answeredQuestions = questions.filter((question) => isHealthBackgroundAnswer(answers[question.key]))
+  const summaryQuestions = section.id === 'background'
+    ? [...answeredQuestions].sort((a, b) => ['birthControlMethod', 'birthControlReasons', 'familyStatus', 'lifestyle'].indexOf(a.key) - ['birthControlMethod', 'birthControlReasons', 'familyStatus', 'lifestyle'].indexOf(b.key))
+    : answeredQuestions
+  const details = summaryQuestions
+    .map((question) => healthBackgroundAnswerSummary(question.key, answers[question.key]))
+    .filter(Boolean)
+    .slice(0, 2)
+  return {
+    answered: answeredQuestions.length,
+    total: questions.length,
+    complete: questions.length > 0 && answeredQuestions.length === questions.length,
+    summary: details.length ? details.join(' · ') : 'Not started',
+  }
+}
+
 export function recommendedLearnSlugs(answers = {}) {
   const recommendations = []
   if (['Heavy', 'Very heavy'].includes(answers.flow) || ['More than 6', 'More than once/hour'].includes(answers.changes) || answers.clots === 'Large clots') {
     recommendations.push('heavy-periods')
   }
-  if ((typeof answers.painWorst === 'number' && answers.painWorst >= 4) || (typeof answers.painBetween === 'number' && answers.painBetween >= 4) || answers.bathroomPain === 'Yes, often') {
+  if ((typeof answers.painWorst === 'number' && answers.painWorst >= ruleValue('flags.moderatePainMinimum')) || (typeof answers.painBetween === 'number' && answers.painBetween >= ruleValue('flags.moderatePainMinimum')) || answers.bathroomPain === 'Yes, often') {
     recommendations.push('painful-periods')
   }
   if (['Moderate', 'Severe'].includes(answers.acne) || (answers.signs || []).some((item) => item !== 'Neither')) {
@@ -104,7 +163,7 @@ export function recommendedLearnSlugs(answers = {}) {
   if (['1', '2', '3', '4', '5+'].includes(answers.missedDays)) {
     recommendations.push('talking-to-your-doctor')
   }
-  if (['Exercise intensely 5+ days/wk', 'Both'].includes(answers.lifestyle)) {
+  if (lifestyleSignals(answers.lifestyle).intenseActivity) {
     recommendations.push('cycle-and-sport')
   }
   if (!recommendations.length && answers.started === 'Not yet') recommendations.push('period-101')

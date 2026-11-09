@@ -9,59 +9,60 @@
 import { PHASE_CARDS, MODIFIER_ACTIONS, sportAction } from '../data/tips.js'
 import { foodContentIsEnabled, foodSensitiveModeIsActive, trackingModulesFromProfile } from '../lib/trackingPreferences.js'
 import { moodPatternTipTrigger } from './moodPms.js'
+import { RULE_CONFIG_VERSION, ruleValue } from './rules/config.js'
 
 export const TIP_V2 = [
   {
-    id: 'pain-comfort-01', category: 'care', priority: 90, cooldownDays: 4,
+    id: 'pain-comfort-01', category: 'care', priority: ruleValue('tips.pain.priority'), cooldownDays: ruleValue('tips.pain.cooldownDays'),
     headline: 'Make comfort easier to reach.',
     action: 'Keep the heat, rest, or other comfort option that helped you nearby.',
     why: 'You recently logged pain that affected how you felt.',
-    trigger: ({ recent }) => recent.slice(0, 2).some(([, log]) => Number(log.pain) >= 4),
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.pain.lookbackLogs')).some(([, log]) => Number(log.pain) >= ruleValue('tips.pain.minimum')),
   },
   {
-    id: 'sleep-reset-01', category: 'care', priority: 76, cooldownDays: 5, requires: 'sleep',
+    id: 'sleep-reset-01', category: 'care', priority: ruleValue('tips.sleep.priority'), cooldownDays: ruleValue('tips.sleep.cooldownDays'), requires: 'sleep',
     headline: 'Give tonight a softer landing.',
     action: 'Choose one small wind-down step that feels realistic tonight.',
     why: 'Your recent check-ins included shorter or less restful sleep.',
-    trigger: ({ recent }) => recent.slice(0, 5).filter(([, log]) => log.rested === 'Not rested' || log.sleepHours === 'Under 6').length >= 2,
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.sleep.lookbackLogs')).filter(([, log]) => log.rested === 'Not rested' || log.sleepHours === 'Under 6').length >= ruleValue('tips.sleep.minimumDays'),
   },
   {
-    id: 'energy-pacing-01', category: 'care', priority: 72, cooldownDays: 4,
+    id: 'energy-pacing-01', category: 'care', priority: ruleValue('tips.energy.priority'), cooldownDays: ruleValue('tips.energy.cooldownDays'),
     headline: 'Plan around the energy you have.',
     action: 'Pick the one thing that matters most and leave room to pause.',
     why: 'Lower energy showed up more than once in your recent logs.',
-    trigger: ({ recent }) => recent.slice(0, 5).filter(([, log]) => Number(log.energy) <= 2 && Number(log.energy) > 0).length >= 2,
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.energy.lookbackLogs')).filter(([, log]) => Number(log.energy) <= ruleValue('signals.lowEnergyMaximum') && Number(log.energy) > 0).length >= ruleValue('tips.energy.minimumDays'),
   },
   {
-    id: 'fuel-regular-01', category: 'fuel', priority: 68, cooldownDays: 5, requires: 'food',
+    id: 'fuel-regular-01', category: 'fuel', priority: ruleValue('tips.fuel.priority'), cooldownDays: ruleValue('tips.fuel.cooldownDays'), requires: 'food',
     headline: 'Keep fuel simple today.',
     action: 'Choose an easy meal or snack you already know works for you.',
     why: 'You recently logged fewer meals or snacks than usual.',
-    trigger: ({ recent }) => recent.slice(0, 4).some(([, log]) => log.fuel?.meals === 'few'),
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.fuel.lookbackLogs')).some(([, log]) => log.fuel?.meals === 'few'),
   },
   {
-    id: 'water-check-01', category: 'fuel', priority: 58, cooldownDays: 6, requires: 'food',
+    id: 'water-check-01', category: 'fuel', priority: ruleValue('tips.water.priority'), cooldownDays: ruleValue('tips.water.cooldownDays'), requires: 'food',
     headline: 'Make water easy to notice.',
     action: 'Put a drink somewhere you will naturally see it.',
     why: 'A recent check-in showed that water was easy to miss.',
-    trigger: ({ recent }) => recent.slice(0, 3).some(([, log]) => log.fuel?.water === 'A little'),
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.water.lookbackLogs')).some(([, log]) => log.fuel?.water === 'A little'),
   },
   {
-    id: 'route-pain-01', category: 'nudge', priority: 82, cooldownDays: 10,
+    id: 'route-pain-01', category: 'nudge', priority: ruleValue('tips.routePain.priority'), cooldownDays: ruleValue('tips.routePain.cooldownDays'),
     headline: 'You have a pattern worth reviewing.',
     action: 'Open Route to see what you logged and prepare what you want to ask.',
     why: 'Pain affected several recent days.',
-    trigger: ({ recent }) => recent.slice(0, 30).filter(([, log]) => Number(log.pain) >= 7).length >= 3,
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.routePain.lookbackLogs')).filter(([, log]) => Number(log.pain) >= ruleValue('flags.highPainMinimum')).length >= ruleValue('tips.routePain.minimumDays'),
   },
   {
-    id: 'mood-gentle-01', category: 'care', priority: 84, cooldownDays: 4, requires: 'moodPms',
+    id: 'mood-gentle-01', category: 'care', priority: ruleValue('tips.mood.priority'), cooldownDays: ruleValue('tips.mood.cooldownDays'), requires: 'moodPms',
     headline: 'Make today a little lighter.',
     action: 'Choose one small thing you can postpone, share, or ask for help with.',
     why: 'Your recent check-ins show that mood has been getting in the way.',
-    trigger: ({ recent }) => recent.slice(0, 4).filter(([, log]) => ['some', 'a_lot'].includes(log.functionalImpact)).length >= 2,
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.mood.lookbackLogs')).filter(([, log]) => ['some', 'a_lot'].includes(log.functionalImpact)).length >= ruleValue('tips.mood.minimumDays'),
   },
   {
-    id: 'mood-timing-01', category: 'nudge', priority: 86, cooldownDays: 14, requires: 'moodPms',
+    id: 'mood-timing-01', category: 'nudge', priority: ruleValue('tips.moodTiming.priority'), cooldownDays: ruleValue('tips.moodTiming.cooldownDays'), requires: 'moodPms',
     headline: 'Your mood timing is worth reviewing.',
     action: 'Open Route to see the before-and-after pattern and prepare what you want to ask.',
     why: 'Mood changes appeared before a logged period and affected your day.',
@@ -102,12 +103,13 @@ export function selectDailyTips({ phase, phaseTips = true, profile = {}, dailyLo
       return !shown || shown === dateKey || daysBetween(dateKey, shown) >= tip.cooldownDays
     })
     .sort((left, right) => right.priority - left.priority || stableRank(left.id, dateKey) - stableRank(right.id, dateKey))
-    .map((tip) => ({ ...tip, actions: [tip.action] }))
+    .map((tip) => ({ ...tip, actions: [tip.action], configVersion: RULE_CONFIG_VERSION }))
 
   const primary = candidates.find((tip) => tip.category === 'care') || (phaseTips && phase ? buildTip(phase, profile) : {
     id: 'baseline-start', category: 'care', headline: 'Start with what you notice.',
     why: 'A few check-ins will help Maisie show more useful patterns.',
     actions: [foodEnabled ? 'Drink some water, choose something steady to eat, and log what stands out.' : 'Drink some water and log what stands out.'],
+    configVersion: RULE_CONFIG_VERSION,
   })
   const fuel = candidates.find((tip) => tip.category === 'fuel') || null
   const nudge = candidates.find((tip) => tip.category === 'nudge') || null
@@ -214,7 +216,7 @@ export function buildTip(phase, profile = {}) {
     .filter((action) => modules.movement || !/movement|training|workout|sport/i.test(action.text))
     .filter((action) => modules.sleep || !/sleep|bedtime|bed earlier/i.test(action.text))
     .sort((x, y) => y.p - x.p)
-    .slice(0, 3)
+    .slice(0, ruleValue('tips.maximumActions'))
 
   return {
     id: `phase-${phase}`,
@@ -224,6 +226,7 @@ export function buildTip(phase, profile = {}) {
     why: base.why,
     actions: merged.map((a) => a.text),
     tags,
+    configVersion: RULE_CONFIG_VERSION,
   }
 }
 
@@ -232,6 +235,7 @@ export function tipSms(phase, profile = {}) {
   const tip = buildTip(phase, profile)
   const first = tip.actions[0] || ''
   let msg = `${tip.headline} Tap to see how to take care of yourself.`
-  if (msg.length > 155 && first) msg = `${tip.headline.split('--')[0].trim()}. Tap for a quick self-care tip.`
-  return msg.slice(0, 160)
+  const smsLimit = ruleValue('tips.smsMaximumCharacters')
+  if (msg.length > smsLimit - 5 && first) msg = `${tip.headline.split('--')[0].trim()}. Tap for a quick self-care tip.`
+  return msg.slice(0, smsLimit)
 }

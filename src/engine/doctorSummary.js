@@ -1,9 +1,10 @@
 import { addDays, dateKeyLocal } from './cyclePredictor.js'
 import { groupLoggedSymptoms } from '../content/symptomClusters.js'
+import { ruleValue } from './rules/config.js'
 
 export function summarizeDoctorLogs(dailyLogs = {}, now = new Date()) {
   const end = dateKeyLocal(now)
-  const start = dateKeyLocal(addDays(now, -29))
+  const start = dateKeyLocal(addDays(now, -(ruleValue('reports.doctorSummaryWindowDays') - 1)))
   const logs = Object.entries(dailyLogs)
     .filter(([date]) => date >= start && date <= end)
     .map(([, log]) => log)
@@ -18,7 +19,7 @@ export function summarizeDoctorLogs(dailyLogs = {}, now = new Date()) {
   const loggedSymptoms = [...symptoms].sort((a, b) => b[1] - a[1]).map(([name]) => name)
   return {
     worstPain: pains.length ? Math.max(...pains) : null,
-    highPainDays: pains.filter((pain) => pain >= 7).length,
+    highPainDays: pains.filter((pain) => pain >= ruleValue('flags.highPainMinimum')).length,
     painLogCount: pains.length,
     impactLogCount: logs.filter((log) => Array.isArray(log.impact)).length,
     impactCount: logs.filter((log) => (log.impact || []).some((impact) => impact !== 'fine')).length,

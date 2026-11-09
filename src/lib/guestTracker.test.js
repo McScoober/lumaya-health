@@ -21,6 +21,7 @@ test('guest tracking preferences and existing logs persist together', () => {
     dailyLogs: { '2026-10-17': { pain: 4 } },
     notifyPrefs: { reminderTime: '19:45' },
     tipHistory: { 'pain-comfort-01': '2026-10-17' },
+    routePreferences: { selectedObservations: ['bleeding-fatigue'], supportChoice: 'unsure', visitNotes: { room: 'Ask about fatigue.' } },
   }
   assert.equal(saveGuestTracker(device, state), true)
   const saved = readGuestTracker(device)
@@ -28,6 +29,9 @@ test('guest tracking preferences and existing logs persist together', () => {
   assert.equal(saved.dailyLogs['2026-10-17'].pain, 4)
   assert.equal(saved.notifyPrefs.reminderTime, '19:45')
   assert.equal(saved.tipHistory['pain-comfort-01'], '2026-10-17')
+  assert.deepEqual(saved.routePreferences.selectedObservations, ['bleeding-fatigue'])
+  assert.equal(saved.routePreferences.supportChoice, 'unsure')
+  assert.equal(saved.routePreferences.visitNotes.room, 'Ask about fatigue.')
   clearGuestTracker(device)
   assert.equal(readGuestTracker(device), null)
 })

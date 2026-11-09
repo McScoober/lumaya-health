@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildPatternEvidence, buildRouteSignals } from './patternInsights.js'
+import { buildCarePreparationState, buildPatternEvidence, buildRouteSignals } from './patternInsights.js'
 
 const now = new Date(2026, 9, 17)
 
@@ -13,6 +13,9 @@ test('recurring evidence requires at least two observed days', () => {
 
   assert.equal(evidence.checkInCount, 3)
   assert.deepEqual(evidence.recurring.map((item) => item.id), ['pain', 'impact', 'fatigue'])
+  assert.deepEqual(evidence.recurring[0].dates, ['2026-10-14', '2026-10-15'])
+  assert.equal(evidence.recurring[0].impactDays, 2)
+  assert.equal(evidence.recurring[0].focusSection, 'pain')
 })
 
 test('fatigue and bleeding are grouped only when both were logged together twice', () => {
@@ -77,4 +80,41 @@ test('all flags stay hidden until seven days and two cycles are observed', () =>
   assert.deepEqual(buildRouteSignals(result, { fullCycleCount: 2, checkInCount: 6 }), [])
   assert.deepEqual(buildRouteSignals(result, { fullCycleCount: 1, checkInCount: 7 }), [])
   assert.equal(buildRouteSignals(result, { fullCycleCount: 2, checkInCount: 7 }).length, 1)
+})
+
+test('recurring observations remain available for care preparation before flags are ready', () => {
+  const state = buildCarePreparationState(null, {
+    checkInCount: 5,
+    fullCycleCount: 1,
+    recurring: [{ id: 'pain' }, { id: 'fatigue' }],
+  })
+
+  assert.equal(state.stage, 'observations')
+  assert.equal(state.heading, 'Prepare for care')
+  assert.match(state.title, /2 observations/)
+  assert.match(state.note, /2 more logged days/)
+  assert.doesNotMatch(`${state.title} ${state.body}`, /nothing to prepare/i)
+})
+
+test('care preparation stays available when no care signal was identified', () => {
+  const state = buildCarePreparationState({ authoritative: true }, {
+    checkInCount: 19,
+    fullCycleCount: 2,
+    recurring: [],
+  })
+
+  assert.equal(state.stage, 'available')
+  assert.match(state.body, /do not need to wait/i)
+  assert.match(state.note, /not a medical assessment/i)
+})
+
+test('discussion signals take precedence over descriptive observations', () => {
+  const state = buildCarePreparationState({ authoritative: true }, {
+    checkInCount: 19,
+    fullCycleCount: 2,
+    recurring: [{ id: 'pain' }],
+  }, [{ id: 'PAIN-01' }])
+
+  assert.equal(state.stage, 'discussion')
+  assert.equal(state.heading, 'Worth discussing')
 })

@@ -3,11 +3,21 @@ export const LEGACY_ROUTE_PREFERENCES_KEY = 'maisie.routePreferences.v1'
 const DEFAULTS = Object.freeze({
   checklist: {},
   selectedQuestions: [],
+  selectedObservations: [],
+  supportChoice: null,
+  visitNotes: {
+    room: '',
+    plan: '',
+    tests: '',
+    followUpDate: '',
+    remainingQuestions: '',
+  },
   personalNote: '',
   nameMode: 'first',
   exportSections: {
     overview: true,
     cycles: true,
+    bleeding: true,
     pain: true,
     impact: true,
     mood: true,

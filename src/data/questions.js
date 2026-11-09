@@ -57,6 +57,41 @@ export const PERSONALIZATION = [
 ]
 
 // ---- Deep Symptom Check-In, 18 questions (Section 7.3) ----
+export const LIFESTYLE_FUEL_CONCERN = 'Sometimes worry I may not eat enough for how active I am'
+
+export const BIRTH_CONTROL_METHODS = [
+  'Combined pill',
+  'Progestin-only pill',
+  'Hormonal IUD',
+  'Copper IUD',
+  'Implant',
+  'Injection',
+  'Patch',
+  'Ring',
+  'Other',
+  'None',
+  'Not sure',
+]
+
+export const BIRTH_CONTROL_REASONS = [
+  'Prevent pregnancy',
+  'Make periods lighter or more regular',
+  'Help with period pain',
+  'Help with acne or other symptoms',
+  'Another reason',
+  'Prefer not to say',
+]
+
+const HORMONAL_BIRTH_CONTROL_METHODS = new Set([
+  'Combined pill',
+  'Progestin-only pill',
+  'Hormonal IUD',
+  'Implant',
+  'Injection',
+  'Patch',
+  'Ring',
+])
+
 export const DEEP_QUESTIONS = [
   {
     id: 'q1',
@@ -213,13 +248,26 @@ export const DEEP_QUESTIONS = [
     exclusive: 'Neither',
   },
   {
-    id: 'bc',
-    key: 'birthControl',
+    id: 'bc-method',
+    key: 'birthControlMethod',
     section: 'Lifestyle',
-    text: 'Are you currently using hormonal birth control (the pill, IUD, implant, ring, or patch)?',
+    text: 'Which birth control method are you currently using?',
+    help: 'Different methods can affect bleeding and cycle timing in different ways.',
     type: 'chips',
-    options: ['Yes', 'No', 'Not sure'],
-    skipIf: (a) => a.started === 'Not yet',
+    options: BIRTH_CONTROL_METHODS,
+  },
+  {
+    id: 'bc-reasons',
+    key: 'birthControlReasons',
+    section: 'Lifestyle',
+    text: 'What do you use it for? Select all that apply.',
+    type: 'multi',
+    options: BIRTH_CONTROL_REASONS,
+    exclusive: 'Prefer not to say',
+    skipIf: (answers) => {
+      const method = birthControlMethodFromAnswers(answers)
+      return !method || method === 'None'
+    },
   },
   {
     id: 'q18',
@@ -229,12 +277,63 @@ export const DEEP_QUESTIONS = [
     type: 'chips',
     options: [
       'Exercise intensely 5+ days/wk',
-      'Limit eating or count calories',
+      LIFESTYLE_FUEL_CONCERN,
       'Both',
       'Neither',
     ],
   },
 ]
+
+export function normalizeLifestyleAnswer(value) {
+  return value === 'Limit eating or count calories' ? LIFESTYLE_FUEL_CONCERN : value
+}
+
+export function lifestyleSignals(value) {
+  const normalized = normalizeLifestyleAnswer(value)
+  return {
+    intenseActivity: ['Exercise intensely 5+ days/wk', 'Both'].includes(normalized),
+    fuelConcern: [LIFESTYLE_FUEL_CONCERN, 'Both'].includes(normalized),
+  }
+}
+
+export function birthControlMethodFromAnswers(answers = {}) {
+  if (BIRTH_CONTROL_METHODS.includes(answers.birthControlMethod)) return answers.birthControlMethod
+  if (answers.birthControl === 'No') return 'None'
+  if (answers.birthControl === 'Yes' || answers.birthControl === 'Not sure') return 'Not sure'
+  return null
+}
+
+export function birthControlContext(answers = {}) {
+  const method = birthControlMethodFromAnswers(answers)
+  const usesBirthControl = Boolean(method && method !== 'None')
+  const hormonal = HORMONAL_BIRTH_CONTROL_METHODS.has(method)
+    ? true
+    : ['Other', 'Not sure'].includes(method)
+      ? null
+      : false
+  return {
+    method,
+    reasons: Array.isArray(answers.birthControlReasons) ? answers.birthControlReasons : [],
+    usesBirthControl,
+    hormonal,
+    affectsCycleInterpretation: hormonal === true || (usesBirthControl && hormonal === null),
+  }
+}
+
+export function withBirthControlCompatibility(answers = {}) {
+  const method = birthControlMethodFromAnswers(answers)
+  if (!method) return answers
+  const hormonal = HORMONAL_BIRTH_CONTROL_METHODS.has(method)
+  const birthControl = ['Other', 'Not sure'].includes(method) ? 'Not sure' : hormonal ? 'Yes' : 'No'
+  return {
+    ...answers,
+    birthControlMethod: method,
+    birthControl,
+    birthControlReasons: method === 'None'
+      ? []
+      : Array.isArray(answers.birthControlReasons) ? answers.birthControlReasons : [],
+  }
+}
 
 // Ordered flow with Section 7.1 skip logic:
 // if Q2 = "Not yet", skip Q3–Q15 and jump to Q16.

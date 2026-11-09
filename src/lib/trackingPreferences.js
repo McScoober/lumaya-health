@@ -1,4 +1,5 @@
 import { features } from '../config/features.js'
+import { ruleValue } from '../engine/rules/config.js'
 
 export const TRACKING_MODULES = [
   { id: 'core', label: 'Core check-in', description: 'Mood, pain, and daily impact.', locked: true },
@@ -103,9 +104,9 @@ export function foodSensitiveModeIsActive(profile = {}, dailyLogs = {}) {
   const recentLoggedDays = Object.entries(dailyLogs)
     .filter(([, log]) => log?.checkinCompleted === true)
     .sort(([left], [right]) => right.localeCompare(left))
-    .slice(0, 14)
+    .slice(0, ruleValue('foodSensitive.lookbackLogs'))
 
-  return recentLoggedDays.filter(([, log]) => log?.fuel?.meals === 'few').length >= 5
+  return recentLoggedDays.filter(([, log]) => log?.fuel?.meals === 'few').length >= ruleValue('foodSensitive.minimumFewMealDays')
 }
 
 export function visibleTrackingModules() {
@@ -113,7 +114,7 @@ export function visibleTrackingModules() {
 }
 
 export function shouldShowPainRelief(modules, pain) {
-  return modules?.painRelief === true && typeof pain === 'number' && pain >= 4
+  return modules?.painRelief === true && typeof pain === 'number' && pain >= ruleValue('flags.moderatePainMinimum')
 }
 
 export function shouldShowBleedingDetails(modules, context = {}) {

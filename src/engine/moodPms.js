@@ -1,4 +1,5 @@
 import { addDays, dateKeyLocal, diffDays, periodStartKeys } from './cyclePredictor.js'
+import { RULE_CONFIG_VERSION, ruleDefinition, ruleValue } from './rules/config.js'
 
 export const MOOD_ITEM_DEFINITIONS = Object.freeze([
   { id: 'irritable', label: 'Irritable' },
@@ -24,7 +25,7 @@ function parseKey(key) {
 function itemValues(log) {
   return MOOD_ITEM_DEFINITIONS
     .map(({ id }) => Number(log?.moodItems?.[id]))
-    .filter((value) => Number.isInteger(value) && value >= 1 && value <= 4)
+    .filter((value) => Number.isInteger(value) && value >= ruleValue('mood.itemMinimum') && value <= ruleValue('mood.itemMaximum'))
 }
 
 function average(values) {
@@ -48,15 +49,17 @@ export function analyzeMoodPattern(dailyLogs = {}, periodLogs = {}) {
 
   const cycles = periodStartKeys(periodLogs).map((startKey) => {
     const start = parseKey(startKey)
-    const before = rowsBetween(rows, addDays(start, -14), addDays(start, -1))
-    const after = rowsBetween(rows, start, addDays(start, 7))
-    const elevatedBeforeDays = before.filter(({ log }) => itemValues(log).some((value) => value >= 3)).length
+    const before = rowsBetween(rows, addDays(start, -ruleValue('mood.beforeWindowDays')), addDays(start, -1))
+    const after = rowsBetween(rows, start, addDays(start, ruleValue('mood.afterWindowDays')))
+    const elevatedBeforeDays = before.filter(({ log }) => itemValues(log).some((value) => value >= ruleValue('mood.elevatedItemMinimum'))).length
     const beforeAverage = average(before.map(({ score }) => score))
     const afterAverage = average(after.map(({ score }) => score))
-    const improvedAfter = beforeAverage !== null && afterAverage !== null && beforeAverage - afterAverage >= 0.5
+    const improvedAfter = beforeAverage !== null && afterAverage !== null && beforeAverage - afterAverage >= ruleValue('mood.minimumImprovement')
     const meaningfulImpact = before.some(({ log }) => ['some', 'a_lot'].includes(log.functionalImpact))
     const highImpact = before.some(({ log }) => log.functionalImpact === 'a_lot')
-    const timedPattern = before.length >= 2 && after.length >= 1 && elevatedBeforeDays >= 2 && improvedAfter
+    const timedPattern = before.length >= ruleValue('mood.minimumBeforeCheckIns') &&
+      after.length >= ruleValue('mood.minimumAfterCheckIns') &&
+      elevatedBeforeDays >= ruleValue('mood.minimumElevatedDays') && improvedAfter
     return {
       startKey,
       beforeDays: before.length,
@@ -72,7 +75,7 @@ export function analyzeMoodPattern(dailyLogs = {}, periodLogs = {}) {
   })
 
   const matchedCycles = cycles.filter((cycle) => cycle.timedPattern)
-  const repeated = matchedCycles.length >= 2
+  const repeated = matchedCycles.length >= ruleValue('mood.repeatedCycles')
   const highImpact = matchedCycles.some((cycle) => cycle.highImpact)
   const meaningfulImpact = matchedCycles.some((cycle) => cycle.meaningfulImpact)
   const status = repeated ? 'repeated' : matchedCycles.length === 1 ? 'observed' : rows.length ? 'tracking' : 'empty'
@@ -88,30 +91,36 @@ export function analyzeMoodPattern(dailyLogs = {}, periodLogs = {}) {
     status,
     summary,
     detailedLogCount: rows.length,
-    comparedCycles: cycles.filter((cycle) => cycle.beforeDays >= 2 && cycle.afterDays >= 1).length,
+    comparedCycles: cycles.filter((cycle) => cycle.beforeDays >= ruleValue('mood.minimumBeforeCheckIns') && cycle.afterDays >= ruleValue('mood.minimumAfterCheckIns')).length,
     matchedCycles: matchedCycles.length,
     repeated,
     meaningfulImpact,
     highImpact,
     worthDiscussing: repeated && meaningfulImpact,
     cycles,
+    configVersion: RULE_CONFIG_VERSION,
   }
 }
 
 export function moodSafetyStatus(dailyLogs = {}, now = new Date()) {
+  const definition = ruleDefinition('SAFETY-MOOD')
   const endKey = typeof now === 'string' ? now : dateKeyLocal(now)
   const end = parseKey(endKey)
-  const start = addDays(end, -6)
+  const start = addDays(end, -(ruleValue('safety.moodWindowDays') - 1))
   const recent = Object.entries(dailyLogs)
     .map(([key, log]) => ({ key, date: parseKey(key), log }))
     .filter(({ date }) => date && date >= start && date <= end)
-  const hopelessDays = recent.filter(({ log }) => Number(log?.moodItems?.hopeless) === 4).length
+  const hopelessDays = recent.filter(({ log }) => Number(log?.moodItems?.hopeless) === ruleValue('safety.hopelessValue')).length
   const directConcern = recent.some(({ log }) => log?.safetyConcern === true)
   return {
-    active: directConcern || hopelessDays >= 2,
+    active: directConcern || hopelessDays >= ruleValue('safety.hopelessDays'),
     directConcern,
     hopelessDays,
-    reason: directConcern ? 'direct' : hopelessDays >= 2 ? 'repeated-hopelessness' : null,
+    reason: directConcern ? 'direct' : hopelessDays >= ruleValue('safety.hopelessDays') ? 'repeated-hopelessness' : null,
+    ruleId: 'SAFETY-MOOD',
+    ruleSource: definition.source,
+    reviewStatus: definition.reviewStatus,
+    configVersion: RULE_CONFIG_VERSION,
   }
 }
 

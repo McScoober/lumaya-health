@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ArrowLeft, CheckCircle, Info, X } from '@phosphor-icons/react'
+import { ArrowLeft, ArrowRight, CheckCircle, Info, PencilSimple, X } from '@phosphor-icons/react'
 import { useStore } from '../state/store.jsx'
 import { Button, Chip, ChipGroup, ProgressBar } from '../components/ui.jsx'
 import NativeDateField from '../components/NativeDateField.jsx'
@@ -11,6 +11,7 @@ import {
   applicableHealthQuestions,
   firstIncompleteHealthSection,
   healthBackgroundProgress,
+  healthBackgroundSectionStatus,
   healthBackgroundValues,
   isHealthBackgroundAnswer,
 } from '../lib/healthBackground.js'
@@ -22,7 +23,9 @@ export default function HealthBackground() {
   const initialValues = useMemo(() => healthBackgroundValues(state.answers, state.history), [state.answers, state.history])
   const [sectionIndex, setSectionIndex] = useState(() => firstIncompleteHealthSection(initialValues))
   const [draft, setDraft] = useState(() => initialValues)
-  const [complete, setComplete] = useState(false)
+  const [view, setView] = useState(() => healthBackgroundProgress(initialValues).complete ? 'overview' : 'form')
+  const [editingSingleSection, setEditingSingleSection] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
   const section = HEALTH_BACKGROUND_SECTIONS[sectionIndex]
   const questions = useMemo(() => applicableHealthQuestions(section, draft), [section, draft])
   const progress = healthBackgroundProgress(draft)
@@ -40,6 +43,36 @@ export default function HealthBackground() {
 
   function update(key, value) {
     setDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  function scrollToTop() {
+    window.requestAnimationFrame(() => document.querySelector('.health-background')?.scrollTo({ top: 0, behavior: 'smooth' }))
+  }
+
+  function openSection(index) {
+    setSectionIndex(index)
+    setEditingSingleSection(true)
+    setJustSaved(false)
+    setView('form')
+    scrollToTop()
+  }
+
+  function discardSectionChanges() {
+    const saved = healthBackgroundValues(state.answers, state.history)
+    setDraft((current) => {
+      const next = { ...current }
+      for (const key of section.keys) next[key] = saved[key]
+      if (section.keys.includes('familyStatus')) next.familyText = saved.familyText
+      return next
+    })
+  }
+
+  function reviewAll() {
+    setSectionIndex(0)
+    setEditingSingleSection(false)
+    setJustSaved(false)
+    setView('form')
+    scrollToTop()
   }
 
   function saveAndContinue() {
@@ -61,32 +94,81 @@ export default function HealthBackground() {
         },
       })
     }
-    if (sectionIndex === HEALTH_BACKGROUND_SECTIONS.length - 1) {
-      setComplete(true)
+    if (editingSingleSection || sectionIndex === HEALTH_BACKGROUND_SECTIONS.length - 1) {
+      setJustSaved(true)
+      setView('overview')
+      setEditingSingleSection(false)
+      scrollToTop()
       return
     }
     setSectionIndex((index) => index + 1)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollToTop()
   }
 
   function moveBack() {
+    if (editingSingleSection) {
+      discardSectionChanges()
+      setView('overview')
+      setEditingSingleSection(false)
+      scrollToTop()
+      return
+    }
     if (sectionIndex === 0) {
       close()
       return
     }
     setSectionIndex((index) => index - 1)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    scrollToTop()
   }
 
-  if (complete) {
+  if (view === 'overview') {
     return (
-      <main className="health-background health-background--complete">
-        <span className="health-background__complete-icon" aria-hidden="true"><CheckCircle size={34} weight="fill" /></span>
-        <p className="eyebrow">Saved</p>
-        <h1>Your health background is ready</h1>
-        <p>Maisie can use these answers to tailor check-ins, suggest relevant Learn topics, and organize your Route summary.</p>
-        <div className="health-background__privacy"><Info size={19} weight="duotone" aria-hidden="true" /><span>You can review or change these answers anytime from Me.</span></div>
-        <Button block onClick={close}>Done</Button>
+      <main className="health-background health-background--overview">
+        <header className="health-background__topbar">
+          <button type="button" aria-label="Go back" onClick={close}><ArrowLeft size={21} weight="bold" /></button>
+          <strong>My health background</strong>
+          <button type="button" aria-label="Close" onClick={close}><X size={21} weight="bold" /></button>
+        </header>
+
+        <section className="health-background-overview__header">
+          <span className="health-background-overview__icon" aria-hidden="true">{progress.complete ? <CheckCircle size={25} weight="fill" /> : <PencilSimple size={24} weight="duotone" />}</span>
+          <div>
+            <p className="eyebrow">{progress.complete ? 'Ready' : 'In progress'}</p>
+            <h1>{progress.complete ? 'Your background is ready' : 'Complete your health background'}</h1>
+            <p>These answers personalize check-ins, Learn topics, and visit preparation.</p>
+          </div>
+        </section>
+
+        {justSaved && <p className="health-background-overview__saved" role="status"><CheckCircle size={17} weight="fill" /> Changes saved</p>}
+
+        <div className="health-background-overview__progress">
+          <span><strong>{progress.answered} of {progress.total}</strong> answered</span>
+          <ProgressBar value={progress.ratio} />
+        </div>
+
+        <div className="health-background-overview__sections">
+          {HEALTH_BACKGROUND_SECTIONS.map((item, index) => {
+            const status = healthBackgroundSectionStatus(item, draft)
+            const unavailable = status.total === 0
+            return (
+              <button key={item.id} type="button" onClick={() => openSection(index)} disabled={unavailable}>
+                <span className="health-background-overview__section-copy">
+                  <strong>{item.title}</strong>
+                  <small>{unavailable ? 'Not applicable right now' : status.summary}</small>
+                </span>
+                <span className={`health-background-overview__section-status ${status.complete ? 'is-complete' : ''}`}>
+                  {unavailable ? 'Skipped' : status.complete ? 'Ready' : `${status.answered}/${status.total}`}
+                </span>
+                {!unavailable && <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="health-background__privacy"><Info size={19} weight="duotone" aria-hidden="true" /><span>Only you can see this unless you choose to include information in a report.</span></div>
+        {!progress.complete && <Button block onClick={() => openSection(firstIncompleteHealthSection(draft))}>Continue where you left off</Button>}
+        {progress.complete && <Button block onClick={close}>Done</Button>}
+        <button type="button" className="health-background__later" onClick={reviewAll}><PencilSimple size={16} /> Review all answers</button>
       </main>
     )
   }
@@ -100,10 +182,13 @@ export default function HealthBackground() {
       </header>
 
       <div className="health-background__progress-copy">
-        <span>Section {sectionIndex + 1} of {HEALTH_BACKGROUND_SECTIONS.length}</span>
-        <span>{progress.answered} of {progress.total} answered</span>
+        <span>{editingSingleSection ? `Editing ${section.title}` : `Section ${sectionIndex + 1} of ${HEALTH_BACKGROUND_SECTIONS.length}`}</span>
+        <span>{questions.filter((question) => isHealthBackgroundAnswer(draft[question.key])).length} of {questions.length} answered</span>
       </div>
-      <ProgressBar value={(sectionIndex + 1) / HEALTH_BACKGROUND_SECTIONS.length} />
+      <ProgressBar value={editingSingleSection
+        ? (questions.length ? questions.filter((question) => isHealthBackgroundAnswer(draft[question.key])).length / questions.length : 1)
+        : (sectionIndex + 1) / HEALTH_BACKGROUND_SECTIONS.length}
+      />
 
       <section className="health-background__intro">
         <p className="eyebrow">{section.title}</p>
@@ -140,11 +225,18 @@ export default function HealthBackground() {
       </div>
 
       <footer className="health-background__actions">
-        <Button block onClick={saveAndContinue}>{sectionIndex === HEALTH_BACKGROUND_SECTIONS.length - 1 ? 'Save and finish' : 'Save and continue'}</Button>
+        <Button block onClick={saveAndContinue}>{editingSingleSection ? 'Save changes' : sectionIndex === HEALTH_BACKGROUND_SECTIONS.length - 1 ? 'Save and finish' : 'Save and continue'}</Button>
         <button type="button" className="health-background__later" onClick={() => {
-          if (sectionIndex === HEALTH_BACKGROUND_SECTIONS.length - 1) close()
-          else setSectionIndex((index) => index + 1)
-        }}>Do this later</button>
+          if (editingSingleSection) {
+            discardSectionChanges()
+            setView('overview')
+            setEditingSingleSection(false)
+          } else {
+            discardSectionChanges()
+            if (sectionIndex === HEALTH_BACKGROUND_SECTIONS.length - 1) close()
+            else setSectionIndex((index) => index + 1)
+          }
+        }}>{editingSingleSection ? 'Cancel' : 'Do this later'}</button>
       </footer>
     </main>
   )

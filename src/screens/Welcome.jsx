@@ -38,9 +38,12 @@ export default function Welcome() {
         headers: { 'x-maisie-local-test': '1' },
       })
       const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || 'The test account could not be opened.')
+      if (!response.ok) {
+        const detail = import.meta.env.DEV && payload.detail ? ` ${payload.detail}` : ''
+        throw new Error(`${payload.error || 'The test account could not be opened.'}${detail}`)
+      }
 
-      const { error } = payload.accessToken && payload.refreshToken
+      const { data, error } = payload.accessToken && payload.refreshToken
         ? await supabase.auth.setSession({
           access_token: payload.accessToken,
           refresh_token: payload.refreshToken,
@@ -50,6 +53,14 @@ export default function Welcome() {
           type: payload.verificationType,
         })
       if (error) throw error
+      const userId = data?.user?.id || data?.session?.user?.id
+      if (!userId) throw new Error('The test profile signed in without a user account.')
+
+      const { error: seedError } = await supabase.rpc('save_tracker_changes', {
+        changes: payload.changes,
+        expected_user_id: userId,
+      })
+      if (seedError) throw seedError
       navigate('/home')
     } catch (error) {
       setTestLoginError(error?.message || 'The test account could not be opened.')
@@ -68,7 +79,7 @@ export default function Welcome() {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 24, width: '100%', maxWidth: 380 }}>
         <Button className="btn--primary btn--block" onClick={() => navigate(state.onboarded ? '/home' : '/age')}>
-          For you (Teen)
+          Get started
         </Button>
         <Button className="btn--ghost btn--block" onClick={() => navigate('/parent')}>
           For a parent

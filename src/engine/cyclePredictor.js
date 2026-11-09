@@ -4,6 +4,8 @@
 // Cycle length is refined over time by daily check-ins, not a one-time estimate.
 // ============================================================
 
+import { ruleValue } from './rules/config.js'
+
 export const PHASES = ['menstrual', 'follicular', 'ovulation', 'luteal']
 
 export const PHASE_META = {
@@ -17,8 +19,8 @@ export const PHASE_META = {
   bc_generic: { label: 'This week',  accent: 'var(--pink-accent)', soft: 'var(--pink-light)', mood: 'Steady' },
 }
 
-const DEFAULT_CYCLE = 28
-const PERIOD_LEN = 5
+const DEFAULT_CYCLE = ruleValue('cycle.defaultLengthDays')
+const PERIOD_LEN = ruleValue('cycle.defaultPeriodDays')
 
 const MS_DAY = 86400000
 export function dateKeyLocal(d = new Date()) {
@@ -59,7 +61,11 @@ function diffDays(a, b) {
  * @param opts.bcSchedule { activeDays, breakDays } optional for BC users
  */
 export function buildCycleModel(opts = {}) {
-  const cycleLength = clamp(opts.cycleLength || DEFAULT_CYCLE, 21, 45)
+  const cycleLength = clamp(
+    opts.cycleLength || DEFAULT_CYCLE,
+    ruleValue('cycle.minimumPredictionDays'),
+    ruleValue('cycle.maximumPredictionDays'),
+  )
   const periodLen = PERIOD_LEN
   const lastStart = opts.lastStart ? startOfDay(parseDateLocal(opts.lastStart)) : null
 
@@ -86,19 +92,19 @@ export function phaseForDate(model, date = new Date()) {
   let dayOfCycle = ((diffDays(date, model.lastStart) % cycleLength) + cycleLength) % cycleLength
 
   if (model.onBirthControl) {
-    // Simple active vs break/placebo split (6.1). Default 21 active / 7 break if unknown.
-    const active = model.bcSchedule?.activeDays ?? 21
-    const cyc = active + (model.bcSchedule?.breakDays ?? 7)
+    // Simple active vs break/placebo split (6.1), using the configured defaults when unknown.
+    const active = model.bcSchedule?.activeDays ?? ruleValue('cycle.birthControlActiveDays')
+    const cyc = active + (model.bcSchedule?.breakDays ?? ruleValue('cycle.birthControlBreakDays'))
     const d = ((diffDays(date, model.lastStart) % cyc) + cyc) % cyc
     return { phase: d < active ? 'bc_active' : 'bc_break', dayOfCycle: d }
   }
 
   // Non-BC four-phase model
-  const ovulationDay = cycleLength - 14 // luteal is ~14 days
+  const ovulationDay = cycleLength - ruleValue('cycle.lutealEstimateDays')
   let phase
   if (dayOfCycle < periodLen) phase = 'menstrual'
-  else if (dayOfCycle < ovulationDay - 1) phase = 'follicular'
-  else if (dayOfCycle <= ovulationDay + 1) phase = 'ovulation'
+  else if (dayOfCycle < ovulationDay - ruleValue('cycle.ovulationWindowRadiusDays')) phase = 'follicular'
+  else if (dayOfCycle <= ovulationDay + ruleValue('cycle.ovulationWindowRadiusDays')) phase = 'ovulation'
   else phase = 'luteal'
   return { phase, dayOfCycle }
 }
@@ -179,7 +185,7 @@ export function fullCycleCount(periodLogs = {}) {
 }
 
 export function hasThreeFullCycles(periodLogs = {}) {
-  return fullCycleCount(periodLogs) >= 3
+  return fullCycleCount(periodLogs) >= ruleValue('cycle.predictionCyclesRequired')
 }
 
 // Calendar cells for a given month.

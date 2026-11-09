@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FAF7FB">
+  <title>Maisie Home - Quick Check-in Concept</title>
+  <style>
+    @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+    @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-500-normal.woff2") format("woff2"); font-weight: 500; }
+    @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+    @font-face { font-family: "Fraunces"; src: url("../node_modules/@fontsource/fraunces/files/fraunces-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+
+    :root {
+      --ink: #3F0824; --plum: #713666; --rose: #EB587B; --blush: #F4A5B8;
+      --lavender: #C8AAD9; --lavender-soft: #F3EDF7; --sage: #4E7554;
+      --sage-mid: #A9C7AB; --sage-soft: #E9F1EA; --gold: #E8C86A;
+      --surface: #FFFFFF; --bg: #FAF7FB; --muted: #6B4C63;
+      --line: rgba(63, 8, 36, 0.11); --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --focus-accent: #A9C7AB; --focus-bg: #E9F1EA; --focus-ink: #4E7554;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body { background: #2d2930; color: var(--ink); font-family: "DM Sans", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    button { color: inherit; font: inherit; }
+    button:focus-visible, a:focus-visible { outline: 3px solid rgba(113, 54, 102, 0.28); outline-offset: 2px; }
+    h1, h2, h3, p { margin: 0; }
+    h1, h2 { font-family: "Fraunces", Georgia, serif; letter-spacing: 0; }
+    svg.icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+    .app { width: min(100%, 430px); height: 100dvh; min-height: 100dvh; margin: 0 auto; position: relative; overflow: hidden; background: var(--bg); box-shadow: 0 20px 70px rgba(0,0,0,.28); }
+    .scroll { height: 100%; overflow-y: auto; padding: calc(18px + var(--safe-top)) 18px calc(106px + var(--safe-bottom)); }
+
+    .topbar { display: flex; align-items: center; justify-content: space-between; min-height: 48px; }
+    .brand { width: 138px; height: auto; display: block; }
+    .avatar { width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--plum); font-family: "Fraunces", serif; font-size: 19px; font-weight: 600; display: grid; place-items: center; box-shadow: 0 4px 14px rgba(63,8,36,.05); }
+
+    .intro { margin-top: 26px; }
+    .intro-meta { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
+    .greeting { color: var(--rose); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+    .week-count { color: var(--muted); font-size: 11px; text-align: right; white-space: nowrap; }
+    .week-count strong { display: block; color: var(--rose); font-family: "Fraunces", serif; font-size: 26px; line-height: .9; }
+    .intro h1 { margin-top: 6px; max-width: 350px; font-size: 36px; line-height: 1.08; }
+    .intro p { margin-top: 7px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+
+    .quick-action { width: 100%; min-height: 82px; margin-top: 22px; padding: 13px; border: 1.5px solid rgba(113,54,102,.2); border-radius: 8px; background: var(--surface); display: grid; grid-template-columns: 46px minmax(0,1fr) auto; gap: 12px; align-items: center; text-align: left; cursor: pointer; box-shadow: 0 7px 22px rgba(63,8,36,.06); }
+    .quick-action:active { background: var(--lavender-soft); }
+    .quick-action__icon { width: 46px; height: 46px; border-radius: 8px; background: var(--plum); color: #fff; display: grid; place-items: center; }
+    .quick-action__copy strong { display: block; font-size: 16px; }
+    .quick-action__copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; line-height: 1.35; }
+    .quick-action__meta { display: grid; justify-items: end; gap: 5px; color: var(--plum); }
+    .quick-action__meta small { padding: 4px 7px; border-radius: 999px; background: var(--sage-soft); color: var(--sage); font-size: 10px; font-weight: 700; white-space: nowrap; }
+    .quick-action.is-saved { border-color: rgba(78,117,84,.25); }
+    .quick-action.is-saved .quick-action__icon { background: var(--sage); }
+
+    .section { margin-top: 26px; }
+    .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 11px; }
+    .section-heading h2 { font-size: 22px; line-height: 1.2; }
+    .section-heading a { color: var(--plum); font-size: 11px; font-weight: 700; text-decoration: none; }
+
+    .focus-card { border: 1px solid color-mix(in srgb, var(--focus-accent) 42%, transparent); border-left: 4px solid var(--focus-accent); border-radius: 8px; background: var(--focus-bg); padding: 16px; }
+    .focus-card__top { display: flex; align-items: center; gap: 9px; color: var(--focus-ink); font-size: 10px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .focus-card h3 { margin-top: 9px; font-family: "Fraunces", serif; font-size: 19px; line-height: 1.25; }
+    .focus-card p { margin-top: 7px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .focus-card .tip-lead { color: var(--ink); font-size: 13.5px; font-weight: 700; }
+    .focus-evidence { display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 9px; align-items: start; margin-top: 14px; padding-top: 13px; border-top: 1px solid color-mix(in srgb, var(--focus-accent) 35%, transparent); }
+    .focus-evidence__icon { width: 28px; height: 28px; border-radius: 7px; background: rgba(255,255,255,.72); color: var(--focus-ink); display: grid; place-items: center; }
+    .focus-evidence__icon .icon { width: 17px; height: 17px; }
+    .focus-evidence p { margin: 0; font-size: 11.5px; line-height: 1.45; }
+    .text-action { margin-top: 12px; padding: 0; border: 0; background: transparent; color: var(--plum); font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+
+    .next-list { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .next-row { width: 100%; min-height: 74px; padding: 12px; border: 0; border-bottom: 1px solid var(--line); background: var(--surface); display: grid; grid-template-columns: 42px minmax(0,1fr) auto; gap: 11px; align-items: center; text-align: left; cursor: pointer; }
+    .next-row:last-child { border-bottom: 0; }
+    .next-icon { width: 42px; height: 42px; border-radius: 8px; display: grid; place-items: center; color: var(--plum); background: var(--lavender-soft); }
+    .next-row.route .next-icon { color: var(--sage); background: var(--sage-soft); }
+    .next-copy small { display: block; color: var(--sage); font-size: 9.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+    .next-copy strong { display: block; margin-top: 3px; font-size: 14px; }
+    .next-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.3; }
+    .arrow { color: var(--plum); font-size: 21px; }
+    .progress-track { width: 100%; height: 4px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: #eee6f1; }
+    .progress-fill { width: 80%; height: 100%; border-radius: inherit; background: var(--plum); }
+    .attention-list { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+    .attention-row { width: 100%; min-height: 66px; padding: 11px 12px; border: 0; border-bottom: 1px solid var(--line); background: transparent; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px; align-items: center; text-align: left; }
+    .attention-row:last-child { border-bottom: 0; }
+    .attention-row span { min-width: 0; }
+    .attention-row strong { display: block; font-size: 13px; }
+    .attention-row small { display: block; margin-top: 3px; color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+
+    .cycle-row { width: 100%; min-height: 56px; margin-top: 24px; padding: 10px 2px; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: transparent; display: grid; grid-template-columns: 32px minmax(0,1fr) auto; gap: 9px; align-items: center; text-align: left; cursor: pointer; }
+    .cycle-row strong { display: block; font-size: 12.5px; }
+    .cycle-row span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+    .tabbar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 20; height: calc(76px + var(--safe-bottom)); padding: 8px 4px var(--safe-bottom); border-top: 1px solid var(--line); background: rgba(255,255,255,.97); display: grid; grid-template-columns: repeat(5,1fr); }
+    .tab { border: 0; background: transparent; color: #897d84; display: grid; place-items: center; align-content: center; gap: 3px; font-size: 9.5px; font-weight: 700; }
+    .tab .icon { width: 23px; height: 23px; }
+    .tab.active { color: var(--plum); }
+
+    .backdrop { position: absolute; inset: 0; z-index: 50; display: none; align-items: flex-end; justify-content: center; background: rgba(38,25,33,.35); }
+    .backdrop.open { display: flex; }
+    .sheet { width: 100%; max-height: calc(100dvh - 34px); overflow-y: auto; padding: 10px 18px calc(22px + var(--safe-bottom)); border-radius: 18px 18px 0 0; background: var(--surface); box-shadow: 0 -15px 45px rgba(36,20,29,.16); animation: rise .22s ease-out; }
+    @keyframes rise { from { transform: translateY(24px); opacity: .75; } to { transform: translateY(0); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .sheet { animation: none; } }
+    .grabber { width: 42px; height: 4px; margin: 0 auto 14px; border-radius: 4px; background: #d9cfd5; }
+    .sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+    .sheet-head h2 { font-size: 25px; }
+    .sheet-head p { margin-top: 4px; color: var(--muted); font-size: 12.5px; }
+    .close { width: 38px; height: 38px; flex: 0 0 auto; border: 0; border-radius: 50%; background: var(--lavender-soft); color: var(--plum); font-size: 22px; display: grid; place-items: center; cursor: pointer; }
+    .areas { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 18px; }
+    .area { min-height: 64px; padding: 10px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; display: grid; grid-template-columns: 31px minmax(0,1fr); gap: 8px; align-items: center; text-align: left; cursor: pointer; }
+    .area[aria-pressed="true"] { border-color: var(--plum); background: var(--lavender-soft); }
+    .area .icon { width: 21px; height: 21px; color: var(--plum); }
+    .area strong { font-size: 12.5px; }
+    .area span { display: block; margin-top: 2px; color: var(--muted); font-size: 9.5px; }
+    .continue { width: 100%; min-height: 50px; margin-top: 16px; border: 0; border-radius: 8px; background: var(--plum); color: #fff; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .continue:disabled { opacity: .35; }
+
+    @media (min-width: 700px) { .app { margin-top: 18px; height: calc(100dvh - 36px); min-height: 680px; border-radius: 22px; } }
+  </style>
+</head>
+<body>
+  <svg width="0" height="0" aria-hidden="true" style="position:absolute"><defs>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h6m4 0h6M10 4v6m-6 7h10m4 0h2m-6-3v6"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-8 12h7l-1 8 8-12h-7z"/></symbol>
+    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5c1.8 1.7 5.2 1.7 7 0M9 9h.01M15 9h.01"/></symbol>
+    <symbol id="i-route" viewBox="0 0 24 24"><circle cx="6" cy="18" r="2"/><circle cx="18" cy="6" r="2"/><path d="M8 18h3a3 3 0 0 0 3-3V9a3 3 0 0 1 3-3"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 5.5A3.5 3.5 0 0 1 7.5 2H11v17H7.5A3.5 3.5 0 0 0 4 22zM20 5.5A3.5 3.5 0 0 0 16.5 2H13v17h3.5A3.5 3.5 0 0 1 20 22z"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12 2.5 2.5L16 9"/></symbol>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 11 9-8 9 8v10h-6v-6H9v6H3z"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M4 20V10m5 10V4m6 16v-7m5 7V7"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 5.6c-2-2-5.1-2-7.1 0L12 7.3l-1.7-1.7a5 5 0 0 0-7.1 7.1L12 21l8.8-8.3a5 5 0 0 0 0-7.1Z"/></symbol>
+    <symbol id="i-drop" viewBox="0 0 24 24"><path d="M12 2S5 10 5 15a7 7 0 0 0 14 0c0-5-7-13-7-13Z"/></symbol>
+  </defs></svg>
+
+  <main class="app">
+    <div class="scroll">
+      <header class="topbar">
+        <img class="brand" src="/brand/maisie-health-logo.png" alt="Maisie Health">
+        <button class="avatar" aria-label="Open Me">A</button>
+      </header>
+
+      <section class="intro">
+        <div class="intro-meta">
+          <p class="greeting">Good evening</p>
+          <p class="week-count"><strong>4</strong>days logged this week</p>
+        </div>
+        <h1>Avery</h1>
+        <p>How are you doing today?</p>
+      </section>
+
+      <button class="quick-action" id="quickAction" type="button">
+        <span class="quick-action__icon"><svg class="icon"><use href="#i-sliders"/></svg></span>
+        <span class="quick-action__copy"><strong>Quick check-in</strong><span>Mood, energy, sleep, pain, and more</span></span>
+        <span class="quick-action__meta"><small>About 1 min</small><svg class="icon"><use href="#i-arrow"/></svg></span>
+      </button>
+
+      <section class="section">
+        <div class="section-heading"><h2>For you today</h2></div>
+        <article class="focus-card">
+          <div class="focus-card__top" id="tipLabel">Today's tip</div>
+          <h3 id="tipTitle">Plan around the energy you have.</h3>
+          <p class="tip-lead" id="tipLead">If pain or fatigue is affecting your day, adjust one part of your schedule and leave room to pause.</p>
+          <div class="focus-evidence">
+            <span class="focus-evidence__icon"><svg class="icon"><use id="evidenceIcon" href="#i-bolt"/></svg></span>
+            <p id="tipEvidence">Lower energy showed up more than once in your recent check-ins.</p>
+          </div>
+          <button class="text-action">See the pattern <svg class="icon"><use href="#i-arrow"/></svg></button>
+        </article>
+      </section>
+
+      <section class="section">
+        <div class="section-heading"><h2>Worth a closer look</h2><a href="/patterns?tab=signals">View all</a></div>
+        <div class="attention-list">
+          <button class="attention-row" onclick="location.href='/patterns?tab=signals&signal=energy'"><span><strong>Your energy has been lower recently</strong><small>Lower energy appeared in several recent check-ins.</small></span><span class="arrow">›</span></button>
+          <button class="attention-row" onclick="location.href='/patterns?tab=signals&signal=pain'"><span><strong>Pain has repeated</strong><small>Pain of 4 or higher was logged more than once.</small></span><span class="arrow">›</span></button>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-heading"><h2>Keep going</h2></div>
+        <div class="next-list">
+          <button class="next-row"><span class="next-icon"><svg class="icon"><use href="#i-sliders"/></svg></span><span class="next-copy"><strong>Personalize Maisie</strong><span>12 of 15 answered</span><span class="progress-track"><span class="progress-fill"></span></span></span><span class="arrow">›</span></button>
+          <button class="next-row route"><span class="next-icon"><svg class="icon"><use href="#i-route"/></svg></span><span class="next-copy"><strong>Prepare for a health conversation</strong><span>1 item may be worth discussing</span></span><span class="arrow">›</span></button>
+        </div>
+      </section>
+
+      <button class="cycle-row"><svg class="icon" id="cycleIcon" style="color:var(--rose)"><use href="#i-calendar"/></svg><span><strong id="cycleTitle">Period day 4 · Logged today</strong><span id="cycleSubtitle">View or edit period details</span></span><span class="arrow">›</span></button>
+    </div>
+
+    <nav class="tabbar" aria-label="Primary">
+      <button class="tab active"><svg class="icon"><use href="#i-home"/></svg><span>Home</span></button>
+      <button class="tab"><svg class="icon"><use href="#i-chart"/></svg><span>Patterns</span></button>
+      <button class="tab"><svg class="icon"><use href="#i-route"/></svg><span>Route</span></button>
+      <button class="tab"><svg class="icon"><use href="#i-book"/></svg><span>Learn</span></button>
+      <button class="tab"><svg class="icon"><use href="#i-user"/></svg><span>Me</span></button>
+    </nav>
+
+    <div class="backdrop" id="backdrop" role="presentation">
+      <section class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+        <div class="grabber"></div>
+        <div class="sheet-head">
+          <div><h2 id="sheetTitle">Quick check-in</h2><p>Choose what you want to log right now.</p></div>
+          <button class="close" id="closeSheet" type="button" aria-label="Close">×</button>
+        </div>
+        <div class="areas">
+          <button class="area" aria-pressed="true"><svg class="icon"><use href="#i-smile"/></svg><span><strong>Mood</strong><span>How you feel</span></span></button>
+          <button class="area" aria-pressed="true"><svg class="icon"><use href="#i-bolt"/></svg><span><strong>Energy</strong><span>High or low</span></span></button>
+          <button class="area" aria-pressed="false"><svg class="icon"><use href="#i-moon"/></svg><span><strong>Sleep</strong><span>Hours and rest</span></span></button>
+          <button class="area" aria-pressed="true"><svg class="icon"><use href="#i-heart"/></svg><span><strong>Pain</strong><span>Level and impact</span></span></button>
+          <button class="area" aria-pressed="false"><svg class="icon"><use href="#i-drop"/></svg><span><strong>Bleeding</strong><span>Only when relevant</span></span></button>
+          <button class="area" aria-pressed="false"><svg class="icon"><use href="#i-sliders"/></svg><span><strong>Something else</strong><span>Symptoms or notes</span></span></button>
+        </div>
+        <button class="continue" id="continueButton">Continue with 3 areas</button>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const backdrop = document.getElementById('backdrop')
+    const quickAction = document.getElementById('quickAction')
+    const continueButton = document.getElementById('continueButton')
+    const areas = [...document.querySelectorAll('.area')]
+    const phaseViews = {
+      period: {
+        accent: '#F4A5B8', background: '#FCECF1', ink: '#A44661', icon: '#i-bolt',
+        title: 'Plan around the energy you have.',
+        lead: 'If pain or fatigue is affecting your day, adjust one part of your schedule and leave room to pause.',
+        evidence: 'Lower energy showed up more than once in your recent check-ins.',
+        cycle: 'Period day 4 · Logged today', cycleNote: 'View or edit period details', cycleColor: '#EB587B'
+      },
+      building: {
+        accent: '#A9C7AB', background: '#E9F1EA', ink: '#4E7554', icon: '#i-bolt',
+        title: 'Use the energy that is returning.',
+        lead: 'Add one thing that feels good, without filling every open space.',
+        evidence: 'Your energy has been steadier since your period ended.',
+        cycle: 'Building up · Cycle day 9', cycleNote: 'Next period in about 19 days', cycleColor: '#6F9875'
+      },
+      peak: {
+        accent: '#E8C86A', background: '#FDF8E9', ink: '#896B15', icon: '#i-smile',
+        title: 'Notice what feels easier today.',
+        lead: 'Use your focus where it helps, and keep checking in with your body.',
+        evidence: 'Your recent check-ins show steadier mood and energy around this point.',
+        cycle: 'Peak · Cycle day 14', cycleNote: 'Timing is an estimate based on your logs', cycleColor: '#B28B19'
+      },
+      winddown: {
+        accent: '#C8AAD9', background: '#F3EDF7', ink: '#713666', icon: '#i-moon',
+        title: 'Leave a little room in your plans.',
+        lead: 'A lighter schedule can help if your energy or mood starts to shift.',
+        evidence: 'You recently logged more tiredness in the days before your period.',
+        cycle: 'Winding down · Cycle day 22', cycleNote: 'Next period in about 6 days', cycleColor: '#8A5A98'
+      }
+    }
+
+    function applyPhaseView() {
+      const requested = new URLSearchParams(window.location.search).get('phase') || 'period'
+      const phase = phaseViews[requested] || phaseViews.period
+      const app = document.querySelector('.app')
+      app.style.setProperty('--focus-accent', phase.accent)
+      app.style.setProperty('--focus-bg', phase.background)
+      app.style.setProperty('--focus-ink', phase.ink)
+      document.getElementById('tipTitle').textContent = phase.title
+      document.getElementById('tipLead').textContent = phase.lead
+      document.getElementById('tipEvidence').textContent = phase.evidence
+      document.getElementById('evidenceIcon').setAttribute('href', phase.icon)
+      document.getElementById('cycleTitle').textContent = phase.cycle
+      document.getElementById('cycleSubtitle').textContent = phase.cycleNote
+      document.getElementById('cycleIcon').style.color = phase.cycleColor
+    }
+
+    function setSheet(open) {
+      backdrop.classList.toggle('open', open)
+      document.body.style.overflow = open ? 'hidden' : ''
+      if (open) document.getElementById('closeSheet').focus()
+      else quickAction.focus()
+    }
+    function updateCount() {
+      const count = areas.filter((button) => button.getAttribute('aria-pressed') === 'true').length
+      continueButton.disabled = count === 0
+      continueButton.textContent = count ? `Continue with ${count} ${count === 1 ? 'area' : 'areas'}` : 'Choose an area'
+    }
+    quickAction.addEventListener('click', () => { window.location.href = '/log' })
+    document.getElementById('closeSheet').addEventListener('click', () => setSheet(false))
+    backdrop.addEventListener('click', (event) => { if (event.target === backdrop) setSheet(false) })
+    areas.forEach((button) => button.addEventListener('click', () => {
+      button.setAttribute('aria-pressed', button.getAttribute('aria-pressed') === 'true' ? 'false' : 'true')
+      updateCount()
+    }))
+    continueButton.addEventListener('click', () => {
+      quickAction.classList.add('is-saved')
+      quickAction.querySelector('.quick-action__icon').innerHTML = '<svg class="icon"><use href="#i-check"/></svg>'
+      quickAction.querySelector('.quick-action__copy').innerHTML = '<strong>Check-in ready</strong><span>Continue where you left off</span>'
+      quickAction.querySelector('small').textContent = 'In progress'
+      setSheet(false)
+    })
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && backdrop.classList.contains('open')) setSheet(false) })
+    applyPhaseView()
+  </script>
+</body>
+</html>

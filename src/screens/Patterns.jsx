@@ -7,14 +7,20 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
+import { ruleValue } from '../engine/rules/config.js'
 import { TopBar, Card, Button, Badge } from '../components/ui.jsx'
 import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
 import { summarizeDoctorLogs } from '../engine/doctorSummary.js'
-import { buildPatternEvidence, buildRouteSignals } from '../engine/patternInsights.js'
+import { buildCarePreparationState, buildPatternEvidence, buildRouteSignals } from '../engine/patternInsights.js'
+import { deriveBodySignals, groupBodySignals } from '../engine/bodySignals.js'
 import { MOOD_ITEM_DEFINITIONS } from '../engine/moodPms.js'
 import { groupLoggedSymptoms } from '../content/symptomClusters.js'
+import { features } from '../config/features.js'
 import { monthCacheKey } from '../lib/historyWindow.js'
-import { ArrowRight, CalendarBlank, ChartLineUp, FileText, FirstAidKit, PencilSimple, X } from '@phosphor-icons/react'
+import { ArrowRight, CalendarBlank, ChartLineUp, ChatCircleText, ClipboardText, FileText, FirstAidKit, PencilSimple, Stethoscope, X } from '@phosphor-icons/react'
+import MetabolicCard from '../components/MetabolicCard.jsx'
+import SignalDetailSheet from '../components/SignalDetailSheet.jsx'
+import ObservationDetailSheet from '../components/ObservationDetailSheet.jsx'
 import {
   buildCycleModel,
   phaseForDate,
@@ -56,7 +62,10 @@ export default function Patterns({ initialTab }) {
 
   // Tab State: 'calendar' | 'signals'
   const tabFromUrl = searchParams.get('tab')
+  const signalFromUrl = searchParams.get('signal')
   const [activeTab, setActiveTab] = useState(tabFromUrl || initialTab || 'calendar')
+  const [selectedSignal, setSelectedSignal] = useState(null)
+  const [selectedObservation, setSelectedObservation] = useState(null)
   const [showDoctorModal, setShowDoctorModal] = useState(false)
   const [copied, setCopied] = useState(false)
   const [selectedDateKey, setSelectedDateKey] = useState(dateKeyLocal(new Date()))
@@ -138,7 +147,7 @@ export default function Patterns({ initialTab }) {
         log?.impact !== undefined
       const isPeriodDay = periodLog?.period === true || log?.period === true
       const isPossiblePeriodDay = !isPeriodDay && periodLog?.status === 'possible'
-      const isPredictedPeriodDay = predictionsReady && phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < 5
+      const isPredictedPeriodDay = predictionsReady && phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < ruleValue('cycle.defaultPeriodDays')
 
       cells.push({
         date,
@@ -174,19 +183,80 @@ export default function Patterns({ initialTab }) {
     calendarDays[0]
 
   const patternEvidence = useMemo(
-    () => buildPatternEvidence(state.dailyLogs, state.periodLogs, now, 90),
+    () => buildPatternEvidence(state.dailyLogs, state.periodLogs, now, 30),
     [state.dailyLogs, state.periodLogs, todayKey],
+  )
+  const bodySignals = useMemo(
+    () => deriveBodySignals(state.dailyLogs, state.profile, { days: 30, today: now }),
+    [state.dailyLogs, state.profile, todayKey],
+  )
+  const bodySignalGroups = useMemo(
+    () => groupBodySignals(bodySignals, state.profile),
+    [bodySignals, state.profile],
+  )
+  const repeatedPatterns = useMemo(
+    () => patternEvidence.recurring.filter((item) => item.id !== 'fatigue'),
+    [patternEvidence.recurring],
   )
   const routeSignals = useMemo(
     () => buildRouteSignals(state.result, patternEvidence),
     [state.result, patternEvidence],
   )
+  const carePreparation = useMemo(
+    () => buildCarePreparationState(state.result, patternEvidence, routeSignals),
+    [state.result, patternEvidence, routeSignals],
+  )
+
+  useEffect(() => {
+    if (activeTab !== 'signals' || !signalFromUrl) return
+    const bodyIds = new Set(['energy', 'mood', 'sleep', 'skin'])
+    const targetId = bodyIds.has(signalFromUrl) ? `body-signal-${signalFromUrl}` : `pattern-${signalFromUrl}`
+    const timer = window.setTimeout(() => document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80)
+    return () => window.clearTimeout(timer)
+  }, [activeTab, signalFromUrl])
+
+  useEffect(() => {
+    if (activeTab !== 'signals' || !signalFromUrl) return
+    if (repeatedPatterns.some((item) => item.id === signalFromUrl)) setSelectedObservation(signalFromUrl)
+  }, [activeTab, signalFromUrl, repeatedPatterns])
+
+  const selectedObservationIds = state.routePreferences?.selectedObservations || []
+  const selectedObservationDetail = repeatedPatterns.find((item) => item.id === selectedObservation)
+
+  function openObservation(id) {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', 'signals')
+    next.set('signal', id)
+    setSearchParams(next, { replace: true })
+    setSelectedObservation(id)
+  }
+
+  function closeObservation() {
+    const next = new URLSearchParams(searchParams)
+    next.delete('signal')
+    next.set('tab', 'signals')
+    setSearchParams(next, { replace: true })
+    setSelectedObservation(null)
+  }
+
+  function toggleVisitObservation(id) {
+    const selected = selectedObservationIds.includes(id)
+    dispatch({
+      type: 'SET_ROUTE_PREFERENCES',
+      payload: {
+        selectedObservations: selected
+          ? selectedObservationIds.filter((item) => item !== id)
+          : [...selectedObservationIds, id],
+      },
+    })
+  }
 
   // Doctor Summary Report Text
   const doctorReportText = useMemo(() => {
     const name = state.identity.name || 'Maisie User'
     const summary = summarizeDoctorLogs(activeLogs, now)
-    const reportStart = addDays(now, -29)
+    const reportDays = ruleValue('reports.doctorSummaryWindowDays')
+    const reportStart = addDays(now, -(reportDays - 1))
 
     const symptomSections = summary.symptomClusters.length
       ? summary.symptomClusters
@@ -194,14 +264,14 @@ export default function Patterns({ initialTab }) {
           .join('\n')
       : 'No symptoms logged.'
 
-    return `MAISIE HEALTH — 30-DAY PATTERN REPORT
+    return `MAISIE HEALTH — ${reportDays}-DAY PATTERN REPORT
 --------------------------------------------------
 Patient / User: ${name}
 Date Range: ${reportStart.toLocaleDateString()} – ${now.toLocaleDateString()}
 Tracked Days: ${summary.totalLogs}
 
 METRICS:
-• High-Pain Days (≥7): ${summary.highPainDays} days
+• High-Pain Days (≥${ruleValue('flags.highPainMinimum')}): ${summary.highPainDays} days
 • Activity Impact Days: ${summary.impactCount} days
 • Observed Cycle Length: ${state.result?.cycleLength ? `${state.result.cycleLength} days` : 'Not available'}
 
@@ -850,22 +920,102 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             </p>
           </Card>
 
-          <section style={{ marginTop: 22 }} aria-labelledby="recurring-patterns-title">
+          <section className="patterns-signal-section" aria-labelledby="changed-signals-title">
+            <div className="patterns-section-heading">
+              <div>
+                <p className="eyebrow">Last 30 days</p>
+                <h2 id="changed-signals-title">Worth a closer look</h2>
+              </div>
+              <span>{patternEvidence.checkInCount} check-in{patternEvidence.checkInCount === 1 ? '' : 's'}</span>
+            </div>
+
+            {bodySignalGroups.changed.length > 0 ? (
+              <div className="patterns-changed-list">
+                {bodySignalGroups.changed.map((signal) => (
+                  <div id={`body-signal-${signal.id}`} key={signal.id}>
+                    <MetabolicCard
+                      title={signal.title}
+                      value={signal.val}
+                      color={signal.color}
+                      description={signal.desc}
+                      trendPoints={signal.trend}
+                      onClick={() => setSelectedSignal(signal.id)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Card className="patterns-collecting-card">
+                <p>Nothing changed repeatedly in this view</p>
+                <span>Maisie only moves something here after it appears in at least two check-ins.</span>
+              </Card>
+            )}
+          </section>
+
+          {bodySignalGroups.steady.length > 0 && (
+            <section className="patterns-signal-section" aria-labelledby="steady-signals-title">
+              <div className="patterns-section-heading">
+                <div><h2 id="steady-signals-title">Steady lately</h2></div>
+              </div>
+              <div className="patterns-steady-list">
+                {bodySignalGroups.steady.map((signal) => (
+                  <button id={`body-signal-${signal.id}`} key={signal.id} type="button" className="patterns-steady-row" onClick={() => setSelectedSignal(signal.id)}>
+                    <i style={{ background: signal.color }} aria-hidden="true" />
+                    <span><strong>{signal.title}</strong><small>{signal.desc}</small></span>
+                    <b>{signal.val}</b>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {bodySignalGroups.collecting.length > 0 && (
+            <section className="patterns-signal-section" aria-labelledby="collecting-signals-title">
+              <div className="patterns-section-heading">
+                <div>
+                  <h2 id="collecting-signals-title">Nothing logged yet</h2>
+                  <p>Add an answer for an area when you want it included.</p>
+                </div>
+              </div>
+              <div className="patterns-steady-list">
+                {bodySignalGroups.collecting.map((signal) => (
+                  <button id={`body-signal-${signal.id}`} key={signal.id} type="button" className="patterns-steady-row" onClick={() => setSelectedSignal(signal.id)}>
+                    <i style={{ background: signal.color }} aria-hidden="true" />
+                    <span><strong>{signal.title}</strong><small>{signal.desc}</small></span>
+                    <b>{signal.val}</b>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section style={{ marginTop: 22 }} aria-labelledby="repeated-observations-title">
             <div style={{ marginBottom: 10 }}>
               <p className="eyebrow" style={{ margin: '0 0 4px' }}>Your observations</p>
-              <h2 id="recurring-patterns-title" style={{ margin: 0, fontSize: 20 }}>Recurring patterns</h2>
+              <h2 id="repeated-observations-title" style={{ margin: 0, fontSize: 20 }}>Repeated observations</h2>
               <p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 12.5 }}>
                 Based on {patternEvidence.checkInCount} check-in{patternEvidence.checkInCount === 1 ? '' : 's'} from the last {patternEvidence.days} days.
               </p>
             </div>
 
-            {patternEvidence.recurring.length > 0 ? (
+            {repeatedPatterns.length > 0 ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {patternEvidence.recurring.map((item) => (
-                  <Card key={item.id} style={{ padding: '14px 16px' }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: 'var(--text-primary)' }}>{item.title}</p>
-                    <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45 }}>{item.body}</p>
-                  </Card>
+                {repeatedPatterns.map((item) => (
+                  <button
+                    id={`pattern-${item.id}`}
+                    key={item.id}
+                    type="button"
+                    className="patterns-observation-card"
+                    onClick={() => openObservation(item.id)}
+                    aria-label={`Open details for ${item.title}`}
+                  >
+                    <span>
+                      <strong>{item.title}</strong>
+                      <small>{item.body}</small>
+                      {selectedObservationIds.includes(item.id) && <em>Added to visit</em>}
+                    </span>
+                    <ArrowRight size={17} weight="bold" aria-hidden="true" />
+                  </button>
                 ))}
               </div>
             ) : (
@@ -885,7 +1035,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
               </span>
               <div>
                 <p className="eyebrow" style={{ margin: '0 0 2px', color: '#4E7554' }}>Route</p>
-                <h2 id="route-title" style={{ margin: 0, fontSize: 20 }}>Worth discussing</h2>
+                <h2 id="route-title" style={{ margin: 0, fontSize: 20 }}>{carePreparation.heading}</h2>
               </div>
             </div>
 
@@ -911,7 +1061,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                       {!signal.early && (
                         <button
                           type="button"
-                          onClick={() => navigate('/advisor')}
+                          onClick={() => navigate('/route/talk')}
                           style={{ border: 'none', background: 'transparent', padding: 0, color: 'var(--pink-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 5 }}
                         >
                           Prepare for a visit <ArrowRight size={15} weight="bold" aria-hidden="true" />
@@ -929,30 +1079,41 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 ))}
               </div>
             ) : (
-              <Card style={{ padding: '14px 16px', background: '#F4F8F4', borderColor: '#C7DAC9' }}>
-                <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Nothing to prepare right now</p>
-                <p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 13, lineHeight: 1.45 }}>
-                  {state.result?.authoritative
-                    ? patternEvidence.checkInCount < 7
-                      ? `Log ${7 - patternEvidence.checkInCount} more ${7 - patternEvidence.checkInCount === 1 ? 'day' : 'days'} to start a useful Route summary.`
-                      : patternEvidence.fullCycleCount < 2
-                        ? 'Your observations are ready. Maisie waits for two completed cycles before showing discussion signals.'
-                        : 'No discussion signal was identified from your available answers. This is not a medical assessment.'
-                    : state.accountId
-                      ? 'This section will update after your saved answers are checked.'
-                      : 'Save your tracker to keep your information across devices and receive updated results.'}
-                </p>
+              <Card className="patterns-care-card">
+                <p className="patterns-care-card__title">{carePreparation.title}</p>
+                <p className="patterns-care-card__body">{carePreparation.body}</p>
+                {carePreparation.note && <p className="patterns-care-card__note">{carePreparation.note}</p>}
                 {!state.accountId && (
                   <button
                     type="button"
+                    className="patterns-care-card__save"
                     onClick={() => navigate('/auth?next=/patterns&source=post-onboarding')}
-                    style={{ border: 'none', background: 'transparent', padding: 0, marginTop: 10, color: 'var(--pink-accent)', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
                   >
-                    Save tracker
+                    Save tracker <ArrowRight size={15} weight="bold" aria-hidden="true" />
                   </button>
                 )}
               </Card>
             )}
+
+            <div className="patterns-care-actions" aria-label="Care preparation options">
+              <button type="button" onClick={() => navigate('/route/summary?range=30')}>
+                <ClipboardText size={19} weight="duotone" aria-hidden="true" />
+                <span><strong>Review pattern summary</strong><small>See what you have logged</small></span>
+                <ArrowRight size={17} weight="bold" aria-hidden="true" />
+              </button>
+              <button type="button" onClick={() => navigate('/route/talk')}>
+                <ChatCircleText size={19} weight="duotone" aria-hidden="true" />
+                <span><strong>Prepare what to say</strong><small>Plan a health conversation</small></span>
+                <ArrowRight size={17} weight="bold" aria-hidden="true" />
+              </button>
+              {features.routeCare && features.routeWho && (
+                <button type="button" onClick={() => navigate('/route/care')}>
+                  <Stethoscope size={19} weight="duotone" aria-hidden="true" />
+                  <span><strong>Find care in Ontario</strong><small>See who you can talk to</small></span>
+                  <ArrowRight size={17} weight="bold" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </section>
 
           <button
@@ -965,6 +1126,24 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             </span>
             <ArrowRight size={17} weight="bold" aria-hidden="true" />
           </button>
+
+          {selectedSignal && bodySignals[selectedSignal] && (
+            <SignalDetailSheet
+              signal={bodySignals[selectedSignal].detail}
+              logCount={bodySignals[selectedSignal].logCount}
+              onClose={() => setSelectedSignal(null)}
+            />
+          )}
+          {selectedObservationDetail && (
+            <ObservationDetailSheet
+              observation={selectedObservationDetail}
+              selected={selectedObservationIds.includes(selectedObservationDetail.id)}
+              onToggleSelected={() => toggleVisitObservation(selectedObservationDetail.id)}
+              onReviewSummary={() => navigate(`/route/summary?range=30&focus=${selectedObservationDetail.id}`)}
+              onPrepare={() => navigate(`/route/talk?focus=${selectedObservationDetail.id}`)}
+              onClose={closeObservation}
+            />
+          )}
         </div>
       )}
 

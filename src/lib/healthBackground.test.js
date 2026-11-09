@@ -5,6 +5,7 @@ import {
   applicableHealthQuestions,
   firstIncompleteHealthSection,
   healthBackgroundProgress,
+  healthBackgroundSectionStatus,
   healthBackgroundValues,
   recommendedLearnSlugs,
 } from './healthBackground.js'
@@ -37,6 +38,21 @@ test('family history belongs to the later health background and not onboarding q
   const background = HEALTH_BACKGROUND_SECTIONS.find((section) => section.id === 'background')
   assert.ok(background.keys.includes('familyStatus'))
   assert.equal(background.questions.find((question) => question.key === 'familyStatus')?.type, 'family-history')
+})
+
+test('completed health-background sections expose a concise review summary', () => {
+  const bleeding = HEALTH_BACKGROUND_SECTIONS.find((section) => section.id === 'bleeding')
+  const status = healthBackgroundSectionStatus(bleeding, {
+    started: 'Yes',
+    flow: 'Heavy',
+    changes: 'More than once/hour',
+    clots: 'Large clots',
+  })
+
+  assert.equal(status.complete, true)
+  assert.equal(status.answered, 3)
+  assert.match(status.summary, /Heavy flow/)
+  assert.match(status.summary, /more than once an hour/)
 })
 
 test('Learn recommendations are neutral, deduplicated, and limited', () => {

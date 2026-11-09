@@ -3,6 +3,7 @@ import { diffRecords, trackerRecords } from './trackerRecords.js'
 import { historyPageRange, initialHistoryStart } from './historyWindow.js'
 import { ageBandFromBirthMonthYear } from './age.js'
 import { stateFromSynchronizedPreferences } from '../state/storeMigration.js'
+import { evaluateRules, RULE_CONFIG_VERSION } from '../engine/rules/index.js'
 
 const snapshots = new Map()
 export function clearSyncCache() { snapshots.clear() }
@@ -131,9 +132,32 @@ export async function pushToSupabase(userId, state) {
     requestError.retryable = !profileStatus || profileStatus >= 500 || profileStatus === 408 || profileStatus === 429
     throw requestError
   }
-  const result = await rpc('save_tracker_changes', { changes, expected_user_id: userId })
+  await rpc('save_tracker_changes', { changes, expected_user_id: userId })
+  const result = evaluateRules({
+    answers: state.answers,
+    dailyLogs: state.dailyLogs,
+    periodLogs: state.periodLogs,
+  })
+  const { data: persistedResult, error: resultError, status: resultStatus } = await supabase.rpc('save_rules_result', {
+    rules_result: result,
+    expected_user_id: userId,
+  })
+  const missingRulesRpc = resultError && (
+    resultError.code === 'PGRST202' ||
+    resultError.code === '42883' ||
+    /could not find (?:the )?function public\.save_rules_result|function public\.save_rules_result.*does not exist/i.test(resultError.message || '')
+  )
+  if (resultError && !missingRulesRpc) {
+    const requestError = new Error(resultError.message)
+    requestError.code = resultError.code
+    requestError.details = resultError.details
+    requestError.status = resultStatus
+    requestError.retryable = !resultStatus || resultStatus >= 500 || resultStatus === 408 || resultStatus === 429
+    throw requestError
+  }
   snapshots.set(userId, current)
-  return result
+  if (missingRulesRpc) return { ...result, serverPersisted: false, ruleVersion: RULE_CONFIG_VERSION }
+  return { ...persistedResult, serverPersisted: true, ruleVersion: RULE_CONFIG_VERSION }
 }
 
 export const listSupportAccess = () => rpc('list_support_access')

@@ -1,3 +1,6 @@
+import { birthControlContext, lifestyleSignals } from '../data/questions.js'
+import { RULE_CONFIG_VERSION, ruleDefinition, ruleValue } from './rules/config.js'
+
 // ============================================================
 // Scoring & Flagging engine (TRD Section 8)
 // Pure function: (answers, profile, history) -> result object.
@@ -33,9 +36,9 @@ export function computeCycleLength(answers) {
   return len
 }
 
-// Derived birth-control flag ("P1 = Yes" in Section 8.2 = the BC check-in answer).
+// Suppress unadjusted cycle rules for known hormonal methods and unknown method types.
 export function onBirthControl(answers) {
-  return answers.birthControl === 'Yes'
+  return birthControlContext(answers).affectsCycleInterpretation
 }
 
 // --- individual rule evaluators ----------------------------
@@ -44,41 +47,40 @@ export function onBirthControl(answers) {
 function rulePRIM(answers) {
   // PRIM-01 Primary amenorrhea — no period by 15 (Tier 1).
   const age = answers.age === '18+' ? 18 : parseInt(answers.age, 10)
-  if (answers.started === 'Not yet' && Number.isFinite(age) && age >= 15) {
-    const severity = age >= 16 ? SEVERITY.MODERATE : SEVERITY.MODERATE
+  if (answers.started === 'Not yet' && Number.isFinite(age) && age >= ruleValue('flags.primaryAmenorrheaAge')) {
+    const severity = SEVERITY.MODERATE
     return {
       id: 'PRIM-01',
       tier: 1,
       severity,
       category: 'No period yet',
-      note: 'No period has started by age 15.',
+      note: `No period has started by age ${ruleValue('flags.primaryAmenorrheaAge')}.`,
     }
   }
   return null
 }
 
-function ruleSTOP(answers) {
+function ruleSTOP(answers, context = {}) {
   // STOP-01 / STOP-02 absent or paused periods (Tier 1).
   const cycle = computeCycleLength(answers)
   const last = parseDate(answers.lastStart)
-  const gapFromLast = last ? daysBetween(new Date(), last) : null
+  const gapFromLast = last ? daysBetween(context.today || new Date(), last) : null
 
   // Secondary amenorrhea: previously menstruating, now a long gap (>90d).
-  if (answers.started === 'Yes' && gapFromLast !== null && gapFromLast > 90) {
+  if (answers.started === 'Yes' && gapFromLast !== null && gapFromLast > ruleValue('flags.pausedPeriodDays')) {
     return {
       id: 'STOP-02',
       tier: 1,
       severity: SEVERITY.MODERATE,
       category: 'Periods have paused',
-      note: 'It’s been more than 90 days since the last period started.',
+      note: `It has been more than ${ruleValue('flags.pausedPeriodDays')} days since the last period started.`,
     }
   }
   // Strain signal: intense exercise / under-eating + a long or absent cycle.
-  const strain = ['Exercise intensely 5+ days/wk', 'Limit eating or count calories', 'Both'].includes(
-    answers.lifestyle,
-  )
-  const longOrMissing = cycle === null ? false : cycle > 45
-  if (answers.started === 'Yes' && strain && (longOrMissing || (gapFromLast ?? 0) > 60)) {
+  const lifestyle = lifestyleSignals(answers.lifestyle)
+  const strain = lifestyle.intenseActivity || lifestyle.fuelConcern
+  const longOrMissing = cycle === null ? false : cycle > ruleValue('flags.longCycleDays')
+  if (answers.started === 'Yes' && strain && (longOrMissing || (gapFromLast ?? 0) > ruleValue('flags.strainGapDays'))) {
     return {
       id: 'STOP-01',
       tier: 1,
@@ -125,17 +127,17 @@ function rulePAIN(answers) {
   if (answers.started !== 'Yes') return null
   let score = 0
   const reasons = []
-  if (typeof answers.painWorst === 'number' && answers.painWorst >= 7) { score += 2; reasons.push('severe period pain') }
-  else if (typeof answers.painWorst === 'number' && answers.painWorst >= 4) { score += 1 }
-  if (typeof answers.painBetween === 'number' && answers.painBetween >= 4) { score += 2; reasons.push('pain between periods') }
-  if (['3', '4', '5+'].includes(answers.missedDays)) { score += 2; reasons.push('missed days from pain') }
-  if (answers.bathroomPain === 'Yes, often') { score += 2; reasons.push('bathroom pain') }
-  else if (answers.bathroomPain === 'Sometimes') { score += 1 }
-  if (answers.nausea === 'Yes, regularly') { score += 1; reasons.push('nausea/vomiting') }
-  if (answers.relievers === 'Not really') { score += 1; reasons.push('pain relievers don’t help') }
-  if (answers.painTrend === 'Worse') { score += 1 }
+  if (typeof answers.painWorst === 'number' && answers.painWorst >= ruleValue('flags.highPainMinimum')) { score += ruleValue('flags.painHighWeight'); reasons.push('severe period pain') }
+  else if (typeof answers.painWorst === 'number' && answers.painWorst >= ruleValue('flags.moderatePainMinimum')) { score += ruleValue('flags.painModerateWeight') }
+  if (typeof answers.painBetween === 'number' && answers.painBetween >= ruleValue('flags.moderatePainMinimum')) { score += ruleValue('flags.painBetweenWeight'); reasons.push('pain between periods') }
+  if (['3', '4', '5+'].includes(answers.missedDays)) { score += ruleValue('flags.painMissedDaysWeight'); reasons.push('missed days from pain') }
+  if (answers.bathroomPain === 'Yes, often') { score += ruleValue('flags.painFrequentBathroomWeight'); reasons.push('bathroom pain') }
+  else if (answers.bathroomPain === 'Sometimes') { score += ruleValue('flags.painOccasionalBathroomWeight') }
+  if (answers.nausea === 'Yes, regularly') { score += ruleValue('flags.painNauseaWeight'); reasons.push('nausea/vomiting') }
+  if (answers.relievers === 'Not really') { score += ruleValue('flags.painUnrelievedWeight'); reasons.push('pain relievers don’t help') }
+  if (answers.painTrend === 'Worse') { score += ruleValue('flags.painWorseningWeight') }
 
-  if (score >= 4) {
+  if (score >= ruleValue('flags.painRuleScore')) {
     return {
       id: 'PAIN-01',
       tier: 2,
@@ -154,16 +156,16 @@ function ruleHORM(answers) {
   const bc = onBirthControl(answers)
   let score = 0
   const reasons = []
-  if (['Moderate', 'Severe'].includes(answers.acne)) { score += 1; reasons.push('acne') }
+  if (['Moderate', 'Severe'].includes(answers.acne)) { score += ruleValue('flags.bodyChangeFeatureWeight'); reasons.push('acne') }
   const signs = answers.signs || []
-  if (signs.includes('Hair growth')) { score += 1; reasons.push('new hair growth') }
-  if (signs.includes('Dark patches')) { score += 1; reasons.push('dark skin patches') }
+  if (signs.includes('Hair growth')) { score += ruleValue('flags.bodyChangeFeatureWeight'); reasons.push('new hair growth') }
+  if (signs.includes('Dark patches')) { score += ruleValue('flags.bodyChangeFeatureWeight'); reasons.push('dark skin patches') }
 
   if (!bc) {
     const cycle = computeCycleLength(answers)
-    if (cycle !== null && cycle > 35) { score += 1; reasons.push('long cycles') }
+    if (cycle !== null && cycle > ruleValue('flags.irregularCycleDays')) { score += ruleValue('flags.bodyChangeFeatureWeight'); reasons.push('long cycles') }
   }
-  if (score >= 2) {
+  if (score >= ruleValue('flags.bodyChangeRuleScore')) {
     return {
       id: 'HORM-01',
       tier: 2,
@@ -181,7 +183,7 @@ function ruleOLIG(answers) {
   if (answers.started !== 'Yes') return null
   if (onBirthControl(answers)) return null
   const cycle = computeCycleLength(answers)
-  if (cycle !== null && cycle > 35) {
+  if (cycle !== null && cycle > ruleValue('flags.irregularCycleDays')) {
     return {
       id: 'OLIG-01',
       tier: 2,
@@ -195,7 +197,7 @@ function ruleOLIG(answers) {
 
 const OBVIOUS_RULES = [rulePRIM, ruleSTOP, ruleHMB]
 const PATTERN_RULES = [rulePAIN, ruleHORM, ruleOLIG]
-const MIN_FULL_CYCLES_FOR_PATTERNS = 3
+const MIN_FULL_CYCLES_FOR_PATTERNS = ruleValue('gates.patternScoringFullCycles')
 
 // --- result level logic (Section 8.3) ----------------------
 function levelFromFlags(flags) {
@@ -224,36 +226,45 @@ export function scoreCheckIn(answers, opts = {}) {
   const observedFullCycleCount = opts.observedFullCycleCount ?? 0
   const patternsReady = observedFullCycleCount >= MIN_FULL_CYCLES_FOR_PATTERNS
   const rules = patternsReady ? [...OBVIOUS_RULES, ...PATTERN_RULES] : OBVIOUS_RULES
-  const raw = rules.map((r) => r(answers)).filter(Boolean)
+  const raw = rules.map((r) => r(answers, { today: opts.today })).filter(Boolean)
 
   const flags = raw.map((f) => {
     if (f.tier === 2) {
       const baseId = f.id.split('-')[0] // PAIN-01 -> PAIN, family match
       const confirmed = priorTier2.has(f.id) || priorTier2.has(baseId)
-      return { ...f, confirmed, displaySeverity: confirmed ? f.severity : SEVERITY.SOFT }
+      return { ...f, confirmed, displaySeverity: confirmed ? f.severity : SEVERITY.SOFT, ruleVersion: RULE_CONFIG_VERSION }
     }
-    return { ...f, confirmed: true, displaySeverity: f.severity }
+    return { ...f, confirmed: true, displaySeverity: f.severity, ruleVersion: RULE_CONFIG_VERSION }
   })
 
-  const level = levelFromFlags(flags)
+  const flagsWithProvenance = flags.map((flag) => ({
+    ...flag,
+    ruleSource: ruleDefinition(flag.id).source,
+    reviewStatus: ruleDefinition(flag.id).reviewStatus,
+  }))
+
+  const level = levelFromFlags(flagsWithProvenance)
   // Tier 2 flags that fired but aren't confirmed yet are stored for passive confirmation (8.4).
-  const pendingTier2 = flags.filter((f) => f.tier === 2 && !f.confirmed).map((f) => f.id)
+  const pendingTier2 = flagsWithProvenance.filter((f) => f.tier === 2 && !f.confirmed).map((f) => f.id)
 
   // Advisor CTA: shown for Tier 1 flags and confirmed Tier 2 (Section 11 / 8.1).
   const needsAdvisor =
     level === LEVEL.URGENT ||
     level === LEVEL.MODERATE ||
-    flags.some((f) => (f.tier === 1) || (f.tier === 2 && f.confirmed))
+    flagsWithProvenance.some((f) => (f.tier === 1) || (f.tier === 2 && f.confirmed))
 
   return {
     level,
-    flags,
+    flags: flagsWithProvenance,
     cycleLength: computeCycleLength(answers),
     onBirthControl: onBirthControl(answers),
     needsAdvisor: needsAdvisor && level !== LEVEL.CLEAR && level !== LEVEL.MILD,
     pendingTier2,
     patternsReady,
     observedFullCycleCount,
+    ruleVersion: RULE_CONFIG_VERSION,
+    configVersion: RULE_CONFIG_VERSION,
+    authoritative: false,
   }
 }
 

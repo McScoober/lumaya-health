@@ -83,8 +83,18 @@ function migrateDailyLogs(dailyLogs, fromVersion) {
 
 function routePreferences(value = {}) {
   const saved = object(value)
+  const visitNotes = object(saved.visitNotes)
   return {
     selectedQuestions: array(saved.selectedQuestions),
+    selectedObservations: [...new Set(array(saved.selectedObservations).filter((id) => typeof id === 'string' && id))],
+    supportChoice: ['yes', 'no', 'unsure'].includes(saved.supportChoice) ? saved.supportChoice : null,
+    visitNotes: {
+      room: typeof visitNotes.room === 'string' ? visitNotes.room.slice(0, 1000) : '',
+      plan: typeof visitNotes.plan === 'string' ? visitNotes.plan.slice(0, 1000) : '',
+      tests: typeof visitNotes.tests === 'string' ? visitNotes.tests.slice(0, 1000) : '',
+      followUpDate: typeof visitNotes.followUpDate === 'string' ? visitNotes.followUpDate : '',
+      remainingQuestions: typeof visitNotes.remainingQuestions === 'string' ? visitNotes.remainingQuestions.slice(0, 1000) : '',
+    },
     personalNote: typeof saved.personalNote === 'string' ? saved.personalNote : '',
     nameMode: ['first', 'initials', 'none'].includes(saved.nameMode) ? saved.nameMode : DEFAULT_ROUTE_PREFERENCES.nameMode,
     exportSections: { ...DEFAULT_ROUTE_PREFERENCES.exportSections, ...object(saved.exportSections) },

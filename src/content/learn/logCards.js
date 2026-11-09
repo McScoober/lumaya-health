@@ -1,5 +1,6 @@
 import { dateKeyLocal, diffDays, periodStartKeys } from '../../engine/cyclePredictor.js'
 import { foodContentIsEnabled } from '../../lib/trackingPreferences.js'
+import { ruleValue } from '../../engine/rules/config.js'
 
 function parseDate(key) {
   const value = new Date(`${key}T12:00:00`)
@@ -27,13 +28,13 @@ function painfulPeriodsCard(state) {
   const starts = periodStartKeys(state?.periodLogs || {})
   const recentBoundary = starts.length >= 2 ? starts.at(-2) : null
   const logs = realDailyLogs(state).filter(([key]) => !recentBoundary || key >= recentBoundary)
-  const highPainDays = logs.filter(([, log]) => Number(log?.pain) >= 7).length
-  const impactPain = logs.some(([, log]) => Number(log?.pain) >= 4 && impactIncludes(log, ['school', 'activity']))
-  if (highPainDays < 2 && !impactPain) return null
+  const highPainDays = logs.filter(([, log]) => Number(log?.pain) >= ruleValue('flags.highPainMinimum')).length
+  const impactPain = logs.some(([, log]) => Number(log?.pain) >= ruleValue('flags.moderatePainMinimum') && impactIncludes(log, ['school', 'activity']))
+  if (highPainDays < ruleValue('observations.repeatedDays') && !impactPain) return null
   return {
     title: 'From your log',
-    text: highPainDays >= 2
-      ? `You rated pain 7 or higher on ${highPainDays} recent days. Here is what that can mean and what to ask.`
+    text: highPainDays >= ruleValue('observations.repeatedDays')
+      ? `You rated pain ${ruleValue('flags.highPainMinimum')} or higher on ${highPainDays} recent days. Here is what that can mean and what to ask.`
       : 'You logged pain that affected school or activity. Here is what that can mean and what to ask.',
   }
 }
@@ -63,21 +64,21 @@ function irregularPeriodsCard(state, today) {
   const previous = parseDate(starts.at(-2))
   const lastCycleLength = latest && previous ? diffDays(latest, previous) : null
   const gap = latest ? diffDays(today, latest) : null
-  if (!(lastCycleLength > 45 || gap > 60)) return null
+  if (!(lastCycleLength > ruleValue('flags.longCycleDays') || gap > ruleValue('flags.strainGapDays'))) return null
   return {
     title: 'From your log',
-    text: lastCycleLength > 45
+    text: lastCycleLength > ruleValue('flags.longCycleDays')
       ? `Your last logged cycle was ${lastCycleLength} days. Here is what is common and when to ask.`
       : `It has been ${gap} days since your last logged period start. Here is when a longer gap is worth asking about.`,
   }
 }
 
 function acneHairCard(state, today) {
-  const skinDays = recentLogs(state, 30, today)
+  const skinDays = recentLogs(state, ruleValue('learn.skinLookbackDays'), today)
     .filter(([, log]) => (log?.symptoms || []).includes('Skin breakout')).length
   const acneAnswer = state?.answers?.acne
   const signs = state?.answers?.signs || []
-  if (skinDays < 10 && !['Moderate', 'Severe'].includes(acneAnswer) && !signs.includes('Hair growth')) return null
+  if (skinDays < ruleValue('learn.skinMinimumDays') && !['Moderate', 'Severe'].includes(acneAnswer) && !signs.includes('Hair growth')) return null
   return {
     title: 'From your log',
     text: 'You have noted skin or hair changes. Here is what can be part of puberty and what is worth asking about.',
@@ -94,10 +95,10 @@ function prePeriodMoodCard(state) {
     return logs.filter(([key, log]) => {
       const date = parseDate(key)
       const daysBefore = date ? diffDays(start, date) : null
-      return daysBefore >= 1 && daysBefore <= 14 && Number(log?.vibe) <= 2
-    }).length >= 3
+      return daysBefore >= 1 && daysBefore <= ruleValue('mood.beforeWindowDays') && Number(log?.vibe) <= ruleValue('learn.moodLowMaximum')
+    }).length >= ruleValue('learn.moodMinimumDays')
   }).length
-  if (matchingPeriods < 2) return null
+  if (matchingPeriods < ruleValue('mood.repeatedCycles')) return null
   return {
     title: 'From your log',
     text: `Your mood dipped before ${matchingPeriods} logged periods. Here is why timing matters and what to ask.`,

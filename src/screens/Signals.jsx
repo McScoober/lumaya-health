@@ -4,6 +4,7 @@ import CycleOverlayChart from '../components/CycleOverlayChart.jsx'
 import { useStore } from '../state/store.jsx'
 import { phaseForDate, PHASE_META, hasThreeFullCycles } from '../engine/cyclePredictor.js'
 import { deriveBodySignals } from '../engine/bodySignals.js'
+import { ruleValue } from '../engine/rules/config.js'
 
 const PHASE_LABELS = {
   menstrual: 'period',
@@ -26,7 +27,7 @@ export default function Signals() {
   const phaseMeta = PHASE_META[phase] || PHASE_META.follicular
   const phaseLabel = PHASE_LABELS[phase] || phaseMeta.label || 'building up'
   const bodySignals = deriveBodySignals(state.dailyLogs, state.profile, {
-    days: 30,
+    days: ruleValue('observations.homeWindowDays'),
     energyColor: '#E8C86A',
     skinColor: '#F4A5B8',
     sleepColor: '#C8AAD9',
@@ -91,7 +92,7 @@ export default function Signals() {
         marginTop: 16
       }}>
         {[
-          ['all', 'last 30 days'],
+          ['all', `last ${ruleValue('observations.homeWindowDays')} days`],
           ['cycle', predictionsReady ? 'through your cycle' : 'baseline'],
         ].map(([key, label]) => (
           <button

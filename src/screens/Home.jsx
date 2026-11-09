@@ -5,22 +5,22 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, predictPeriod, isInPeriodWindow, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
-import { maisieMessage, selectDailyTips } from '../engine/tipEngine.js'
-import { deriveBodySignals } from '../engine/bodySignals.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, predictPeriod, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
+import { selectDailyTips } from '../engine/tipEngine.js'
+import { deriveBodySignals, groupBodySignals } from '../engine/bodySignals.js'
+import { buildPatternEvidence } from '../engine/patternInsights.js'
 import { buildRouteSummary } from '../engine/routeSummary.js'
-import { moodSafetyStatus } from '../engine/moodPms.js'
+import { evaluateSafetyRules, ruleValue } from '../engine/rules/index.js'
 import { features } from '../config/features.js'
 import { Card, Button } from '../components/ui.jsx'
-import MetabolicCard from '../components/MetabolicCard.jsx'
 import ProgressiveCheckin from './ProgressiveCheckin.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import FoodSupportCard from '../components/FoodSupportCard.jsx'
 import MoodSafetyCard from '../components/MoodSafetyCard.jsx'
 import { foodSensitiveModeIsActive } from '../lib/trackingPreferences.js'
-import { ArrowRight, CalendarBlank, CheckCircle, ClipboardText, Gear, MapPin } from '@phosphor-icons/react'
+import { ArrowRight, CalendarBlank, CheckCircle, ClipboardText, SlidersHorizontal } from '@phosphor-icons/react'
 
-function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
+function recentCheckInCount(dailyLogs = {}, today = new Date(), days = ruleValue('home.recentLoggingWindowDays')) {
   let count = 0
   for (let i = 0; i < days; i++) {
     const key = dateKeyLocal(addDays(today, -i))
@@ -35,7 +35,6 @@ function recentCheckInCount(dailyLogs = {}, today = new Date(), days = 5) {
 export default function Home() {
   const navigate = useNavigate()
   const { state, dispatch, cycleModel } = useStore()
-  const [selectedSignal, setSelectedSignal] = useState(null)
   const [periodPromptChoice, setPeriodPromptChoice] = useState(null)
   const [periodPromptSaved, setPeriodPromptSaved] = useState(false)
   const now = new Date()
@@ -49,27 +48,23 @@ export default function Home() {
   const predictionsReady = state.result?.authoritative === true && state.result.patternsReady === true
   const supportPhaseInfo = phaseForDateWithObservations(cycleModel, state.periodLogs, now)
   const supportPhase = supportPhaseInfo.phase
-  const supportCycleDay = supportPhaseInfo.dayOfCycle === null || supportPhaseInfo.dayOfCycle === undefined
-    ? 1
-    : supportPhaseInfo.dayOfCycle + 1
   const phaseInfo = predictionsReady || periodStartedToday
     ? phaseForDateWithObservations(cycleModel, state.periodLogs, now)
     : { phase: null, dayOfCycle: null }
   const { phase, dayOfCycle } = phaseInfo
   const meta = phase ? PHASE_META[phase] : null
   const prediction = predictionsReady ? predictPeriod(cycleModel, now) : null
-  const inWindow = predictionsReady ? isInPeriodWindow(cycleModel, now) : false
   const latestPeriodStartKey = periodStarts[periodStarts.length - 1]
   const daysSinceLatestPeriod = latestPeriodStartKey
     ? diffDays(now, new Date(`${latestPeriodStartKey}T00:00:00`))
     : null
   const isPeriodAskWindow = predictionsReady && prediction
-    ? diffDays(now, addDays(prediction.windowStart, -3)) >= 0 && diffDays(now, prediction.windowEnd) <= 0
+    ? diffDays(now, addDays(prediction.windowStart, -ruleValue('cycle.periodPromptLeadDays'))) >= 0 && diffDays(now, prediction.windowEnd) <= 0
     : false
   const isEarlyPeriodAskWindow = !predictionsReady &&
     daysSinceLatestPeriod !== null &&
-    daysSinceLatestPeriod >= 21 &&
-    daysSinceLatestPeriod <= 38
+    daysSinceLatestPeriod >= ruleValue('cycle.earlyPromptMinimumDays') &&
+    daysSinceLatestPeriod <= ruleValue('cycle.earlyPromptMaximumDays')
   const possiblePeriodToday = todayPeriodLog.status === 'possible' && todayPeriodLog.period !== true
   const shouldShowPeriodStartCard = (possiblePeriodToday || isPeriodAskWindow || isEarlyPeriodAskWindow) &&
     (!todayPeriodLog.periodPromptAnswered || periodStartedToday || possiblePeriodToday)
@@ -80,12 +75,16 @@ export default function Home() {
       : latestPeriodStartKey
         ? 'Building your baseline'
         : 'Ready when you are'
-  const baselineBody = latestPeriodStartKey
-    ? `Last period start: ${new Date(`${latestPeriodStartKey}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${daysSinceLatestPeriod !== null ? ` (${Math.max(0, daysSinceLatestPeriod)} day${daysSinceLatestPeriod === 1 ? '' : 's'} ago)` : ''}. Keep logging to make Maisie more accurate.`
-    : 'Log your period start and quick daily check-ins. Maisie gets more accurate as it learns your rhythm.'
   const phaseSubtitle = phaseInfo.observed
-    ? `Day ${phaseInfo.dayOfPeriod || 1}`
-    : meta?.mood
+    ? `Period day ${phaseInfo.dayOfPeriod || 1} · Logged today`
+    : meta
+      ? `${meta.label.charAt(0).toUpperCase()}${meta.label.slice(1)}${dayOfCycle === null ? '' : ` · Cycle day ${dayOfCycle + 1}`}`
+      : baselineTitle
+  const phaseDetail = phaseInfo.observed
+    ? 'View or edit period details'
+    : prediction
+      ? `Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}`
+      : 'Keep logging to build your cycle context'
 
   const tipSelection = useMemo(() => selectDailyTips({
     phase: supportPhase,
@@ -102,25 +101,41 @@ export default function Home() {
     [state.profile, state.dailyLogs],
   )
   useEffect(() => {
-    if (tipSelection.ids.some((id) => state.tipHistory?.[id] !== todayKey)) {
-      dispatch({ type: 'RECORD_TIPS', dateKey: todayKey, ids: tipSelection.ids })
+    const visibleIds = tip ? [tip.id] : []
+    if (visibleIds.some((id) => state.tipHistory?.[id] !== todayKey)) {
+      dispatch({ type: 'RECORD_TIPS', dateKey: todayKey, ids: visibleIds })
     }
-  }, [dispatch, state.tipHistory, tipSelection.ids, todayKey])
-  const todayMaisieMsg = useMemo(
-    () => (state.notifyPrefs.phaseTips && supportPhase
-      ? maisieMessage(supportPhase, supportCycleDay, state.profile)
-      : 'Your recent check-ins can help you notice what supports you day to day.'),
-    [state.notifyPrefs.phaseTips, supportPhase, supportCycleDay, state.profile]
-  )
+  }, [dispatch, state.tipHistory, tip, todayKey])
   const signals = useMemo(
-    () => deriveBodySignals(state.dailyLogs, state.profile, { days: 8, today: now }),
+    () => deriveBodySignals(state.dailyLogs, state.profile, { today: now }),
     [state.dailyLogs, state.profile, todayKey],
   )
+  const signalGroups = useMemo(() => groupBodySignals(signals, state.profile), [signals, state.profile])
+  const patternEvidence = useMemo(
+    () => buildPatternEvidence(state.dailyLogs, state.periodLogs, now, ruleValue('observations.homeWindowDays')),
+    [state.dailyLogs, state.periodLogs, todayKey],
+  )
+  const attentionItems = useMemo(() => {
+    const bodyItems = signalGroups.changed.map((signal) => ({
+      id: signal.id,
+      title: signal.id === 'energy' ? 'Your energy has been lower recently' : `${signal.title} changed recently`,
+      body: signal.desc,
+    }))
+    const extraItems = patternEvidence.recurring
+      .filter((item) => !['fatigue', 'mood-timing'].includes(item.id))
+    const seen = new Set()
+    return [...bodyItems, ...extraItems].filter((item) => {
+      if (seen.has(item.id)) return false
+      seen.add(item.id)
+      return true
+    }).slice(0, 2)
+  }, [signalGroups.changed, patternEvidence.recurring])
   const routeSummary = useMemo(
     () => buildRouteSummary({ dailyLogs: state.dailyLogs, periodLogs: state.periodLogs, result: state.result }),
     [state.dailyLogs, state.periodLogs, state.result],
   )
-  const moodSafety = useMemo(() => moodSafetyStatus(state.dailyLogs, now), [state.dailyLogs, todayKey])
+  const safety = useMemo(() => evaluateSafetyRules({ dailyLogs: state.dailyLogs, now }), [state.dailyLogs, todayKey])
+  const moodSafety = safety.mood
 
 
 
@@ -161,53 +176,27 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Phase card */}
-      <Card accent style={{ marginTop: 12 }}>
-        <div>
-          <div className="card__label">Right now</div>
-          {meta ? (
-            <>
-              <h2 style={{ margin: '2px 0 2px', color: 'var(--phase-accent)' }}>
-                {phase === 'menstrual' ? 'Your period' : `${meta.label} phase`}
-              </h2>
-              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>{phaseSubtitle}</p>
-            </>
-          ) : (
-            <>
-              <h2 style={{ margin: '2px 0 2px' }}>{baselineTitle}</h2>
-              <p className="muted" style={{ margin: 0, fontSize: 13.5 }}>
-                {baselineBody}
-              </p>
-            </>
-          )}
-        </div>
-        {periodStartedToday ? (
-          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13 }}>
-            Periods can vary in length. Notice how your energy and comfort feel today.
-          </p>
-        ) : prediction && (
-          <p className="muted" style={{ margin: '10px 0 0', fontSize: 13, display: 'flex', alignItems: 'center', gap: 5 }}>
-            {inWindow ? (
-              <>
-                <MapPin size={16} weight="regular" aria-hidden="true" />
-                <span>You're in your predicted period window.</span>
-              </>
-            ) : (
-              <>
-                <CalendarBlank size={16} weight="regular" aria-hidden="true" />
-                <span>Next period in about {Math.max(0, prediction.daysUntil)} day{prediction.daysUntil === 1 ? '' : 's'}.</span>
-              </>
-            )}
-          </p>
-        )}
-      </Card>
+      <button type="button" className={`home-quick-checkin${checkedInToday ? ' home-quick-checkin--complete' : ''}`} onClick={() => navigate('/log')}>
+        <span className="home-quick-checkin__icon" aria-hidden="true">
+          {checkedInToday ? <CheckCircle size={25} weight="fill" /> : <SlidersHorizontal size={24} weight="duotone" />}
+        </span>
+        <span className="home-quick-checkin__copy">
+          <strong>{checkedInToday ? "Today's check-in is complete" : 'Quick check-in'}</strong>
+          <small>{checkedInToday ? 'Review or change today’s answers' : 'Mood, energy, sleep, pain, and more'}</small>
+        </span>
+        <span className="home-quick-checkin__meta">
+          <small>{checkedInToday ? 'Edit' : 'About 1 min'}</small>
+          <ArrowRight size={19} weight="bold" aria-hidden="true" />
+        </span>
+      </button>
 
       {moodSafety.active && <div style={{ marginTop: 14 }}><MoodSafetyCard /></div>}
 
       {tip && (
-        <div style={{ marginTop: 14 }}>
-          <Card>
-            <div className="card__label" style={{ color: 'var(--phase-accent)' }}>Today's Tip</div>
+        <section className="home-section" aria-labelledby="home-tip-title">
+          <h2 id="home-tip-title" className="home-section__title">For you today</h2>
+          <Card accent className="home-tip-card">
+            <div className="card__label" style={{ color: 'var(--phase-accent)' }}>Today's tip</div>
             <h2 style={{
               margin: '4px 0 10px',
               color: 'var(--text-primary)',
@@ -229,88 +218,62 @@ export default function Home() {
               </p>
             )}
             <p style={{
-              margin: 0,
+              margin: '12px 0 0',
+              paddingTop: 12,
+              borderTop: '1px solid color-mix(in srgb, var(--phase-accent) 28%, transparent)',
               color: '#5E3A55',
-              fontSize: 13.5,
+              fontSize: 12.5,
               lineHeight: 1.5,
             }}>
               {tip.why}
             </p>
+            {signalGroups.changed[0] && (
+              <button type="button" className="home-tip-card__link" onClick={() => navigate(`/patterns?tab=signals&signal=${signalGroups.changed[0].id}`)}>
+                See the pattern <ArrowRight size={16} weight="bold" aria-hidden="true" />
+              </button>
+            )}
           </Card>
-        </div>
-      )}
-
-      {tipSelection.fuel && (
-        <Card style={{ marginTop: 10 }}>
-          <div className="card__label">Fuel note</div>
-          <h3 style={{ margin: '4px 0 6px' }}>{tipSelection.fuel.headline}</h3>
-          <p style={{ margin: 0, fontSize: 13.5, lineHeight: 1.5 }}>{tipSelection.fuel.actions[0]}</p>
-        </Card>
-      )}
-
-      {tipSelection.nudge && (
-        <Card style={{ marginTop: 10 }}>
-          <div className="card__label">Worth reviewing</div>
-          <h3 style={{ margin: '4px 0 6px' }}>{tipSelection.nudge.headline}</h3>
-          <p style={{ margin: '0 0 10px', fontSize: 13.5, lineHeight: 1.5 }}>{tipSelection.nudge.why}</p>
-          <Button variant="secondary" onClick={() => navigate('/route')}>Open Route</Button>
-        </Card>
+        </section>
       )}
 
       {foodSensitive && <div style={{ marginTop: 10 }}><FoodSupportCard /></div>}
 
-      {/* Daily check-in CTA */}
-      <Card style={{ marginTop: 14 }}>
-        {checkedInToday ? (
-          <>
-            <div className="row" style={{ gap: 12, alignItems: 'center' }}>
-              <span
-                aria-hidden="true"
-                style={{
-                  width: 42,
-                  height: 42,
-                  borderRadius: '50%',
-                  background: 'var(--sage-100)',
-                  color: 'var(--sage-700)',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <CheckCircle size={24} weight="fill" />
-              </span>
-              <div>
-                <p style={{ margin: 0, fontWeight: 600 }}>You're checked in for today</p>
-                <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                  See you tomorrow.
-                </p>
-              </div>
-            </div>
-
-          </>
-        ) : (
-          <>
-            <p style={{ margin: '0 0 4px', fontWeight: 600 }}>
-              How are you feeling today?
-            </p>
-            <p className="muted" style={{ margin: '0 0 12px', fontSize: 13 }}>
-              A quick tap helps Maisie learn your real patterns.
-            </p>
-            <Button block onClick={() => navigate('/daily')}>Daily check-in</Button>
-          </>
-        )}
-      </Card>
-
-      {/* Progressive onboarding mini-cards (fast-start users only) */}
-      <ProgressiveCheckin />
-      {features.routeSummary && routeSummary.loggedDays >= 7 && (
-        <button type="button" className="home-route-entry" onClick={() => navigate('/route/summary')}>
-          <span className="home-route-entry__icon"><ClipboardText size={22} weight="duotone" /></span>
-          <span><strong>Your pattern so far</strong><small>{routeSummary.stage === 'flags' && routeSummary.flags.length ? `${routeSummary.flags.length} ${routeSummary.flags.length === 1 ? 'item' : 'items'} worth discussing` : `${routeSummary.loggedDays} logged days ready to review`}</small></span>
-          <ArrowRight size={19} aria-hidden="true" />
-        </button>
+      {attentionItems.length > 0 && (
+        <section className="home-section" aria-labelledby="home-attention-title">
+          <div className="home-section__heading">
+            <h2 id="home-attention-title" className="home-section__title">Worth a closer look</h2>
+            {attentionItems.length > 1 && <button type="button" onClick={() => navigate('/patterns?tab=signals')}>View all</button>}
+          </div>
+          <div className="home-attention-list">
+            {attentionItems.map((item) => (
+              <button key={item.id} type="button" className="home-attention-row" onClick={() => navigate(`/patterns?tab=signals&signal=${item.id}`)}>
+                <span><strong>{item.title}</strong><small>{item.body}</small></span>
+                <ArrowRight size={18} weight="bold" aria-hidden="true" />
+              </button>
+            ))}
+          </div>
+        </section>
       )}
+
+      <section className="home-section" aria-labelledby="home-keep-going-title">
+        <h2 id="home-keep-going-title" className="home-section__title">Keep going</h2>
+        <div className="home-task-list">
+          <ProgressiveCheckin />
+          {features.routeSummary && (
+            <button type="button" className="home-route-entry" onClick={() => navigate(routeSummary.loggedDays >= ruleValue('gates.defaultCheckIns') ? '/route/summary' : '/route')}>
+              <span className="home-route-entry__icon"><ClipboardText size={22} weight="duotone" /></span>
+              <span><strong>Prepare for a health conversation</strong><small>{routeSummary.loggedDays >= ruleValue('gates.defaultCheckIns') ? (routeSummary.stage === 'flags' && routeSummary.flags.length ? `${routeSummary.flags.length} ${routeSummary.flags.length === 1 ? 'item' : 'items'} worth discussing` : `${routeSummary.loggedDays} logged days ready to review`) : 'Use your saved check-ins to get ready'}</small></span>
+              <ArrowRight size={19} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      </section>
+
+      <button type="button" className="home-cycle-row" onClick={() => navigate('/patterns?tab=calendar')}>
+        <CalendarBlank size={21} weight="duotone" aria-hidden="true" />
+        <span><strong>{phaseSubtitle}</strong><small>{phaseDetail}</small></span>
+        <ArrowRight size={18} weight="bold" aria-hidden="true" />
+      </button>
 
       {(shouldShowPeriodStartCard || periodPromptSaved) && (
         <Card style={{ marginTop: 14, background: 'var(--lavender-100)', borderColor: 'var(--border-strong)' }}>
@@ -379,112 +342,6 @@ export default function Home() {
 
 
 
-      <div style={{ marginTop: 24 }} className="stack-16">
-        <MetabolicCard title="Energy" value={signals.energy.val} color="var(--signal-energy)" description={signals.energy.desc} trendPoints={signals.energy.trend} onClick={() => setSelectedSignal('energy')} />
-        <MetabolicCard title="Skin" value={signals.skin.val} color="var(--signal-skin)" description={signals.skin.desc} trendPoints={signals.skin.trend} onClick={() => setSelectedSignal('skin')} />
-        <MetabolicCard title="Sleep" value={signals.sleep.val} color="var(--signal-sleep)" description={signals.sleep.desc} trendPoints={signals.sleep.trend} onClick={() => setSelectedSignal('sleep')} />
-        <MetabolicCard title="Mood" value={signals.mood.val} color="var(--signal-mood)" description={signals.mood.desc} trendPoints={signals.mood.trend} onClick={() => setSelectedSignal('mood')} />
-      </div>
-
-      <div style={{ marginTop: 24 }}>
-        <Card accent>
-          <div className="card__label" style={{ color: 'var(--phase-accent)' }}>From Maisie Today</div>
-          <p style={{ margin: '4px 0 0', fontWeight: 500, fontSize: 14.5, lineHeight: 1.5 }}>
-            {todayMaisieMsg}
-          </p>
-        </Card>
-      </div>
-
-      {selectedSignal && (
-          <SignalDetailSheet
-          signal={signals[selectedSignal].detail}
-          logCount={signals[selectedSignal].logCount}
-          onClose={() => setSelectedSignal(null)}
-        />
-      )}
-    </div>
-  )
-}
-
-function SignalDetailSheet({ signal, logCount, onClose }) {
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${signal.title} details`}
-      onClick={onClose}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 80,
-        background: 'rgba(44,24,16,0.28)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-        padding: '12px 12px calc(86px + env(safe-area-inset-bottom, 0px))',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: 560,
-          background: '#fff',
-          borderRadius: '18px 18px 14px 14px',
-          padding: 18,
-          boxShadow: '0 -10px 30px rgba(44,24,16,0.16)',
-          maxHeight: 'calc(100vh - 130px)',
-          overflowY: 'auto',
-        }}
-      >
-        <div className="row row--between" style={{ alignItems: 'flex-start', gap: 12 }}>
-          <div>
-            <p className="eyebrow" style={{ margin: '0 0 4px', color: 'var(--pink-accent)' }}>
-              Body signal
-            </p>
-            <h2 style={{ margin: 0, fontSize: 22 }}>{signal.title}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            style={{
-              border: '1px solid rgba(44,24,16,0.08)',
-              background: '#fff',
-              borderRadius: 999,
-              padding: '7px 12px',
-              color: '#5E3A55',
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            Close
-          </button>
-        </div>
-
-        <div className="stack-12" style={{ marginTop: 14 }}>
-          <DetailBlock label="What it means" text={signal.means} />
-          <DetailBlock label="How Maisie got this" text={signal.derived} />
-          <DetailBlock label="Inputs used" text={signal.uses} />
-          <DetailBlock label="What helps next" text={signal.next} />
-        </div>
-
-        <p className="muted" style={{ margin: '14px 0 0', fontSize: 12.5, lineHeight: 1.45 }}>
-          {logCount < 3
-            ? `Early estimate: you have ${logCount} daily log${logCount === 1 ? '' : 's'} so far.`
-            : `Based on ${logCount} daily logs so far.`}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function DetailBlock({ label, text }) {
-  return (
-    <div>
-      <div className="card__label" style={{ marginBottom: 3 }}>{label}</div>
-      <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.5 }}>
-        {text}
-      </p>
     </div>
   )
 }

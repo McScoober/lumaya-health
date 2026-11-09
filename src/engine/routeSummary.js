@@ -1,10 +1,11 @@
 import { addDays, dateKeyLocal, diffDays, fullCycleCount, periodStartKeys } from './cyclePredictor.js'
 import { groupLoggedSymptoms } from '../content/symptomClusters.js'
 import { analyzeMoodPattern } from './moodPms.js'
+import { RULE_CONFIG_VERSION, ruleValue, serverRuleVersionStatus } from './rules/config.js'
 
 export const ROUTE_WINDOWS = Object.freeze({
-  '30': { label: '30 days', days: 30 },
-  '90': { label: '90 days', days: 90 },
+  '30': { label: `${ruleValue('observations.homeWindowDays')} days`, days: ruleValue('observations.homeWindowDays') },
+  '90': { label: `${ruleValue('observations.windowDays')} days`, days: ruleValue('observations.windowDays') },
   all: { label: 'All', days: null },
 })
 
@@ -50,6 +51,21 @@ function average(values) {
   return Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10
 }
 
+const FLOW_LABELS = { light: 'Light', medium: 'Medium', heavy: 'Heavy' }
+const FLOW_ORDER = ['light', 'medium', 'heavy']
+const CLOT_ORDER = ['None', 'Small', 'Large']
+const DURATION_ORDER = ['Started today', '2-3 days', '4-7 days', 'More than 7 days']
+
+function normalizedFlow(value) {
+  const key = String(value || '').trim().toLowerCase()
+  return FLOW_LABELS[key] ? key : null
+}
+
+function finiteCount(value) {
+  const count = Number(value)
+  return Number.isFinite(count) && count > 0 ? count : 0
+}
+
 export function buildRouteSummary({
   dailyLogs = {},
   periodLogs = {},
@@ -73,7 +89,9 @@ export function buildRouteSummary({
   const entries = completedEntries.filter(([key]) => key >= startKey)
   const logs = entries.map(([date, log]) => ({ date, log }))
   const completedCycles = fullCycleCount(periodLogs)
-  const stage = logs.length < 7 ? 'building' : completedCycles < 2 ? 'descriptive' : 'flags'
+  const stage = logs.length < ruleValue('gates.defaultCheckIns')
+    ? 'building'
+    : completedCycles < ruleValue('gates.defaultFullCycles') ? 'descriptive' : 'flags'
 
   const painValues = logs
     .map(({ log }) => log.pain)
@@ -87,9 +105,42 @@ export function buildRouteSummary({
   const moodLogCount = logs.filter(({ log }) => (
     typeof log.vibe === 'number' || Object.keys(log.moodItems || {}).length > 0
   )).length
-  const bleedingDays = Object.entries(periodLogs)
+  const periodEntries = Object.entries(periodLogs)
     .filter(([key, entry]) => key >= startKey && key <= endKey && entry?.period === true)
-    .length
+  const bleedingDays = periodEntries.length
+  const flowRows = periodEntries
+    .map(([date, entry]) => ({ date, flow: normalizedFlow(entry.flow) }))
+    .filter((row) => row.flow)
+  const flowCounts = FLOW_ORDER.map((flow) => ({ name: FLOW_LABELS[flow], count: flowRows.filter((row) => row.flow === flow).length }))
+    .filter((item) => item.count > 0)
+  const heaviestFlowKey = [...flowRows].sort((a, b) => FLOW_ORDER.indexOf(b.flow) - FLOW_ORDER.indexOf(a.flow))[0]?.flow || null
+
+  const fullnessRows = logs.map(({ date, log }) => {
+    const fullness = log.bleeding?.productFullness || {}
+    const counts = {
+      light: finiteCount(fullness.light),
+      moderate: finiteCount(fullness.moderate),
+      full: finiteCount(fullness.full),
+    }
+    return { date, counts, total: counts.light + counts.moderate + counts.full }
+  }).filter((row) => row.total > 0)
+  const productFullness = fullnessRows.reduce((totals, row) => ({
+    light: totals.light + row.counts.light,
+    moderate: totals.moderate + row.counts.moderate,
+    full: totals.full + row.counts.full,
+  }), { light: 0, moderate: 0, full: 0 })
+  const floodingRows = logs.filter(({ log }) => log.bleeding?.flooding !== undefined && log.bleeding?.flooding !== null)
+  const clotValues = logs.map(({ log }) => log.bleeding?.clots).filter((value) => typeof value === 'string' && value)
+  const knownClotValues = clotValues.filter((value) => CLOT_ORDER.includes(value))
+  const durationValues = logs.map(({ log }) => log.bleedingDuration).filter((value) => typeof value === 'string' && value)
+  const knownDurationValues = durationValues.filter((value) => DURATION_ORDER.includes(value))
+  const detailDates = new Set([
+    ...flowRows.map((row) => row.date),
+    ...fullnessRows.map((row) => row.date),
+    ...floodingRows.map(({ date }) => date),
+    ...logs.filter(({ log }) => typeof log.bleeding?.clots === 'string' && log.bleeding.clots).map(({ date }) => date),
+    ...logs.filter(({ log }) => typeof log.bleedingDuration === 'string' && log.bleedingDuration).map(({ date }) => date),
+  ])
   const starts = periodStartKeys(periodLogs)
   const runs = periodRuns(periodLogs)
   const cycles = starts.slice(0, -1).map((start, index) => {
@@ -130,18 +181,40 @@ export function buildRouteSummary({
     loggedDays: logs.length,
     completedCycles,
     stage,
-    daysUntilMetrics: Math.max(0, 7 - logs.length),
+    daysUntilMetrics: Math.max(0, ruleValue('gates.defaultCheckIns') - logs.length),
     flags,
     cycles,
+    configVersion: RULE_CONFIG_VERSION,
+    serverRuleVersionStatus: serverRuleVersionStatus(result),
     metrics: {
       cycleCount: cycles.length,
       averageCycleDays: average(cycles.map((cycle) => cycle.cycleDays).filter((value) => value > 0)),
       averagePeriodDays: average(cycles.map((cycle) => cycle.periodDays).filter((value) => value > 0)),
       bleedingDays,
+      bleedingDetails: {
+        loggedDays: detailDates.size,
+        flowLoggedDays: flowRows.length,
+        flowCounts,
+        heaviestFlow: heaviestFlowKey ? FLOW_LABELS[heaviestFlowKey] : null,
+        productLoggedDays: fullnessRows.length,
+        productFullness,
+        totalProductChanges: productFullness.light + productFullness.moderate + productFullness.full,
+        fullySoakedDays: fullnessRows.filter((row) => row.counts.full > 0).length,
+        floodingAnsweredDays: floodingRows.length,
+        floodingDays: floodingRows.filter(({ log }) => log.bleeding.flooding === true).length,
+        floodingUnknownDays: floodingRows.filter(({ log }) => log.bleeding.flooding === 'not-sure').length,
+        floodingNotSharedDays: floodingRows.filter(({ log }) => log.bleeding.flooding === 'prefer-not').length,
+        clotAnsweredDays: clotValues.length,
+        clotCounts: tally(clotValues),
+        largestClot: [...knownClotValues].sort((a, b) => CLOT_ORDER.indexOf(b) - CLOT_ORDER.indexOf(a))[0] || null,
+        durationAnsweredDays: durationValues.length,
+        durationCounts: tally(durationValues),
+        longestDuration: [...knownDurationValues].sort((a, b) => DURATION_ORDER.indexOf(b) - DURATION_ORDER.indexOf(a))[0] || null,
+      },
       painLogCount: painValues.length,
       worstPain: painValues.length ? Math.max(...painValues) : null,
       averagePain: average(painValues),
-      highPainDays: painValues.filter((value) => value >= 7).length,
+      highPainDays: painValues.filter((value) => value >= ruleValue('flags.highPainMinimum')).length,
       impactDays: impactRows.length,
       impacts: tally(impactRows.flatMap(({ log }) => log.impact || [])),
       moodLogCount,

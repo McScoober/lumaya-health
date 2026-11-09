@@ -25,7 +25,8 @@ import { TopBar, Chip } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
 import MoodSafetyCard from '../components/MoodSafetyCard.jsx'
-import { MOOD_ITEM_DEFINITIONS, MOOD_SEVERITY_OPTIONS, moodSafetyStatus } from '../engine/moodPms.js'
+import { MOOD_ITEM_DEFINITIONS, MOOD_SEVERITY_OPTIONS } from '../engine/moodPms.js'
+import { evaluateSafetyRules, ruleValue } from '../engine/rules/index.js'
 import {
   SmileyWink, Smiley, SmileyMeh, SmileySad, SmileyBlank,
   BookOpen, PersonSimpleRun, CalendarBlank, Bed, CheckCircle, CaretDown,
@@ -163,7 +164,7 @@ function hasDailyAnswers(log = {}) {
 
 // ── Practical post-log guidance ───────────────────────────────────────────
 function getDailyTip({ symptoms, pain, impacts, vibe, foodEnabled }) {
-  if (symptoms.includes('Cramps') || pain >= 4) {
+  if (symptoms.includes('Cramps') || pain >= ruleValue('tips.pain.minimum')) {
     return 'A heating pad on your lower abdomen or back may help with cramps. Rest and drink water if you can.'
   }
   if (symptoms.includes('Headache')) {
@@ -186,7 +187,7 @@ function getDailyTip({ symptoms, pain, impacts, vibe, foodEnabled }) {
   if (symptoms.includes('Sleep trouble') || impacts.includes('sleep')) {
     return 'Lower the lights, avoid late caffeine, and put your phone down a little earlier.'
   }
-  if (symptoms.includes('Mood changes') || vibe?.value <= 2) {
+  if (symptoms.includes('Mood changes') || vibe?.value <= ruleValue('tips.mood.dailyLowMaximum')) {
     return 'Take things slowly today. If a low mood feels intense or lasts, talk to someone you trust.'
   }
   if (symptoms.includes('Skin breakout')) {
@@ -195,7 +196,7 @@ function getDailyTip({ symptoms, pain, impacts, vibe, foodEnabled }) {
   if (impacts.includes('school') || impacts.includes('activity') || impacts.includes('plans')) {
     return 'Note what was affected today. This can help you explain the pattern later.'
   }
-  if (vibe?.value >= 4) {
+  if (vibe?.value >= ruleValue('signals.moodUpbeatMinimum')) {
     return foodEnabled
       ? 'Think about what helped today, such as sleep, food, movement, or less stress.'
       : 'Think about what helped today, such as sleep, movement, or less stress.'
@@ -408,13 +409,14 @@ export default function DailyLog() {
   }
 
   const dailyTip      = getDailyTip({ symptoms, pain: pain ?? 0, impacts, vibe, foodEnabled: trackingModules.food && !foodSensitive })
-  const moodSafety = moodSafetyStatus({
+  const safety = evaluateSafetyRules({ dailyLogs: {
     ...state.dailyLogs,
     [dateKey]: { ...existingLog, moodItems, functionalImpact, safetyConcern },
-  }, todayKey)
-  const isHighPain    = (pain ?? 0) >= 8
+  }, now: todayKey })
+  const moodSafety = safety.mood
+  const isHighPain    = (pain ?? 0) >= ruleValue('safety.legacyHighPainMinimum')
   const hasSpotting   = periodToday !== true && spotting === true
-  const showRedFlag   = isHighPain || (hasSpotting && (pain ?? 0) >= 6)
+  const showRedFlag   = safety.physical.active || isHighPain || (hasSpotting && (pain ?? 0) >= ruleValue('safety.legacySpottingPainMinimum'))
 
   // ── Post-log confirmation + instant tip ──────────────────────────────
   if (done) {
@@ -536,29 +538,22 @@ export default function DailyLog() {
       </div>
 
       {/* ── 2. Pain dot-scale ──────────────────────────────────────── */}
-      <div style={{ marginTop: 22 }}>
-        <p style={{ margin: '0 0 10px', fontWeight: 700, fontSize: 15 }}>
+      <fieldset className="pain-scale">
+        <legend className="pain-scale__title">
           {isToday ? 'Pain level today' : 'Pain level that day'}{' '}
-          <span className="muted" style={{ fontWeight: 400, fontSize: 13 }}>
+          <span className="pain-scale__hint">
             (tap to set)
           </span>
-        </p>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 5,
-          }}
-        >
+        </legend>
+        <div className="pain-scale__points">
           {Array.from({ length: 11 }, (_, i) => {
             const val = i
             const isSelected = pain === val
             const isUnder    = pain !== null && val <= pain
-            // Color ramps: green → yellow → orange → red
             const dotColor =
-              val <= 3 ? '#4E7554'
-              : val <= 6 ? '#713666'
-              : val <= 8 ? '#EB587B'
+              val <= ruleValue('pain.mildMaximum') ? '#4E7554'
+              : val <= ruleValue('pain.moderateMaximum') ? '#713666'
+              : val <= ruleValue('pain.severeMaximum') ? '#B52F55'
               : '#713666'
             return (
               <button
@@ -566,52 +561,34 @@ export default function DailyLog() {
                 id={`pain-dot-${val}`}
                 type="button"
                 aria-label={val === 0 ? 'Pain 0, no pain' : `Pain ${val}`}
+                aria-pressed={isSelected}
                 onClick={() => setPain(isSelected ? null : val)}
-                style={{
-                  flex: 1,
-                  aspectRatio: '1',
-                  maxWidth: 28,
-                  borderRadius: '50%',
-                  border: isSelected
-                    ? `2px solid ${dotColor}`
-                    : isUnder
-                    ? 'none'
-                    : '1.5px solid rgba(44,24,16,0.1)',
-                  background: isUnder ? dotColor : 'transparent',
-                  opacity: isUnder ? (isSelected ? 1 : 0.55) : 0.3,
-                  cursor: 'pointer',
-                  transform: isSelected ? 'scale(1.25)' : 'scale(1)',
-                  transition: 'transform 0.1s ease, opacity 0.1s ease',
-                  padding: 0,
-                }}
+                className={`pain-scale__point${isUnder ? ' is-filled' : ''}${isSelected ? ' is-selected' : ''}`}
+                style={{ '--pain-point-color': dotColor }}
               />
             )
           })}
         </div>
-        <div
-          className="row row--between muted"
-          style={{ fontSize: 11, marginTop: 5 }}
-        >
+        <div className="pain-scale__anchors">
           <span>0 · none</span>
           <span>10 · worst</span>
         </div>
         {pain !== null && (
           <p
             style={{
-              margin: '6px 0 0',
-              fontSize: 13,
-              fontWeight: 600,
               color:
-                pain <= 3 ? '#4E7554'
-                : pain <= 6 ? '#713666'
-                : pain <= 8 ? '#EB587B'
+                pain <= ruleValue('pain.mildMaximum') ? '#4E7554'
+                : pain <= ruleValue('pain.moderateMaximum') ? '#713666'
+                : pain <= ruleValue('pain.severeMaximum') ? '#B52F55'
                 : '#713666',
             }}
+            className="pain-scale__status"
+            role="status"
           >
-            {pain === 0 ? 'No pain' : pain <= 3 ? 'Mild' : pain <= 6 ? 'Moderate' : pain <= 8 ? 'Severe' : 'Extreme'} · {pain}/10
+            {pain === 0 ? 'No pain' : pain <= ruleValue('pain.mildMaximum') ? 'Mild' : pain <= ruleValue('pain.moderateMaximum') ? 'Moderate' : pain <= ruleValue('pain.severeMaximum') ? 'Severe' : 'Extreme'} · {pain}/10
           </p>
         )}
-      </div>
+      </fieldset>
 
       {/* ── 3. Symptom clusters ────────────────────────────────────── */}
       {clusterCards.length > 0 && (

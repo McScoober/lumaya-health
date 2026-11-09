@@ -10,9 +10,10 @@
 
 import { predictPeriod, phaseForDate, addDays, diffDays, startOfDay } from './cyclePredictor.js'
 import { tipSms } from './tipEngine.js'
+import { ruleValue } from './rules/config.js'
 
 // Build the upcoming notification schedule for the next `days` days.
-export function buildSchedule(model, profile, { days = 30, from = new Date(), phaseTips = true } = {}) {
+export function buildSchedule(model, profile, { days = ruleValue('notifications.defaultScheduleDays'), from = new Date(), phaseTips = true } = {}) {
   const out = []
   if (!model.hasData) return out
   if (!model.predictionsReady) return out
@@ -47,8 +48,8 @@ export function buildSchedule(model, profile, { days = 30, from = new Date(), ph
       }
       // 3. Mid-luteal nudge — one extra touch partway through luteal.
       if (phase === 'luteal') {
-        const lutealStart = model.cycleLength - 14
-        if (dayOfCycle === Math.round(lutealStart + 6)) {
+        const lutealStart = model.cycleLength - ruleValue('cycle.lutealEstimateDays')
+        if (dayOfCycle === Math.round(lutealStart + ruleValue('notifications.midLutealOffsetDays'))) {
           out.push({
             date,
             type: 'luteal_nudge',
@@ -61,7 +62,7 @@ export function buildSchedule(model, profile, { days = 30, from = new Date(), ph
       lastPhaseSeen = phase
     } else if (phaseTips) {
       // BC users: a lighter weekly steady-state touch.
-      if (i % 7 === 0 && i > 0) {
+      if (i % ruleValue('notifications.birthControlCadenceDays') === 0 && i > 0) {
         out.push({
           date,
           type: 'phase_checkin',
@@ -97,7 +98,7 @@ function dedupePerDay(items) {
 
 // The "next message" the user should see today (for the home inbox).
 export function todaysMessages(model, profile, from = new Date(), preferences = {}) {
-  const schedule = buildSchedule(model, profile, { days: 2, from, phaseTips: preferences.phaseTips !== false })
+  const schedule = buildSchedule(model, profile, { days: ruleValue('notifications.todayLookupDays'), from, phaseTips: preferences.phaseTips !== false })
   const key = startOfDay(from).toISOString().slice(0, 10)
   return schedule.filter((m) => m.date.toISOString().slice(0, 10) === key)
 }

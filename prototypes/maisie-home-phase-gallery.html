@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Maisie Home - Cycle Phase Views</title>
+  <style>
+    @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-400-normal.woff2") format("woff2"); font-weight: 400; }
+    @font-face { font-family: "DM Sans"; src: url("../node_modules/@fontsource/dm-sans/files/dm-sans-latin-700-normal.woff2") format("woff2"); font-weight: 700; }
+    @font-face { font-family: "Fraunces"; src: url("../node_modules/@fontsource/fraunces/files/fraunces-latin-600-normal.woff2") format("woff2"); font-weight: 600; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #F5F1F5; color: #3F0824; font-family: "DM Sans", system-ui, sans-serif; }
+    header { max-width: 1840px; margin: 0 auto; padding: 28px 24px 20px; }
+    h1 { margin: 0; font-family: "Fraunces", Georgia, serif; font-size: 34px; }
+    header p { max-width: 720px; margin: 8px 0 0; color: #6B4C63; line-height: 1.5; }
+    .gallery { width: max-content; min-width: 100%; display: grid; grid-template-columns: repeat(4, 430px); gap: 22px; padding: 0 24px 32px; }
+    .view { min-width: 0; }
+    .view-head { display: flex; align-items: center; justify-content: space-between; min-height: 40px; padding: 0 4px; }
+    .view h2 { margin: 0; font-family: "Fraunces", Georgia, serif; font-size: 20px; }
+    .view span { color: #6B4C63; font-size: 12px; }
+    iframe { display: block; width: 430px; height: 860px; border: 1px solid rgba(63,8,36,.12); border-radius: 20px; background: #FAF7FB; box-shadow: 0 16px 40px rgba(63,8,36,.09); }
+    @media (max-width: 700px) {
+      header { padding: 22px 16px 16px; }
+      h1 { font-size: 28px; }
+      .gallery { width: 100%; grid-template-columns: 1fr; gap: 26px; padding: 0 0 28px; }
+      .view-head { padding: 0 18px; }
+      iframe { width: 100%; height: 820px; border-width: 1px 0; border-radius: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Home across the cycle</h1>
+    <p>The layout stays familiar. Maisie changes the tip and cycle context only when timing and recent check-ins make that guidance relevant.</p>
+  </header>
+  <main class="gallery">
+    <section class="view"><div class="view-head"><h2>Period</h2><span>Day 4</span></div><iframe title="Period Home view" src="./maisie-home-quick-checkin.html?phase=period"></iframe></section>
+    <section class="view"><div class="view-head"><h2>Building Up</h2><span>Cycle day 9</span></div><iframe title="Building Up Home view" src="./maisie-home-quick-checkin.html?phase=building"></iframe></section>
+    <section class="view"><div class="view-head"><h2>Peak</h2><span>Cycle day 14</span></div><iframe title="Peak Home view" src="./maisie-home-quick-checkin.html?phase=peak"></iframe></section>
+    <section class="view"><div class="view-head"><h2>Wind Down</h2><span>Cycle day 22</span></div><iframe title="Wind Down Home view" src="./maisie-home-quick-checkin.html?phase=winddown"></iframe></section>
+  </main>
+</body>
+</html>

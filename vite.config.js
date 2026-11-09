@@ -6,6 +6,12 @@ import { localTestProfile } from './src/config/localTestProfiles.js'
 const LOCAL_TEST_LOGIN_PATH = '/__maisie/test-login'
 const LOCAL_ORIGINS = new Set(['http://localhost:5180', 'http://127.0.0.1:5180'])
 
+class DisabledRealtimeTransport {
+  constructor() {
+    throw new Error('Realtime is disabled for local test-profile setup.')
+  }
+}
+
 function isLoopback(address = '') {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 }
@@ -183,29 +189,6 @@ function trackerChangesForProfile(profileId) {
     : buildSampleTrackerChanges()
 }
 
-async function onlyMissingSampleData(client, userId, sample) {
-  const [dailyResult, periodResult, answerResult] = await Promise.all([
-    client.from('daily_logs').select('log_date').eq('user_id', userId),
-    client.from('period_days').select('log_date').eq('user_id', userId),
-    client.from('questionnaire_answers').select('question_key').eq('user_id', userId),
-  ])
-  const error = dailyResult.error || periodResult.error || answerResult.error
-  if (error) throw error
-
-  const existingDaily = new Set((dailyResult.data || []).map((row) => row.log_date))
-  const existingPeriods = new Set((periodResult.data || []).map((row) => row.log_date))
-  const existingAnswers = new Set((answerResult.data || []).map((row) => row.question_key))
-  const missingEntries = (entries, existing) => Object.fromEntries(
-    Object.entries(entries).filter(([key]) => !existing.has(key)),
-  )
-
-  return {
-    dailyLogs: missingEntries(sample.dailyLogs, existingDaily),
-    periodLogs: missingEntries(sample.periodLogs, existingPeriods),
-    answers: missingEntries(sample.answers, existingAnswers),
-  }
-}
-
 function localTestLogin(env) {
   return {
     name: 'maisie-local-test-login',
@@ -228,10 +211,9 @@ function localTestLogin(env) {
         }
 
         const supabaseUrl = env.VITE_SUPABASE_URL
-        const anonKey = env.VITE_SUPABASE_ANON_KEY
         const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY
         const testUserId = env.LOCAL_TEST_USER_ID
-        if (!supabaseUrl || !anonKey || !serviceRoleKey) {
+        if (!supabaseUrl || !serviceRoleKey) {
           res.statusCode = 503
           res.end(JSON.stringify({ error: 'Local test login is not configured.' }))
           return
@@ -243,6 +225,7 @@ function localTestLogin(env) {
           const testProfile = localTestProfile(requestedProfile)
           const admin = createClient(supabaseUrl, serviceRoleKey, {
             auth: { autoRefreshToken: false, persistSession: false },
+            realtime: { transport: DisabledRealtimeTransport },
           })
           const configuredEmail = testProfile.id === 'typical'
             ? (env.LOCAL_TEST_USER_EMAIL || testProfile.defaultEmail)
@@ -254,18 +237,13 @@ function localTestLogin(env) {
           const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email: user.email })
           if (error || !data?.properties?.hashed_token) throw error || new Error('No test token was returned.')
 
-          const localClient = createClient(supabaseUrl, anonKey, {
-            auth: { autoRefreshToken: false, persistSession: false },
-          })
-          const { data: sessionData, error: sessionError } = await localClient.auth.verifyOtp({
-            token_hash: data.properties.hashed_token,
-            type: data.properties.verification_type,
-          })
-          if (sessionError || !sessionData.session) throw sessionError || new Error('No test session was returned.')
+          const sampleChanges = trackerChangesForProfile(testProfile.id)
 
-          const sampleChanges = await onlyMissingSampleData(localClient, user.id, trackerChangesForProfile(testProfile.id))
-
-          const { error: settingsError } = await localClient.rpc('save_tracker_changes', {
+          res.statusCode = 200
+          res.end(JSON.stringify({
+            tokenHash: data.properties.hashed_token,
+            verificationType: data.properties.verification_type,
+            profileId: testProfile.id,
             changes: {
               ...sampleChanges,
               settings: {
@@ -291,15 +269,6 @@ function localTestLogin(env) {
                 preferences: { periodCheckin: true, phaseTips: true },
               },
             },
-            expected_user_id: user.id,
-          })
-          if (settingsError) throw settingsError
-
-          res.statusCode = 200
-          res.end(JSON.stringify({
-            accessToken: sessionData.session.access_token,
-            refreshToken: sessionData.session.refresh_token,
-            profileId: testProfile.id,
           }))
         } catch (error) {
           server.config.logger.error(`Local test login failed: ${error?.message || 'unknown error'}`)

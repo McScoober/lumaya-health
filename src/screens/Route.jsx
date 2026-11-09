@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowRight,
@@ -15,15 +15,20 @@ import {
   MagnifyingGlass,
   NotePencil,
   Phone,
+  Plus,
   ShareNetwork,
   ShieldCheck,
   Stethoscope,
   WarningCircle,
+  Users,
+  X,
 } from '@phosphor-icons/react'
 import { Button, TopBar } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
+import NativeDateField from '../components/NativeDateField.jsx'
 import { features } from '../config/features.js'
 import { buildRouteSummary, ROUTE_WINDOWS } from '../engine/routeSummary.js'
+import { buildPatternEvidence, PATTERN_OBSERVATION_META } from '../engine/patternInsights.js'
 import { useStore } from '../state/store.jsx'
 import { OHIP_NOTE, ONTARIO_CARE_OPTIONS, ROUTE_CARE_REVIEW, URGENT_CARE_OPTIONS } from '../content/route/care.js'
 import { healthBackgroundProgress, healthBackgroundValues } from '../lib/healthBackground.js'
@@ -48,36 +53,18 @@ const TALK_TABS = [
     label: 'Before',
     title: 'Get ready',
     intro: 'Bring the details that are hardest to remember in the moment.',
-    items: [
-      ['summary', 'Open your pattern summary'],
-      ['questions', 'Choose your most important questions'],
-      ['medicines', 'Write down medicines or treatments you have tried'],
-      ['support', 'Decide whether you want someone with you'],
-    ],
   },
   {
     id: 'room',
     label: 'In the room',
     title: 'Say what matters first',
     intro: 'Start with the change, how long it has been happening, and how it affects your day.',
-    items: [
-      ['lead', 'Lead with the main concern'],
-      ['impact', 'Explain what it stops you from doing'],
-      ['show', 'Show your summary if it helps'],
-      ['clarify', 'Ask what happens next'],
-    ],
   },
   {
     id: 'after',
     label: 'After',
     title: 'Leave with a clear next step',
     intro: 'It is okay to ask for instructions again or write them down.',
-    items: [
-      ['plan', 'Write down the plan'],
-      ['followup', 'Confirm when to follow up'],
-      ['results', 'Ask how you will receive results'],
-      ['questions-after', 'Save questions that come up later'],
-    ],
   },
 ]
 
@@ -165,9 +152,9 @@ export function RouteHome() {
   )
 }
 
-function SummarySection({ title, children }) {
+function SummarySection({ id, title, children }) {
   return (
-    <section className="route-section">
+    <section id={id} className="route-section">
       <h2>{title}</h2>
       {children}
     </section>
@@ -183,31 +170,160 @@ function Metric({ label, value, detail }) {
   )
 }
 
+function countBreakdown(items = [], noun = 'day') {
+  return items.map((item) => `${item.name}: ${item.count} ${item.count === 1 ? noun : `${noun}s`}`).join(' · ')
+}
+
+function clotSummary(details) {
+  if (details.largestClot === 'Large') return 'Large clots reported'
+  if (details.largestClot === 'Small') return 'Small clots reported'
+  if (details.largestClot === 'None') return 'None reported'
+  if (details.clotCounts.some((item) => item.name === 'Not sure')) return 'Not sure'
+  if (details.clotCounts.some((item) => item.name === 'Prefer not to say')) return 'Not shared'
+  return 'Not logged'
+}
+
+function durationSummary(details) {
+  if (details.longestDuration) return details.longestDuration
+  if (details.durationCounts.some((item) => item.name === 'Not sure')) return 'Not sure'
+  if (details.durationCounts.some((item) => item.name === 'Prefer not to say')) return 'Not shared'
+  return 'Not logged'
+}
+
+function floodingSummary(details) {
+  if (!details.floodingAnsweredDays) return 'Not logged'
+  if (details.floodingDays) return `${details.floodingDays} ${details.floodingDays === 1 ? 'day' : 'days'}`
+  if (details.floodingUnknownDays) return 'Not sure'
+  if (details.floodingNotSharedDays) return 'Not shared'
+  return 'None reported'
+}
+
+function BleedingMetrics({ details }) {
+  const fullness = details.productFullness
+  const fullnessBasis = details.productLoggedDays
+    ? `Across ${details.productLoggedDays} ${details.productLoggedDays === 1 ? 'day' : 'days'} with protection fullness logged`
+    : ''
+  return (
+    <>
+      <Metric label="Flow" value={details.heaviestFlow ? `${details.heaviestFlow} at heaviest` : 'Not logged'} detail={countBreakdown(details.flowCounts)} />
+      <Metric label="Lightly full changes" value={details.productLoggedDays ? fullness.light : 'Not logged'} detail={fullnessBasis} />
+      <Metric label="About half full changes" value={details.productLoggedDays ? fullness.moderate : 'Not logged'} />
+      <Metric label="Fully soaked changes" value={details.productLoggedDays ? fullness.full : 'Not logged'} detail={details.fullySoakedDays ? `Logged on ${details.fullySoakedDays} ${details.fullySoakedDays === 1 ? 'day' : 'days'}` : ''} />
+      <Metric
+        label="Sudden soak-through"
+        value={floodingSummary(details)}
+        detail={details.floodingAnsweredDays ? `Answered on ${details.floodingAnsweredDays} ${details.floodingAnsweredDays === 1 ? 'day' : 'days'}` : ''}
+      />
+      <Metric label="Clots" value={clotSummary(details)} detail={countBreakdown(details.clotCounts)} />
+      <Metric label="Bleeding length" value={durationSummary(details)} detail={countBreakdown(details.durationCounts, 'entry')} />
+    </>
+  )
+}
+
+function SummaryAccordion({ id, title, summary, open, onToggle, children }) {
+  return (
+    <section id={id} className={`route-summary-accordion ${open ? 'is-open' : ''}`}>
+      <button type="button" aria-expanded={open} aria-controls={`${id}-content`} onClick={onToggle}>
+        <span>
+          <strong>{title}</strong>
+          <small>{summary}</small>
+        </span>
+        <CaretDown size={19} weight="bold" aria-hidden="true" />
+      </button>
+      {open && <div id={`${id}-content`} className="route-summary-accordion__content">{children}</div>}
+    </section>
+  )
+}
+
 export function RouteSummary() {
   if (!features.routeSummary) return <Navigate to="/home" replace />
-  const { state } = useStore()
+  const { state, dispatch } = useStore()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const windowKey = ROUTE_WINDOWS[searchParams.get('range')] ? searchParams.get('range') : '90'
+  const focusId = searchParams.get('focus')
+  const focusMeta = PATTERN_OBSERVATION_META[focusId] || null
   const summary = useMemo(() => buildRouteSummary({
     dailyLogs: state.dailyLogs,
     periodLogs: state.periodLogs,
     result: state.result,
     window: windowKey,
   }), [state.dailyLogs, state.periodLogs, state.result, windowKey])
+  const focusedEvidence = useMemo(() => {
+    if (!focusMeta) return null
+    const days = ROUTE_WINDOWS[windowKey].days || Math.max(ruleValue('observations.windowDays'), summary.windowDays)
+    return buildPatternEvidence(state.dailyLogs, state.periodLogs, new Date(), days).recurring.find((item) => item.id === focusId) || null
+  }, [focusId, focusMeta, state.dailyLogs, state.periodLogs, summary.windowDays, windowKey])
+  const selectedObservationIds = state.routePreferences?.selectedObservations || []
+  const selectedObservations = selectedObservationIds.map((id) => ({ id, ...PATTERN_OBSERVATION_META[id] })).filter((item) => item.title)
+  const [openSections, setOpenSections] = useState(() => new Set(focusMeta?.focusSection ? [focusMeta.focusSection] : []))
+  const visitItems = [
+    ...summary.flags.map((flag) => ({
+      id: `flag-${flag.id}`,
+      label: 'Worth discussing',
+      title: flag.title,
+      note: flag.note,
+      tone: 'flag',
+    })),
+    ...(focusMeta ? [{
+      id: `focus-${focusId}`,
+      observationId: focusId,
+      label: selectedObservationIds.includes(focusId) ? 'Reviewing · Added by you' : 'Reviewing',
+      title: focusMeta.title,
+      note: focusedEvidence?.body || 'This observation is no longer repeated in this time range, but you can still review the related entries.',
+      tone: 'focus',
+      removable: selectedObservationIds.includes(focusId),
+    }] : []),
+    ...selectedObservations.filter((item) => item.id !== focusId).map((item) => ({
+      id: `selected-${item.id}`,
+      observationId: item.id,
+      label: 'Added by you',
+      title: item.title,
+      note: 'Included in your visit preparation.',
+      tone: 'selected',
+      removable: true,
+    })),
+  ]
+
+  useEffect(() => {
+    if (!focusMeta) return
+    setOpenSections((current) => new Set([...current, focusMeta.focusSection]))
+    const timer = window.setTimeout(() => document.getElementById(`route-summary-${focusMeta.focusSection}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 180)
+    return () => window.clearTimeout(timer)
+  }, [focusMeta])
+
+  function removeSelectedObservation(id) {
+    dispatch({
+      type: 'SET_ROUTE_PREFERENCES',
+      payload: { selectedObservations: selectedObservationIds.filter((item) => item !== id) },
+    })
+  }
+
+  function toggleSection(id) {
+    setOpenSections((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div className="screen screen--pad-bottom route-screen">
       <TopBar title="Pattern summary" />
       <div className="route-segments" aria-label="Summary time range">
         {Object.entries(ROUTE_WINDOWS).map(([key, item]) => (
-          <button key={key} type="button" aria-pressed={windowKey === key} onClick={() => setSearchParams({ range: key })}>{item.label}</button>
+          <button key={key} type="button" aria-pressed={windowKey === key} onClick={() => {
+            const next = new URLSearchParams(searchParams)
+            next.set('range', key)
+            setSearchParams(next)
+          }}>{item.label}</button>
         ))}
       </div>
-      <div className="route-basis">
-        <CalendarDots size={20} weight="duotone" />
-        <div><strong>Based on {summary.loggedDays} logged {summary.loggedDays === 1 ? 'day' : 'days'} out of {summary.windowDays}</strong><span>{summary.completedCycles} completed {summary.completedCycles === 1 ? 'cycle' : 'cycles'} recorded</span></div>
-      </div>
+      <p className="route-summary-basis">
+        <CalendarDots size={17} weight="duotone" aria-hidden="true" />
+        <span>Based on <strong>{summary.loggedDays} logged {summary.loggedDays === 1 ? 'day' : 'days'} in this view</strong> · {summary.completedCycles} completed {summary.completedCycles === 1 ? 'cycle' : 'cycles'} recorded</span>
+      </p>
 
       {summary.stage === 'building' ? (
         <section className="route-progress-state">
@@ -219,48 +335,118 @@ export function RouteSummary() {
         </section>
       ) : (
         <>
-          {summary.stage === 'descriptive' && (
-            <div className="route-notice"><ShieldCheck size={21} /><p><strong>Your observations are ready.</strong><span>Maisie will wait for two completed cycles before showing pattern flags.</span></p></div>
-          )}
-          {summary.stage === 'flags' && summary.flags.length > 0 && (
-            <SummarySection title="Worth discussing">
-              <div className="route-flag-list">
-                {summary.flags.map((flag) => <div key={flag.id}><strong>{flag.title}</strong><p>{flag.note}</p></div>)}
+          <section className={`route-visit-overview ${visitItems.length ? '' : 'route-visit-overview--empty'}`} aria-labelledby="route-visit-overview-title">
+            <p className="eyebrow">For your visit</p>
+            <h2 id="route-visit-overview-title">{visitItems.length ? 'What to review' : 'Bring what matters to you'}</h2>
+            {visitItems.length ? (
+              <div className="route-visit-overview__items">
+                {visitItems.map((item) => (
+                  <div key={item.id} className={`route-visit-item route-visit-item--${item.tone}`}>
+                    <span>
+                      <small>{item.label}</small>
+                      <strong>{item.title}</strong>
+                      <p>{item.note}</p>
+                    </span>
+                    {item.removable && (
+                      <button type="button" onClick={() => removeSelectedObservation(item.observationId)} aria-label={`Remove ${item.title} from visit preparation`}>
+                        <X size={16} weight="bold" />
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            </SummarySection>
-          )}
-          <SummarySection title="At a glance">
-            <Metric label="Days logged" value={summary.loggedDays} />
-            <Metric label="Bleeding days" value={summary.metrics.bleedingDays || 'None logged'} />
-            <Metric label="Days affected" value={summary.metrics.impactDays || 'None logged'} detail="School, sleep, movement, or plans" />
-          </SummarySection>
-          <SummarySection title="Cycles">
+            ) : <p>No discussion item has been identified from this view. You can still prepare anything that concerns you.</p>}
+            {summary.stage === 'descriptive' && (
+              <p className="route-visit-overview__status"><ShieldCheck size={17} weight="duotone" /> Pattern checks begin after two completed cycles.</p>
+            )}
+            <Link className="route-visit-overview__action" to={focusId ? `/route/talk?focus=${encodeURIComponent(focusId)}` : '/route/talk'}>
+              <ChatCircleText size={19} weight="duotone" />
+              <span>Prepare what to say</span>
+              <ArrowRight size={17} weight="bold" />
+            </Link>
+          </section>
+
+          <section className="route-summary-snapshot" aria-labelledby="route-summary-snapshot-title">
+            <div className="route-summary-snapshot__heading">
+              <h2 id="route-summary-snapshot-title">{windowKey === 'all' ? 'All-time snapshot' : `${summary.windowLabel.replace(' days', '')}-day snapshot`}</h2>
+              <span>{summary.loggedDays} days logged</span>
+            </div>
+            <div className="route-summary-snapshot__stats">
+              <div><strong>{summary.metrics.bleedingDays || 'None'}</strong><span>Bleeding days</span></div>
+              <div><strong>{summary.metrics.worstPain === null ? '—' : `${summary.metrics.worstPain}/10`}</strong><span>Highest pain</span></div>
+              <div><strong>{summary.metrics.impactDays || 'None'}</strong><span>Days affected</span></div>
+            </div>
+          </section>
+
+          <div className="route-summary-details__heading"><h2>Details</h2></div>
+          <SummaryAccordion
+            id="route-summary-cycles"
+            title="Cycles"
+            summary={summary.metrics.averageCycleDays ? `${summary.completedCycles} completed · ${summary.metrics.averageCycleDays}-day average` : `${summary.completedCycles} completed · Still collecting`}
+            open={openSections.has('cycles')}
+            onToggle={() => toggleSection('cycles')}
+          >
             {summary.cycles.length ? summary.cycles.map((cycle) => (
               <Metric key={cycle.start} label={new Date(`${cycle.start}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} value={`${cycle.cycleDays} days`} detail={`${cycle.periodDays} bleeding ${cycle.periodDays === 1 ? 'day' : 'days'} logged`} />
             )) : <p className="route-empty">Not enough completed cycle dates in this view.</p>}
-          </SummarySection>
-          <SummarySection title="Pain">
+          </SummaryAccordion>
+          <SummaryAccordion
+            id="route-summary-bleeding"
+            title="Bleeding details"
+            summary={summary.metrics.bleedingDetails.loggedDays
+              ? `${summary.metrics.bleedingDetails.loggedDays} ${summary.metrics.bleedingDetails.loggedDays === 1 ? 'day' : 'days'} with details · ${summary.metrics.bleedingDays} bleeding ${summary.metrics.bleedingDays === 1 ? 'day' : 'days'}`
+              : summary.metrics.bleedingDays ? `${summary.metrics.bleedingDays} bleeding ${summary.metrics.bleedingDays === 1 ? 'day' : 'days'} · Details not logged` : 'No bleeding details logged'}
+            open={openSections.has('bleeding')}
+            onToggle={() => toggleSection('bleeding')}
+          >
+            <BleedingMetrics details={summary.metrics.bleedingDetails} />
+          </SummaryAccordion>
+          <SummaryAccordion
+            id="route-summary-pain"
+            title="Pain"
+            summary={summary.metrics.worstPain === null ? 'No pain logged' : `Highest ${summary.metrics.worstPain}/10 · ${summary.metrics.painLogCount} ${summary.metrics.painLogCount === 1 ? 'entry' : 'entries'}`}
+            open={openSections.has('pain')}
+            onToggle={() => toggleSection('pain')}
+          >
             <Metric label="Pain entries" value={summary.metrics.painLogCount || 'None logged'} />
             <Metric label="Highest logged" value={summary.metrics.worstPain === null ? 'Not logged' : `${summary.metrics.worstPain}/10`} />
             <Metric label="Severe pain days" value={summary.metrics.highPainDays || 'None logged'} />
-          </SummarySection>
-          <SummarySection title="Daily impact">
+          </SummaryAccordion>
+          <SummaryAccordion
+            id="route-summary-impact"
+            title="Daily impact"
+            summary={summary.metrics.impactDays ? `${summary.metrics.impactDays} ${summary.metrics.impactDays === 1 ? 'day' : 'days'} affected` : 'No impact logged'}
+            open={openSections.has('impact')}
+            onToggle={() => toggleSection('impact')}
+          >
             {summary.metrics.impacts.length ? summary.metrics.impacts.map((item) => <Metric key={item.name} label={item.name} value={`${item.count} ${item.count === 1 ? 'day' : 'days'}`} />) : <p className="route-empty">No daily impact was logged in this view.</p>}
-          </SummarySection>
-          <SummarySection title="Mood">
+          </SummaryAccordion>
+          <SummaryAccordion
+            id="route-summary-mood"
+            title="Mood"
+            summary={summary.metrics.averageMood === null ? 'Still collecting' : `${summary.metrics.moodLogCount} ${summary.metrics.moodLogCount === 1 ? 'entry' : 'entries'} · ${summary.metrics.averageMood}/5 average`}
+            open={openSections.has('mood')}
+            onToggle={() => toggleSection('mood')}
+          >
             <Metric label="Mood entries" value={summary.metrics.moodLogCount || 'None logged'} />
             <Metric label="Average" value={summary.metrics.averageMood === null ? 'Not enough data' : `${summary.metrics.averageMood}/5`} />
             <Metric label="Timing across cycles" value={summary.metrics.moodPattern.comparedCycles ? `${summary.metrics.moodPattern.comparedCycles} compared` : 'Still collecting'} detail={summary.metrics.moodPattern.summary} />
-          </SummarySection>
-          <SummarySection title="Symptoms by area">
+          </SummaryAccordion>
+          <SummaryAccordion
+            id="route-summary-symptoms"
+            title="Symptoms by area"
+            summary={summary.metrics.symptomClusters.length ? `${summary.metrics.symptomClusters.length} ${summary.metrics.symptomClusters.length === 1 ? 'area' : 'areas'} logged` : 'No symptoms logged'}
+            open={openSections.has('symptoms')}
+            onToggle={() => toggleSection('symptoms')}
+          >
             {summary.metrics.symptomClusters.length ? summary.metrics.symptomClusters.map((cluster) => (
               <div className="route-cluster-summary" key={cluster.id}>
                 <h3>{cluster.label}</h3>
                 {cluster.symptoms.map((item) => <Metric key={item.name} label={item.name} value={`${item.count} ${item.count === 1 ? 'day' : 'days'}`} />)}
               </div>
             )) : <p className="route-empty">No symptoms were logged in this view.</p>}
-          </SummarySection>
-          <Button block onClick={() => navigate(`/route/summary/export?range=${windowKey}`)}>Export or share</Button>
+          </SummaryAccordion>
+          <Button block variant="secondary" className="route-summary-export" onClick={() => navigate(`/route/summary/export?range=${windowKey}`)}><DownloadSimple size={18} /> Export or share</Button>
         </>
       )}
       <p className="route-disclaimer">This summary reflects only what was entered in Maisie. Missing entries do not mean that a symptom was absent.</p>
@@ -282,7 +468,19 @@ function summaryText(summary, identity, preferences) {
     `${summary.completedCycles} completed cycles`,
   ].filter(Boolean)
   if (preferences.exportSections.overview) lines.push(`Bleeding: ${summary.metrics.bleedingDays} days; daily impact: ${summary.metrics.impactDays} days`)
-  if (preferences.exportSections.cycles && summary.metrics.averageCycleDays) lines.push(`Average completed cycle: ${summary.metrics.averageCycleDays} days`)
+  if (preferences.exportSections.cycles) {
+    if (summary.metrics.averageCycleDays) lines.push(`Average completed cycle: ${summary.metrics.averageCycleDays} days`)
+    if (summary.metrics.averagePeriodDays) lines.push(`Average marked bleeding length: ${summary.metrics.averagePeriodDays} days`)
+  }
+  if (preferences.exportSections.bleeding) {
+    const details = summary.metrics.bleedingDetails
+    lines.push('Bleeding details:')
+    lines.push(`- Flow: ${details.heaviestFlow ? `${details.heaviestFlow} at heaviest${details.flowCounts.length ? ` (${countBreakdown(details.flowCounts)})` : ''}` : 'not logged'}`)
+    lines.push(`- Protection fullness: ${details.productLoggedDays ? `${details.totalProductChanges} changes logged; lightly full ${details.productFullness.light}, about half full ${details.productFullness.moderate}, fully soaked ${details.productFullness.full}` : 'not logged'}`)
+    lines.push(`- Sudden soak-through: ${floodingSummary(details).toLowerCase()}`)
+    lines.push(`- Clots: ${clotSummary(details).toLowerCase()}${details.clotCounts.length ? ` (${countBreakdown(details.clotCounts)})` : ''}`)
+    lines.push(`- Bleeding length: ${durationSummary(details).toLowerCase()}${details.durationCounts.length ? ` (${countBreakdown(details.durationCounts, 'entry')})` : ''}`)
+  }
   if (preferences.exportSections.pain) lines.push(`Highest logged pain: ${summary.metrics.worstPain === null ? 'not logged' : `${summary.metrics.worstPain}/10`}`)
   if (preferences.exportSections.impact) lines.push(`Days affected: ${summary.metrics.impactDays}`)
   if (preferences.exportSections.mood) {
@@ -294,6 +492,13 @@ function summaryText(summary, identity, preferences) {
       lines.push(`${cluster.label}: ${cluster.symptoms.map((item) => `${item.name} (${item.count})`).join(', ')}`)
     }
     if (!summary.metrics.symptomClusters.length) lines.push('Symptoms: none logged')
+  }
+  if (preferences.selectedObservations?.length) {
+    lines.push('Selected for your visit:')
+    for (const id of preferences.selectedObservations) {
+      const item = PATTERN_OBSERVATION_META[id]
+      if (item) lines.push(`- ${item.title}`)
+    }
   }
   if (preferences.personalNote) lines.push(`Personal note: ${preferences.personalNote}`)
   lines.push('This summary is based on information entered by the user and is not a diagnosis.')
@@ -343,7 +548,7 @@ export function RouteExport() {
       <div className="route-export-controls">
         <fieldset>
           <legend>Include</legend>
-          {Object.entries({ overview: 'Overview', cycles: 'Cycles', pain: 'Pain', impact: 'Daily impact', mood: 'Mood', symptoms: 'Symptoms' }).map(([key, label]) => (
+          {Object.entries({ overview: 'Overview', cycles: 'Cycles', bleeding: 'Bleeding details', pain: 'Pain', impact: 'Daily impact', mood: 'Mood', symptoms: 'Symptoms' }).map(([key, label]) => (
             <label key={key}><span>{label}</span><input type="checkbox" checked={preferences.exportSections[key]} onChange={(event) => updatePreferences({ exportSections: { ...preferences.exportSections, [key]: event.target.checked } })} /></label>
           ))}
         </fieldset>
@@ -362,7 +567,8 @@ export function RouteExport() {
         {exportName(state.identity, preferences.nameMode) && <p className="route-print-name">Prepared for {exportName(state.identity, preferences.nameMode)}</p>}
         <p><strong>{summary.windowLabel}</strong> · {summary.loggedDays} logged days out of {summary.windowDays} · {summary.completedCycles} completed cycles</p>
         {preferences.exportSections.overview && <SummarySection title="Overview"><Metric label="Bleeding days" value={summary.metrics.bleedingDays} /><Metric label="Days affected" value={summary.metrics.impactDays} /></SummarySection>}
-        {preferences.exportSections.cycles && <SummarySection title="Cycles"><Metric label="Completed cycles" value={summary.completedCycles} /><Metric label="Average cycle" value={summary.metrics.averageCycleDays ? `${summary.metrics.averageCycleDays} days` : 'Not enough data'} /></SummarySection>}
+        {preferences.exportSections.cycles && <SummarySection title="Cycles"><Metric label="Completed cycles" value={summary.completedCycles} /><Metric label="Average cycle" value={summary.metrics.averageCycleDays ? `${summary.metrics.averageCycleDays} days` : 'Not enough data'} /><Metric label="Average marked bleeding length" value={summary.metrics.averagePeriodDays ? `${summary.metrics.averagePeriodDays} days` : 'Not enough data'} /></SummarySection>}
+        {preferences.exportSections.bleeding && <SummarySection title="Bleeding details"><BleedingMetrics details={summary.metrics.bleedingDetails} /></SummarySection>}
         {preferences.exportSections.pain && <SummarySection title="Pain"><Metric label="Highest logged" value={summary.metrics.worstPain === null ? 'Not logged' : `${summary.metrics.worstPain}/10`} /><Metric label="Severe pain days" value={summary.metrics.highPainDays} /></SummarySection>}
         {preferences.exportSections.impact && <SummarySection title="Daily impact"><Metric label="Days affected" value={summary.metrics.impactDays} /></SummarySection>}
         {preferences.exportSections.mood && <SummarySection title="Mood"><Metric label="Mood entries" value={summary.metrics.moodLogCount} /><Metric label="Timing across cycles" value={summary.metrics.moodPattern.comparedCycles ? `${summary.metrics.moodPattern.comparedCycles} compared` : 'Still collecting'} detail={summary.metrics.moodPattern.summary} /></SummarySection>}
@@ -374,6 +580,13 @@ export function RouteExport() {
             </div>
           )) : <p className="route-empty">No symptoms were logged in this view.</p>}
         </SummarySection>}
+        {preferences.selectedObservations?.length > 0 && (
+          <SummarySection title="Selected for your visit">
+            <div className="route-print-observations">
+              {preferences.selectedObservations.map((id) => PATTERN_OBSERVATION_META[id] && <p key={id}>{PATTERN_OBSERVATION_META[id].title}</p>)}
+            </div>
+          </SummarySection>
+        )}
         {preferences.personalNote && <SummarySection title="Personal note"><p>{preferences.personalNote}</p></SummarySection>}
         <p className="route-disclaimer">This summary reflects information entered by the user. It is not medical advice or a diagnosis.</p>
       </article>
@@ -400,56 +613,154 @@ export function RouteExport() {
   )
 }
 
+function VisitPrepRow({ to, onClick, Icon, title, status, complete = false, expanded = false }) {
+  const className = `route-prep-task ${complete ? 'is-complete' : ''}`
+  const content = (
+    <>
+      <span className="route-prep-task__icon" aria-hidden="true"><Icon size={20} weight="duotone" /></span>
+      <span className="route-prep-task__copy"><strong>{title}</strong><small>{status}</small></span>
+      {onClick
+        ? <CaretDown className={expanded ? 'is-expanded' : ''} size={18} weight="bold" aria-hidden="true" />
+        : <ArrowRight size={18} weight="bold" aria-hidden="true" />}
+    </>
+  )
+  if (to) return <Link className={className} to={to} state={to === '/me/health-background' ? { from: 'route' } : undefined}>{content}</Link>
+  return <button className={className} type="button" onClick={onClick} aria-expanded={expanded}>{content}</button>
+}
+
+function VisitNotesField({ label, value, placeholder, onChange }) {
+  return (
+    <label className="route-visit-field">
+      <span>{label}</span>
+      <textarea maxLength={1000} value={value || ''} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  )
+}
+
 export function RouteTalk() {
   if (!features.routeSummary) return <Navigate to="/home" replace />
-  const { state } = useStore()
+  const { state, dispatch } = useStore()
   const [preferences, updatePreferences] = useRoutePreferences()
+  const [searchParams] = useSearchParams()
   const [activeTab, setActiveTab] = useState('before')
   const [copied, setCopied] = useState(false)
+  const [questionsOpen, setQuestionsOpen] = useState(false)
+  const [medicinesOpen, setMedicinesOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
+  const [medicineDraft, setMedicineDraft] = useState(() => (state.history.medications || []).map((item) => typeof item === 'string' ? item : item?.name || '').filter(Boolean).join('\n'))
+  const screenRef = useRef(null)
   const tab = TALK_TABS.find((item) => item.id === activeTab)
-  const script = 'I have been tracking a change in my health. It has been happening for a while and it affects my day. I would like to understand what the next step should be.'
-  function toggleChecklist(key) {
-    updatePreferences({ checklist: { ...preferences.checklist, [key]: !preferences.checklist[key] } })
-  }
+  const focusId = PATTERN_OBSERVATION_META[searchParams.get('focus')] ? searchParams.get('focus') : null
+  const selectedObservationIds = preferences.selectedObservations || []
+  const visitObservationIds = [...new Set([focusId, ...selectedObservationIds].filter(Boolean))]
+  const focusedObservation = PATTERN_OBSERVATION_META[focusId || selectedObservationIds[0]]
+  const script = focusedObservation?.visitScript || 'I have been tracking a change in my health. It has been happening for a while and it affects my day. I would like to understand what the next step should be.'
+  const backgroundProgress = healthBackgroundProgress(healthBackgroundValues(state.answers, state.history))
+  const routeSummary = useMemo(() => buildRouteSummary({
+    dailyLogs: state.dailyLogs,
+    periodLogs: state.periodLogs,
+    result: state.result,
+    window: '90',
+  }), [state.dailyLogs, state.periodLogs, state.result])
+  const medicines = (state.history.medications || []).map((item) => typeof item === 'string' ? item : item?.name || '').filter(Boolean)
+  const supportLabels = { yes: 'Bringing someone', no: 'Going on your own', unsure: 'Still deciding' }
+  const visitNotes = preferences.visitNotes || {}
+  const prepStates = [
+    routeSummary.loggedDays > 0,
+    backgroundProgress.complete,
+    preferences.selectedQuestions.length > 0,
+    medicines.length > 0,
+    Boolean(preferences.supportChoice),
+  ]
+  const prepComplete = prepStates.filter(Boolean).length
+
+  useEffect(() => {
+    screenRef.current?.scrollTo({ top: 0 })
+  }, [activeTab])
+
   function toggleQuestion(question) {
     const selected = preferences.selectedQuestions.includes(question)
     updatePreferences({ selectedQuestions: selected ? preferences.selectedQuestions.filter((item) => item !== question) : [...preferences.selectedQuestions, question] })
+  }
+  function saveMedicines() {
+    const next = medicineDraft.split(/\n+/).map((item) => item.trim()).filter(Boolean).slice(0, 20)
+    dispatch({ type: 'SET_HISTORY', payload: { medications: next } })
+    setMedicinesOpen(false)
+  }
+  function updateVisitNote(key, value) {
+    updatePreferences({ visitNotes: { ...visitNotes, [key]: value } })
   }
   async function copyScript() {
     await navigator.clipboard.writeText(script)
     setCopied(true)
     window.setTimeout(() => setCopied(false), 1800)
   }
+
   return (
-    <div className="screen screen--pad-bottom route-screen">
+    <div ref={screenRef} className="screen screen--pad-bottom route-screen">
       <TopBar title="Talk to a clinician" />
       <p className="route-lede">A little preparation can make it easier to explain what has been changing and what you need.</p>
-      <Link className="route-background-link" to="/me/health-background" state={{ from: 'route' }}>
-        <span><strong>My health background</strong><small>{healthBackgroundProgress(healthBackgroundValues(state.answers, state.history)).complete ? 'Review the context Maisie uses to personalize visit preparation.' : 'Add context that can make visit preparation more useful.'}</small></span>
-        <ArrowRight size={18} aria-hidden="true" />
-      </Link>
       <div className="route-segments route-segments--three" aria-label="Visit timing">
         {TALK_TABS.map((item) => <button key={item.id} type="button" aria-pressed={activeTab === item.id} onClick={() => setActiveTab(item.id)}>{item.label}</button>)}
       </div>
+
       <section className="route-talk-panel">
         <h1>{tab.title}</h1>
         <p>{tab.intro}</p>
-        <div className="route-checklist">
-          {tab.items.map(([key, label]) => <label key={key}><input type="checkbox" checked={Boolean(preferences.checklist[key])} onChange={() => toggleChecklist(key)} /><span>{label}</span></label>)}
-        </div>
+
+        {activeTab === 'before' && (
+          <>
+            <div className="route-prep-progress">
+              <span><strong>{prepComplete} of {prepStates.length}</strong> ready</span>
+              <div className="route-progress" role="progressbar" aria-valuenow={prepComplete} aria-valuemin="0" aria-valuemax={prepStates.length}><span style={{ width: `${(prepComplete / prepStates.length) * 100}%` }} /></div>
+            </div>
+
+            <div className="route-main-concern">
+              <span><small>Main concern</small><strong>{focusedObservation?.title || 'Choose what you want to discuss'}</strong></span>
+              <Link to="/patterns?tab=signals">{focusedObservation ? 'Change' : 'Choose'}</Link>
+            </div>
+
+            <div className="route-prep-tasks">
+              <VisitPrepRow to="/route/summary" Icon={ClipboardText} title="Pattern summary" status={routeSummary.loggedDays ? `${routeSummary.loggedDays} logged ${routeSummary.loggedDays === 1 ? 'day' : 'days'}` : 'No check-ins yet'} complete={routeSummary.loggedDays > 0} />
+              <VisitPrepRow to="/me/health-background" Icon={ShieldCheck} title="Health background" status={backgroundProgress.complete ? 'Ready to review' : `${backgroundProgress.total - backgroundProgress.answered} questions left`} complete={backgroundProgress.complete} />
+              <VisitPrepRow Icon={ChatCircleText} title="Questions to ask" status={preferences.selectedQuestions.length ? `${preferences.selectedQuestions.length} selected` : 'Choose the questions that matter most'} complete={preferences.selectedQuestions.length > 0} expanded={questionsOpen} onClick={() => setQuestionsOpen((value) => !value)} />
+              {questionsOpen && <div className="route-prep-editor"><div className="route-question-list">{QUESTION_OPTIONS.map((question) => <button key={question} type="button" aria-pressed={preferences.selectedQuestions.includes(question)} onClick={() => toggleQuestion(question)}>{question}</button>)}</div></div>}
+              <VisitPrepRow Icon={NotePencil} title="Medicines and treatments" status={medicines.length ? `${medicines.length} added` : 'Add what you have already tried'} complete={medicines.length > 0} expanded={medicinesOpen} onClick={() => setMedicinesOpen((value) => !value)} />
+              {medicinesOpen && <div className="route-prep-editor"><label className="route-visit-field"><span>One item per line</span><textarea maxLength={600} value={medicineDraft} placeholder={'Ibuprofen\nHeating pad'} onChange={(event) => setMedicineDraft(event.target.value)} /></label><Button block onClick={saveMedicines}>Save medicines</Button></div>}
+              <VisitPrepRow Icon={Users} title="Support person" status={supportLabels[preferences.supportChoice] || 'Decide whether someone will join you'} complete={Boolean(preferences.supportChoice)} expanded={supportOpen} onClick={() => setSupportOpen((value) => !value)} />
+              {supportOpen && <div className="route-prep-editor route-support-options">{[['yes', 'Someone will join me'], ['no', 'I will go on my own'], ['unsure', 'I am still deciding']].map(([value, label]) => <button key={value} type="button" aria-pressed={preferences.supportChoice === value} onClick={() => { updatePreferences({ supportChoice: value }); setSupportOpen(false) }}>{label}</button>)}</div>}
+            </div>
+
+            <button type="button" className="route-appointment-preview" onClick={() => setActiveTab('room')}><span>Open appointment view</span><ArrowRight size={18} weight="bold" /></button>
+          </>
+        )}
+
+        {activeTab === 'room' && (
+          <div className="route-appointment-mode">
+            <section>
+              <h2>A way to start</h2>
+              <blockquote className="route-script">“{script}”</blockquote>
+              <button className="route-copy-button" type="button" onClick={copyScript}>{copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copied' : 'Copy statement'}</button>
+            </section>
+            {visitObservationIds.length > 0 && <section><h2>What you want to discuss</h2><ul className="route-appointment-list">{visitObservationIds.map((id) => PATTERN_OBSERVATION_META[id] && <li key={id}>{PATTERN_OBSERVATION_META[id].title}</li>)}</ul></section>}
+            <section><h2>Your questions</h2>{preferences.selectedQuestions.length ? <ol className="route-appointment-list">{preferences.selectedQuestions.map((question) => <li key={question}>{question}</li>)}</ol> : <p className="route-empty">No questions selected yet.</p>}</section>
+            {medicines.length > 0 && <section><h2>What you have tried</h2><ul className="route-appointment-list">{medicines.map((item) => <li key={item}>{item}</li>)}</ul></section>}
+            <VisitNotesField label="Notes from the conversation" value={visitNotes.room} placeholder="Write down anything you want to remember" onChange={(value) => updateVisitNote('room', value)} />
+            <Link className="route-dismissed-link" to="/route/talk/dismissed">If you feel dismissed <ArrowRight size={17} /></Link>
+          </div>
+        )}
+
+        {activeTab === 'after' && (
+          <div className="route-after-visit">
+            <VisitNotesField label="The plan" value={visitNotes.plan} placeholder="What did the clinician recommend?" onChange={(value) => updateVisitNote('plan', value)} />
+            <VisitNotesField label="Tests, referrals, or medicine changes" value={visitNotes.tests} placeholder="Add anything that needs to happen next" onChange={(value) => updateVisitNote('tests', value)} />
+            <label className="route-visit-field"><span>Follow-up date</span><NativeDateField id="route-follow-up-date" label="Follow-up date" value={visitNotes.followUpDate || ''} onChange={(event) => updateVisitNote('followUpDate', event.target.value)} /></label>
+            <VisitNotesField label="Questions for next time" value={visitNotes.remainingQuestions} placeholder="Save anything you still want to ask" onChange={(value) => updateVisitNote('remainingQuestions', value)} />
+            <Link className="route-appointment-preview" to="/route/summary"><span>Review your pattern summary</span><ArrowRight size={18} weight="bold" /></Link>
+          </div>
+        )}
       </section>
-      {activeTab === 'before' && (
-        <SummarySection title="Questions to bring">
-          <div className="route-question-list">{QUESTION_OPTIONS.map((question) => <button key={question} type="button" aria-pressed={preferences.selectedQuestions.includes(question)} onClick={() => toggleQuestion(question)}>{question}</button>)}</div>
-        </SummarySection>
-      )}
-      {activeTab === 'room' && (
-        <SummarySection title="A way to start">
-          <blockquote className="route-script">“{script}”</blockquote>
-          <button className="route-copy-button" type="button" onClick={copyScript}>{copied ? <Check size={18} /> : <Copy size={18} />} {copied ? 'Copied' : 'Copy script'}</button>
-        </SummarySection>
-      )}
-      <Link className="route-dismissed-link" to="/route/talk/dismissed">If you feel dismissed <ArrowRight size={17} /></Link>
+
       <p className="route-disclaimer">These prompts help you prepare for a conversation. They are not medical advice.</p>
     </div>
   )

@@ -12,7 +12,7 @@ function displayDate(value) {
   }).format(date)
 }
 
-export default function NativeDateField({ id, value, max, onChange, label = 'Date' }) {
+export default function NativeDateField({ id, value, min, max, onChange, label = 'Date' }) {
   const inputRef = useRef(null)
 
   function openPicker() {
@@ -47,6 +47,7 @@ export default function NativeDateField({ id, value, max, onChange, label = 'Dat
         id={id}
         className="native-date-field__input"
         type="date"
+        min={min}
         max={max}
         value={value}
         onChange={onChange}

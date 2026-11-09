@@ -7,6 +7,8 @@ import { clearLegacyHealthStorage, trackerRecords } from '../lib/trackerRecords.
 import { clearSignupDraft, readSignupDraft } from '../lib/signupDraft.js'
 import { bufferedMonthRange, monthCacheKey } from '../lib/historyWindow.js'
 import { ageBandFromBirthMonthYear } from '../lib/age.js'
+import { birthControlContext, withBirthControlCompatibility } from '../data/questions.js'
+import { evaluateRules, ruleValue, serverRuleVersionStatus } from '../engine/rules/index.js'
 import { clearGuestTracker, readGuestTracker, saveGuestTracker } from '../lib/guestTracker.js'
 import { clearLegacyRoutePreferences, hasLegacyRoutePreferences, readRoutePreferences } from '../lib/routePreferences.js'
 import {
@@ -78,8 +80,8 @@ export function freshState() {
     periodicCheckins: [],
     checklists: { talkToDoctor: { ...DEFAULT_CHECKLISTS_V3.talkToDoctor } },
     routePreferences: {
-      selectedQuestions: [], personalNote: '', nameMode: 'first',
-      exportSections: { overview: true, cycles: true, pain: true, impact: true, mood: true, symptoms: true },
+      selectedQuestions: [], selectedObservations: [], personalNote: '', nameMode: 'first',
+      exportSections: { overview: true, cycles: true, bleeding: true, pain: true, impact: true, mood: true, symptoms: true },
       privacyWarningSeen: false, lastExportedAt: null,
     },
     answers: {},
@@ -131,7 +133,7 @@ function seedPeriodLogsFromAnswers(periodLogs, answers) {
   if (!lastStart) return periodLogs
 
   const safeLastEnd = lastEnd && diffDays(lastEnd, lastStart) >= 0 ? lastEnd : lastStart
-  const lastSpan = Math.min(diffDays(safeLastEnd, lastStart), 9)
+  const lastSpan = Math.min(diffDays(safeLastEnd, lastStart), ruleValue('cycle.onboardingPeriodMaximumDays') - 1)
   seedRange(prevStart, 0, 'onboarding-prev')
   seedRange(lastStart, lastSpan, 'onboarding-last')
 
@@ -154,7 +156,7 @@ function estimatedPeriodLength(periodLogs = {}) {
     .map(([key]) => key)
     .sort()
 
-  if (periodKeys.length === 0) return 5
+  if (periodKeys.length === 0) return ruleValue('cycle.defaultPeriodDays')
 
   const runs = []
   let currentRun = [periodKeys[0]]
@@ -172,7 +174,13 @@ function estimatedPeriodLength(periodLogs = {}) {
   runs.push(currentRun)
 
   const average = runs.reduce((sum, run) => sum + run.length, 0) / runs.length
-  return Math.max(3, Math.min(7, Math.round(average || 5)))
+  return Math.max(
+    ruleValue('cycle.estimatedPeriodMinimumDays'),
+    Math.min(
+      ruleValue('cycle.estimatedPeriodMaximumDays'),
+      Math.round(average || ruleValue('cycle.defaultPeriodDays')),
+    ),
+  )
 }
 
 function hasMeaningfulPeriodFields(log = {}) {
@@ -260,6 +268,10 @@ function normalizeResult(result) {
   }
 }
 
+function evaluateStateRules({ answers = {}, dailyLogs = {}, periodLogs = {} }) {
+  return evaluateRules({ answers, dailyLogs, periodLogs })
+}
+
 function normalizeSavedHealth(payload = {}) {
   const migrated = migrateStoreV3(payload)
   const answers = migrated.answers || {}
@@ -276,12 +288,16 @@ function normalizeSavedHealth(payload = {}) {
     periodLogs = addPossiblePeriodDays(periodLogs, start)
   }
 
+  const savedResult = normalizeResult(payload.result)
+  const result = serverRuleVersionStatus(savedResult) === 'current'
+    ? savedResult
+    : evaluateStateRules({ answers, dailyLogs, periodLogs })
   return {
     ...migrated,
     profile,
     notifyPrefs: { ...DEFAULT_NOTIFY_PREFS, ...(payload.notifyPrefs || {}) },
     tipHistory: payload.tipHistory || {},
-    result: normalizeResult(payload.result),
+    result,
     dailyLogs,
     periodLogs,
     pendingTier2: (payload.pendingTier2 || []).map(normalizeFlagId),
@@ -299,7 +315,12 @@ export function reducer(state, action) {
       const dailyLogs = { ...state.dailyLogs, ...(action.dailyLogs || {}) }
       let periodLogs = { ...state.periodLogs, ...(action.periodLogs || {}) }
       for (const start of periodStartKeys(periodLogs)) periodLogs = addPossiblePeriodDays(periodLogs, start)
-      return { ...state, dailyLogs, periodLogs }
+      return {
+        ...state,
+        dailyLogs,
+        periodLogs,
+        result: evaluateStateRules({ answers: state.answers, dailyLogs, periodLogs }),
+      }
     }
 
     case 'SET_AUTH_USER':
@@ -314,7 +335,16 @@ export function reducer(state, action) {
       }
 
     case 'SERVER_RESULT':
-      return { ...state, result: action.result }
+      if (serverRuleVersionStatus(action.result) === 'current') {
+        return { ...state, result: normalizeResult(action.result) }
+      }
+      return {
+        ...state,
+        result: {
+          ...evaluateStateRules(state),
+          staleServerRuleVersion: action.result?.ruleVersion || null,
+        },
+      }
 
     case 'SET_STEP':
       return { ...state, step: action.step }
@@ -404,10 +434,11 @@ export function reducer(state, action) {
       return { ...state, identity: { ...state.identity, ...action.payload } }
 
     case 'SAVE_CHECKIN': {
-      const answers = action.answers
-      const onBC = answers.birthControl === 'Yes'
+      const answers = withBirthControlCompatibility(action.answers)
+      const birthControl = birthControlContext(answers)
+      const onBC = birthControl.affectsCycleInterpretation
       const periodLogs = seedPeriodLogsFromAnswers(removeOnboardingPeriodLogs(state.periodLogs), answers)
-      const result = null
+      const result = evaluateStateRules({ answers, dailyLogs: state.dailyLogs, periodLogs })
       const history = state.checkinHistory
       return {
         ...state,
@@ -424,10 +455,14 @@ export function reducer(state, action) {
 
     case 'ANSWER_PROGRESSIVE': {
       // Saves a single deferred onboarding answer and advances the progress index.
-      const updatedAnswers = { ...state.answers, [action.key]: action.value }
-      const onBC = updatedAnswers.birthControl === 'Yes'
-      // Clear the old result until the server processes the changed answer.
-      const updatedResult = null
+      const updatedAnswers = withBirthControlCompatibility({ ...state.answers, [action.key]: action.value })
+      const birthControl = birthControlContext(updatedAnswers)
+      const onBC = birthControl.affectsCycleInterpretation
+      const updatedResult = evaluateStateRules({
+        answers: updatedAnswers,
+        dailyLogs: state.dailyLogs,
+        periodLogs: state.periodLogs,
+      })
       return {
         ...state,
         answers: updatedAnswers,
@@ -438,12 +473,18 @@ export function reducer(state, action) {
     }
 
     case 'SAVE_HEALTH_BACKGROUND': {
-      const updatedAnswers = { ...state.answers, ...action.answers }
+      const updatedAnswers = withBirthControlCompatibility({ ...state.answers, ...action.answers })
+      const birthControl = birthControlContext(updatedAnswers)
+      const onBC = birthControl.affectsCycleInterpretation
       return {
         ...state,
         answers: updatedAnswers,
-        profile: { ...state.profile, onBirthControl: updatedAnswers.birthControl === 'Yes' },
-        result: null,
+        profile: { ...state.profile, onBirthControl: onBC },
+        result: evaluateStateRules({
+          answers: updatedAnswers,
+          dailyLogs: state.dailyLogs,
+          periodLogs: state.periodLogs,
+        }),
         progressiveQIndex: Object.values(updatedAnswers).filter((value) =>
           Array.isArray(value) ? value.length > 0 : value !== undefined && value !== null && value !== '',
         ).length,
@@ -536,7 +577,13 @@ export function reducer(state, action) {
         lastCheckinDate = dateKey
       }
 
-      let next = { ...state, dailyLogs, streak, lastCheckinDate, result: null }
+      let next = {
+        ...state,
+        dailyLogs,
+        streak,
+        lastCheckinDate,
+        result: evaluateStateRules({ answers: state.answers, dailyLogs, periodLogs: state.periodLogs }),
+      }
 
       return next
     }
@@ -594,7 +641,7 @@ export function reducer(state, action) {
         lastStart: starts.at(-1) || undefined,
         prevStart: starts.at(-2) || undefined,
       }
-      const result = null
+      const result = evaluateStateRules({ answers, dailyLogs: state.dailyLogs, periodLogs })
       next = { ...next, answers, result, confirmedTier2: [], pendingTier2: [] }
       return next
     }
