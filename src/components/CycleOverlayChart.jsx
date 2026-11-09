@@ -1,6 +1,7 @@
 // CycleOverlayChart, teen-friendly version
 import { useState } from 'react'
 import { Bed, Lightning, Smiley, Sparkle } from '@phosphor-icons/react'
+import { getTipCopy } from '../content/tipRegistry.js'
 
 const PHASES = [
   { label: 'Period', days: 5, color: '#F4A5B8', lightColor: '#FDF0F4' },
@@ -17,7 +18,7 @@ const SIGNALS = [
     Icon: Lightning,
     color: '#E8C86A',
     values: [2, 2, 3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2],
-    insight: 'Your energy usually builds after your period ends and peaks mid-cycle. It can dip in the wind-down week, which is normal.',
+    insight: getTipCopy('cycle-insight.energy').text,
   },
   {
     key: 'skin',
@@ -25,7 +26,7 @@ const SIGNALS = [
     Icon: Sparkle,
     color: '#F4A5B8',
     values: [3, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 3, 3, 3, 2, 2, 2, 3, 3, 3, 3],
-    insight: 'Skin can look clearer during the building-up phase. Breakouts before your period are common and not your fault.',
+    insight: getTipCopy('cycle-insight.skin').text,
   },
   {
     key: 'sleep',
@@ -33,7 +34,7 @@ const SIGNALS = [
     Icon: Bed,
     color: '#C8AAD9',
     values: [3, 3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 3, 3, 3],
-    insight: 'Sleep is often best mid-cycle. Restless nights can show up in the wind-down week, so protect your sleep routine then.',
+    insight: getTipCopy('cycle-insight.sleep').text,
   },
   {
     key: 'mood',
@@ -41,7 +42,7 @@ const SIGNALS = [
     Icon: Smiley,
     color: '#A9C7AB',
     values: [2, 2, 2, 3, 3, 4, 4, 5, 5, 5, 5, 5, 5, 4, 4, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 3, 3, 3],
-    insight: 'Mood often lifts in the building-up and peak phases. The wind-down week can feel heavier, and tracking helps you plan ahead.',
+    insight: getTipCopy('cycle-insight.mood').text,
   },
 ]
 

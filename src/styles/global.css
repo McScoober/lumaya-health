@@ -18,6 +18,10 @@
   --gold: #E8C86A;
   --stem: #6E9473;
   --danger: #B42318;
+  --pain-mild: var(--sage-700);
+  --pain-moderate: #986216;
+  --pain-severe: #B52F55;
+  --pain-extreme: #7F183D;
 
   --bg: var(--lavender-50);
   --text-primary: var(--plum-900);
@@ -304,7 +308,7 @@ button {
   background: #fff;
   border: 2px solid #806B78;
   border-radius: 50%;
-  transition: width 120ms ease, height 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+  transition: width 150ms ease, height 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
 }
 .pain-scale__point.is-filled::before { background: var(--pain-point-color); border-color: var(--pain-point-color); }
 .pain-scale__point.is-selected { z-index: 1; }
@@ -540,8 +544,33 @@ button {
   border-color: var(--plum-700);
   color: #fff;
   font-weight: 600;
+  animation: choice-select 120ms ease-out;
 }
 .chip--stack { width: 100%; justify-content: flex-start; }
+
+@keyframes choice-select {
+  50% { transform: scale(0.97); }
+}
+
+.mood-pms-scale button { transition: transform 120ms ease, background-color 120ms ease, border-color 120ms ease, color 120ms ease; }
+.mood-pms-scale button[aria-pressed='true'] { animation: choice-select 120ms ease-out; }
+.daily-log-choice[aria-pressed='true'] { animation: choice-pop 120ms ease-out; }
+
+@keyframes choice-pop {
+  0% { transform: scale(0.96); }
+  70% { transform: scale(1.03); }
+  100% { transform: scale(1); }
+}
+
+.result-screen__flower {
+  animation: result-flower-in 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@keyframes result-flower-in {
+  from { opacity: 0; transform: scale(0.72) rotate(-12deg); }
+  70% { opacity: 1; transform: scale(1.06) rotate(3deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
 
 /* ---- Cards (Notion / Apple Health style, 13.2.1) ---- */
 .card {
@@ -1911,7 +1940,10 @@ button {
 .home-section__heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
 .home-section__heading .home-section__title { margin: 0; }
 .home-section__heading > button { padding: 4px; color: var(--accent-ink); font-size: 11px; font-weight: 700; background: transparent; border: 0; }
-.home-tip-card { border-left: 4px solid var(--phase-accent); border-radius: 8px; }
+.home-tip-card { border-left: 3px solid var(--phase-accent); border-radius: 8px; }
+.home-tip-card__label { margin-bottom: 7px; color: var(--sage-700); font-family: var(--font-body); font-size: 11px; font-weight: 700; line-height: 1.4; text-transform: uppercase; }
+.home-tip-card__headline { margin: 0 0 8px; color: var(--text-primary); font-family: var(--font-head); font-size: 22px; font-weight: 600; line-height: 1.25; }
+.home-tip-card__text { margin: 0; color: var(--text-secondary); font-size: 16px; font-weight: 400; line-height: 1.5; }
 .home-tip-card__link { display: inline-flex; align-items: center; gap: 5px; margin-top: 11px; padding: 2px 0; color: var(--accent-ink); font-size: 11.5px; font-weight: 700; background: transparent; border: 0; }
 .home-attention-list, .home-task-list { overflow: hidden; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-sm); }
 .home-attention-row { width: 100%; min-height: 70px; display: grid; grid-template-columns: minmax(0, 1fr) 20px; align-items: center; gap: 12px; padding: 12px 13px; color: var(--ink); text-align: left; background: transparent; border: 0; }
@@ -2187,4 +2219,8 @@ button {
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  .chip[aria-pressed='true'],
+  .mood-pms-scale button[aria-pressed='true'],
+  .daily-log-choice[aria-pressed='true'],
+  .result-screen__flower { animation: none !important; }
 }

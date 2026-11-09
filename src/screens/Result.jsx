@@ -1,6 +1,6 @@
 // Screen 5 — Result screen (TRD Section 6.4)
 import { useNavigate } from 'react-router-dom'
-import { ChartBar, ChatCircleDots, CheckCircle, Flower, Info } from '@phosphor-icons/react'
+import { ChartBar, ChatCircleDots, Flower, Info } from '@phosphor-icons/react'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 
 export default function Result() {
@@ -10,21 +10,11 @@ export default function Result() {
     <div className="screen result-screen">
       <MaisieLogo variant="wordmark" width={220} style={{ marginBottom: 18 }} />
 
-      <div
-        aria-hidden="true"
-        style={{
-          width: 56,
-          height: 56,
-          margin: '10px 0 24px',
-          borderRadius: '50%',
-          display: 'grid',
-          placeItems: 'center',
-          background: 'var(--sage-100)',
-          color: 'var(--sage-700)',
-        }}
-      >
-        <CheckCircle size={34} weight="fill" />
-      </div>
+      <MaisieLogo
+        className="result-screen__flower"
+        size={64}
+        style={{ margin: '10px 0 24px' }}
+      />
 
       <h1 style={{
         fontFamily: "'Fraunces', serif",

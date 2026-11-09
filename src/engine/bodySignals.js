@@ -13,10 +13,6 @@ function clamp(value, min = 1, max = 5) {
   return Math.max(min, Math.min(max, value))
 }
 
-function plural(count, singular, pluralText = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : pluralText}`
-}
-
 function hasSymptom(log, symptom) {
   return (log?.symptoms || []).some((item) => item.toLowerCase() === symptom.toLowerCase())
 }
@@ -110,39 +106,35 @@ export function deriveBodySignals(dailyLogs = {}, profile = {}, options = {}) {
   const mood = signalBase('mood', 'Mood', options.moodColor || 'var(--signal-mood)', moodRows.length)
 
   if (energyRows.length > 0) {
-    const energyAnswerCount = energyRows.filter(({ log }) => typeof log.energy === 'number').length
-    const fatigueSymptomCount = energyRows.filter(({ log }) => hasSymptom(log, 'Fatigue')).length
     const lowEnergyDayCount = energyRows.filter(({ log }) => hasSymptom(log, 'Fatigue') || (
       typeof log.energy === 'number' && log.energy <= ruleValue('signals.lowEnergyMaximum')
     )).length
-    const logCount = energyRows.length
     energy.trend = energyRows.map(({ log }) => {
       if (typeof log.energy === 'number') return clamp(log.energy)
       return hasSymptom(log, 'Fatigue') ? 2 : 3
     })
-    energy.val = lowEnergyDayCount > 0 ? plural(lowEnergyDayCount, 'low day') : 'Steady'
+    energy.val = lowEnergyDayCount > 0 ? 'Lower energy' : 'Steady'
     energy.desc = lowEnergyDayCount > 0
-      ? `Lower energy or fatigue was logged in ${lowEnergyDayCount} of ${plural(logCount, 'energy check-in')}.`
-      : `No lower-energy days logged across ${plural(logCount, 'energy check-in')}.`
+      ? 'Lower energy or fatigue showed up in recent check-ins.'
+      : 'No lower-energy days were reported in recent check-ins.'
     energy.status = lowEnergyDayCount >= ruleValue('signals.repeatedChangeDays') ? 'changed' : 'steady'
     energy.priority = lowEnergyDayCount * ruleValue('signals.energyPriorityPerLowDay')
     energy.detail = {
       title: 'Energy',
       means: 'A summary of lower energy or fatigue in recent check-ins.',
       derived: 'A day counts as lower energy when Energy is 1 or 2, or when Fatigue is selected. Mood and sleep do not change this card.',
-      uses: `${plural(energyAnswerCount, 'energy answer')} and ${plural(fatigueSymptomCount, 'Fatigue entry')} from recent daily logs.`,
+      uses: 'Energy answers and Fatigue entries from recent daily logs.',
       next: 'Add an energy answer or select Fatigue on days it happens.',
     }
   }
 
   if (skinRows.length > 0) {
     const skinBreakoutCount = skinRows.filter(({ log }) => log.skinBreakout === true || hasSymptom(log, 'Skin breakout')).length
-    const logCount = skinRows.length
     skin.trend = skinRows.map(({ log }) => (log.skinBreakout === true || hasSymptom(log, 'Skin breakout') ? 2 : 5))
-    skin.val = skinBreakoutCount > 0 ? plural(skinBreakoutCount, 'flare-up') : 'Clear'
+    skin.val = skinBreakoutCount > 0 ? 'Breakouts logged' : 'Clear'
     skin.desc = skinBreakoutCount > 0
-      ? `Skin changes were logged in ${skinBreakoutCount} of ${plural(logCount, 'skin check-in')}.`
-      : `No skin breakouts were reported across ${plural(logCount, 'skin check-in')}.`
+      ? 'You logged skin breakouts in recent check-ins.'
+      : 'No skin breakouts were reported in recent check-ins.'
     skin.status = skinBreakoutCount >= ruleValue('signals.repeatedChangeDays') ? 'changed' : 'steady'
     skin.priority = skinBreakoutCount * ruleValue('signals.skinPriorityPerChangeDay')
     skin.detail = {
@@ -158,21 +150,20 @@ export function deriveBodySignals(dailyLogs = {}, profile = {}, options = {}) {
     const sleepTroubleCount = sleepRows.filter(({ log }) => (
       log.rested === 'Not rested' || log.sleepHours === 'Under 6' || hasSymptom(log, 'Sleep trouble')
     )).length
-    const logCount = sleepRows.length
     sleep.trend = sleepRows.map(({ log }) => (
       log.rested === 'Not rested' || log.sleepHours === 'Under 6' || hasSymptom(log, 'Sleep trouble') ? 2 : 4
     ))
-    sleep.val = sleepTroubleCount > 0 ? plural(sleepTroubleCount, 'rough night') : 'Solid'
+    sleep.val = sleepTroubleCount > 0 ? 'Less restful sleep' : 'Solid'
     sleep.desc = sleepTroubleCount > 0
-      ? `Less restful sleep was logged in ${sleepTroubleCount} of ${plural(logCount, 'sleep check-in')}.`
-      : `No sleep trouble was reported across ${plural(logCount, 'sleep check-in')}.`
+      ? 'Less restful sleep showed up in recent check-ins.'
+      : 'No sleep trouble was reported in recent check-ins.'
     sleep.status = sleepTroubleCount >= ruleValue('signals.repeatedChangeDays') ? 'changed' : 'steady'
     sleep.priority = sleepTroubleCount * ruleValue('signals.sleepPriorityPerRoughNight')
     sleep.detail = {
       title: 'Sleep',
       means: 'Tracks whether sleep trouble is showing up in daily logs.',
       derived: 'Maisie uses sleep hours, rested answers, and days where Sleep trouble was selected.',
-      uses: `Sleep answers and Sleep trouble entries${profile.sleep ? `, with your profile as context: ${profile.sleep}.` : '.'}`,
+      uses: `Sleep answers and Sleep trouble entries${profile.sleep ? `, with your sleep preference as context: ${profile.sleep}.` : '.'}`,
       next: 'Add sleep hours, how rested you felt, or Sleep trouble when you want this card updated.',
     }
   }
@@ -181,10 +172,9 @@ export function deriveBodySignals(dailyLogs = {}, profile = {}, options = {}) {
     const moodChangeCount = moodRows.filter(({ log }) => hasSymptom(log, 'Mood changes')).length
     const moodScores = moodRows.map(({ log }) => moodScore(log))
     const avgMood = average(moodScores)
-    const logCount = moodRows.length
     mood.trend = moodScores.map((score) => score ?? 3)
     if (avgMood === null) {
-      mood.val = plural(moodChangeCount, 'mood-change day')
+      mood.val = 'Mood changes logged'
     } else if (avgMood >= ruleValue('signals.moodUpbeatMinimum')) {
       mood.val = 'Upbeat'
     } else if (avgMood >= ruleValue('signals.moodSteadyMinimum')) {
@@ -193,12 +183,18 @@ export function deriveBodySignals(dailyLogs = {}, profile = {}, options = {}) {
       mood.val = 'Lower'
     }
     if (moodChangeCount >= ruleValue('signals.repeatedChangeDays') && (avgMood === null || avgMood >= ruleValue('signals.moodSteadyMinimum'))) {
-      mood.val = plural(moodChangeCount, 'mood-change day')
+      mood.val = 'Mood changes logged'
     }
-    mood.desc = avgMood === null
-      ? `Mood changes were logged across ${plural(logCount, 'mood check-in')}.`
-      : `Average mood is ${avgMood.toFixed(1)}/5 across ${plural(moodScores.filter((score) => score !== null).length, 'mood log')}.`
-    if (moodChangeCount > 0 && avgMood !== null) mood.desc += ` Mood changes were logged on ${plural(moodChangeCount, 'day')}.`
+    const moodDescription = avgMood === null
+      ? 'Mood changes were reported in recent check-ins.'
+      : avgMood >= ruleValue('signals.moodUpbeatMinimum')
+        ? 'Recent mood check-ins have felt more upbeat.'
+        : avgMood >= ruleValue('signals.moodSteadyMinimum')
+          ? 'Recent mood check-ins have felt generally steady.'
+          : 'Recent mood check-ins have felt lower.'
+    mood.desc = moodChangeCount > 0 && avgMood !== null
+      ? `${moodDescription} Mood changes were also reported.`
+      : moodDescription
     const moodLogCount = moodScores.filter((score) => score !== null).length
     mood.status = (moodLogCount >= ruleValue('signals.repeatedChangeDays') && avgMood < ruleValue('signals.moodSteadyMinimum')) || moodChangeCount >= ruleValue('signals.repeatedChangeDays') ? 'changed' : 'steady'
     mood.priority = mood.status === 'changed'
@@ -207,7 +203,7 @@ export function deriveBodySignals(dailyLogs = {}, profile = {}, options = {}) {
     mood.detail = {
       title: 'Mood',
       means: 'Shows the pattern from mood taps and mood-change symptoms.',
-      derived: 'Maisie averages mood/vibe taps and notes days where Mood changes was selected.',
+      derived: 'Maisie uses mood/vibe taps and notes when Mood changes was selected to describe recent check-ins.',
       uses: 'Mood/vibe taps and Mood changes entries.',
       next: 'Add a mood tap or select Mood changes when you want this card updated.',
     }

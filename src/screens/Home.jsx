@@ -196,28 +196,18 @@ export default function Home() {
         <section className="home-section" aria-labelledby="home-tip-title">
           <h2 id="home-tip-title" className="home-section__title">For you today</h2>
           <Card accent className="home-tip-card">
-            <div className="card__label" style={{ color: 'var(--phase-accent)' }}>Today's tip</div>
-            <h2 style={{
-              margin: '4px 0 10px',
-              color: 'var(--text-primary)',
-              fontFamily: "'Fraunces', serif",
-              fontSize: 21,
-              lineHeight: 1.2,
-            }}>
-              {tip.headline}
-            </h2>
-            {tip.actions[0] && (
-              <p style={{
-                margin: '0 0 8px',
-                color: '#3F0824',
-                fontSize: 14.5,
-                fontWeight: 600,
-                lineHeight: 1.45,
-              }}>
-                {tip.actions[0]}
+            <div className="home-tip-card__label">
+              {tip.origin === 'predicted-phase'
+                ? 'Based on your estimated cycle phase'
+                : tip.origin === 'recent-check-in' ? 'From your check-ins' : 'Getting started'}
+            </div>
+            {tip.headline && <h3 className="home-tip-card__headline">{tip.headline}</h3>}
+            {(tip.text || tip.actions?.[0]) && (
+              <p className="home-tip-card__text">
+                {tip.text || tip.actions[0]}
               </p>
             )}
-            <p style={{
+            {tip.origin === 'recent-check-in' && tip.why && <p style={{
               margin: '12px 0 0',
               paddingTop: 12,
               borderTop: '1px solid color-mix(in srgb, var(--phase-accent) 28%, transparent)',
@@ -226,7 +216,7 @@ export default function Home() {
               lineHeight: 1.5,
             }}>
               {tip.why}
-            </p>
+            </p>}
             {signalGroups.changed[0] && (
               <button type="button" className="home-tip-card__link" onClick={() => navigate(`/patterns?tab=signals&signal=${signalGroups.changed[0].id}`)}>
                 See the pattern <ArrowRight size={16} weight="bold" aria-hidden="true" />

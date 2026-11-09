@@ -6,7 +6,8 @@
 // lifestyle tags, so a stacked message never grows past a single SMS (9.3).
 // ============================================================
 
-import { PHASE_CARDS, MODIFIER_ACTIONS, sportAction } from '../data/tips.js'
+import { PHASE_ACTIONS, MODIFIER_ACTIONS, sportAction } from '../data/tips.js'
+import { getTipCopy, renderTipCopy, TIP_COPY_REGISTRY } from '../content/tipRegistry.js'
 import { foodContentIsEnabled, foodSensitiveModeIsActive, trackingModulesFromProfile } from '../lib/trackingPreferences.js'
 import { moodPatternTipTrigger } from './moodPms.js'
 import { RULE_CONFIG_VERSION, ruleValue } from './rules/config.js'
@@ -14,58 +15,42 @@ import { RULE_CONFIG_VERSION, ruleValue } from './rules/config.js'
 export const TIP_V2 = [
   {
     id: 'pain-comfort-01', category: 'care', priority: ruleValue('tips.pain.priority'), cooldownDays: ruleValue('tips.pain.cooldownDays'),
-    headline: 'Make comfort easier to reach.',
-    action: 'Keep the heat, rest, or other comfort option that helped you nearby.',
-    why: 'You recently logged pain that affected how you felt.',
+    copyId: 'recent.pain-comfort-01',
     trigger: ({ recent }) => recent.slice(0, ruleValue('tips.pain.lookbackLogs')).some(([, log]) => Number(log.pain) >= ruleValue('tips.pain.minimum')),
   },
   {
     id: 'sleep-reset-01', category: 'care', priority: ruleValue('tips.sleep.priority'), cooldownDays: ruleValue('tips.sleep.cooldownDays'), requires: 'sleep',
-    headline: 'Give tonight a softer landing.',
-    action: 'Choose one small wind-down step that feels realistic tonight.',
-    why: 'Your recent check-ins included shorter or less restful sleep.',
+    copyId: 'recent.sleep-reset-01',
     trigger: ({ recent }) => recent.slice(0, ruleValue('tips.sleep.lookbackLogs')).filter(([, log]) => log.rested === 'Not rested' || log.sleepHours === 'Under 6').length >= ruleValue('tips.sleep.minimumDays'),
   },
   {
     id: 'energy-pacing-01', category: 'care', priority: ruleValue('tips.energy.priority'), cooldownDays: ruleValue('tips.energy.cooldownDays'),
-    headline: 'Plan around the energy you have.',
-    action: 'Pick the one thing that matters most and leave room to pause.',
-    why: 'Lower energy showed up more than once in your recent logs.',
+    copyId: 'recent.energy-pacing-01',
     trigger: ({ recent }) => recent.slice(0, ruleValue('tips.energy.lookbackLogs')).filter(([, log]) => Number(log.energy) <= ruleValue('signals.lowEnergyMaximum') && Number(log.energy) > 0).length >= ruleValue('tips.energy.minimumDays'),
   },
   {
     id: 'fuel-regular-01', category: 'fuel', priority: ruleValue('tips.fuel.priority'), cooldownDays: ruleValue('tips.fuel.cooldownDays'), requires: 'food',
-    headline: 'Keep fuel simple today.',
-    action: 'Choose an easy meal or snack you already know works for you.',
-    why: 'You recently logged fewer meals or snacks than usual.',
-    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.fuel.lookbackLogs')).some(([, log]) => log.fuel?.meals === 'few'),
+    copyId: 'recent.fuel-regular-01',
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.fuel.lookbackLogs')).filter(([, log]) => log.fuel?.meals === 'few').length >= ruleValue('tips.fuel.minimumDays'),
   },
   {
     id: 'water-check-01', category: 'fuel', priority: ruleValue('tips.water.priority'), cooldownDays: ruleValue('tips.water.cooldownDays'), requires: 'food',
-    headline: 'Make water easy to notice.',
-    action: 'Put a drink somewhere you will naturally see it.',
-    why: 'A recent check-in showed that water was easy to miss.',
-    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.water.lookbackLogs')).some(([, log]) => log.fuel?.water === 'A little'),
+    copyId: 'recent.water-check-01',
+    trigger: ({ recent }) => recent.slice(0, ruleValue('tips.water.lookbackLogs')).filter(([, log]) => log.fuel?.water === 'A little').length >= ruleValue('tips.water.minimumDays'),
   },
   {
     id: 'route-pain-01', category: 'nudge', priority: ruleValue('tips.routePain.priority'), cooldownDays: ruleValue('tips.routePain.cooldownDays'),
-    headline: 'You have a pattern worth reviewing.',
-    action: 'Open Route to see what you logged and prepare what you want to ask.',
-    why: 'Pain affected several recent days.',
+    copyId: 'recent.route-pain-01',
     trigger: ({ recent }) => recent.slice(0, ruleValue('tips.routePain.lookbackLogs')).filter(([, log]) => Number(log.pain) >= ruleValue('flags.highPainMinimum')).length >= ruleValue('tips.routePain.minimumDays'),
   },
   {
     id: 'mood-gentle-01', category: 'care', priority: ruleValue('tips.mood.priority'), cooldownDays: ruleValue('tips.mood.cooldownDays'), requires: 'moodPms',
-    headline: 'Make today a little lighter.',
-    action: 'Choose one small thing you can postpone, share, or ask for help with.',
-    why: 'Your recent check-ins show that mood has been getting in the way.',
+    copyId: 'recent.mood-gentle-01',
     trigger: ({ recent }) => recent.slice(0, ruleValue('tips.mood.lookbackLogs')).filter(([, log]) => ['some', 'a_lot'].includes(log.functionalImpact)).length >= ruleValue('tips.mood.minimumDays'),
   },
   {
     id: 'mood-timing-01', category: 'nudge', priority: ruleValue('tips.moodTiming.priority'), cooldownDays: ruleValue('tips.moodTiming.cooldownDays'), requires: 'moodPms',
-    headline: 'Your mood timing is worth reviewing.',
-    action: 'Open Route to see the before-and-after pattern and prepare what you want to ask.',
-    why: 'Mood changes appeared before a logged period and affected your day.',
+    copyId: 'recent.mood-timing-01',
     trigger: ({ dailyLogs, periodLogs }) => moodPatternTipTrigger(dailyLogs, periodLogs),
   },
 ]
@@ -103,12 +88,14 @@ export function selectDailyTips({ phase, phaseTips = true, profile = {}, dailyLo
       return !shown || shown === dateKey || daysBetween(dateKey, shown) >= tip.cooldownDays
     })
     .sort((left, right) => right.priority - left.priority || stableRank(left.id, dateKey) - stableRank(right.id, dateKey))
-    .map((tip) => ({ ...tip, actions: [tip.action], configVersion: RULE_CONFIG_VERSION }))
+    .map(({ copyId, ...tip }) => {
+      const copy = getTipCopy(copyId)
+      return { ...tip, ...copy, origin: 'recent-check-in', configVersion: RULE_CONFIG_VERSION }
+    })
 
   const primary = candidates.find((tip) => tip.category === 'care') || (phaseTips && phase ? buildTip(phase, profile) : {
-    id: 'baseline-start', category: 'care', headline: 'Start with what you notice.',
-    why: 'A few check-ins will help Maisie show more useful patterns.',
-    actions: [foodEnabled ? 'Drink some water, choose something steady to eat, and log what stands out.' : 'Drink some water and log what stands out.'],
+    id: 'baseline-start', category: 'care', ...getTipCopy('fallback.phase-disabled'),
+    text: getTipCopy('fallback.phase-disabled').actions[foodEnabled ? 'foodEnabled' : 'foodDisabled'],
     configVersion: RULE_CONFIG_VERSION,
   })
   const fuel = candidates.find((tip) => tip.category === 'fuel') || null
@@ -143,35 +130,33 @@ export function maisieMessage(phase, cycleDay, profile = {}) {
   const bank = {
     menstrual: [
       isAthlete && activity
-        ? `Reduce ${activity} intensity if pain or fatigue affects training.`
-        : 'You may need more rest during your period.',
-      isStudent
-        ? 'If symptoms affect focus, use shorter study blocks and take breaks.'
-        : 'Adjust your schedule if pain or fatigue affects your day.',
+        ? renderTipCopy('message.phase.menstrual.athlete', { activity })
+        : renderTipCopy('message.phase.menstrual.rest'),
+      renderTipCopy(isStudent ? 'message.phase.menstrual.student' : 'message.phase.menstrual.general'),
     ],
     follicular: [
-      'You may notice more energy after your period.',
-      'Track whether your focus or energy changes during this phase.',
+      renderTipCopy('message.phase.follicular.1'),
+      renderTipCopy('message.phase.follicular.2'),
     ],
     ovulation: [
-      'Some people notice more energy around ovulation.',
-      'Use your own energy and symptoms to decide how much activity feels right.',
+      renderTipCopy('message.phase.ovulation.1'),
+      renderTipCopy('message.phase.ovulation.2'),
     ],
     luteal: [
       isAthlete && activity
-        ? `Reduce ${activity} intensity if fatigue or other symptoms affect training.`
-        : 'Energy and mood can change during the luteal phase.',
+        ? renderTipCopy('message.phase.luteal.athlete', { activity })
+        : renderTipCopy('message.phase.luteal.general'),
       foodEnabled
-        ? 'Track cravings, fatigue, or mood changes to learn whether they repeat.'
-        : 'Track fatigue or mood changes to learn whether they repeat.',
+        ? renderTipCopy('message.phase.luteal.food')
+        : renderTipCopy('message.phase.luteal.no-food'),
     ],
     bc_active: [
-      'Steady hormone levels today. Notice how you feel compared to last week.',
-      'Your cycle on the pill looks different. That is expected.',
+      renderTipCopy('message.phase.bc_active.1'),
+      renderTipCopy('message.phase.bc_active.2'),
     ],
     bc_break: [
-      'Withdrawal week. You might feel more tired or emotional -- that is normal.',
-      'Rest this week if you need it. Your body is adjusting.',
+      renderTipCopy('message.phase.bc_break.1'),
+      renderTipCopy('message.phase.bc_break.2'),
     ],
   }
   const msgs = bank[phase] || bank.follicular
@@ -182,7 +167,7 @@ export function maisieMessage(phase, cycleDay, profile = {}) {
 function pickActions(tag, phase) {
   const pack = MODIFIER_ACTIONS[tag]
   if (!pack) return []
-  return [...(pack[phase] || []), ...(pack['*'] || [])]
+  return [...(pack[phase] || []), ...(pack['*'] || [])].map(({ copyId, p }) => ({ text: getTipCopy(copyId).text, p }))
 }
 
 /**
@@ -190,11 +175,13 @@ function pickActions(tag, phase) {
  * @returns { phase, headline, why, actions: [{text}], tags }
  */
 export function buildTip(phase, profile = {}) {
-  const base = PHASE_CARDS[phase] || PHASE_CARDS.luteal
+  const phaseKey = TIP_COPY_REGISTRY[`phase.${phase}`] ? phase : 'luteal'
+  const base = getTipCopy(`phase.${phaseKey}`)
   const tags = modifierTagsFor(profile)
 
   // Start with the physiological base actions (always highest priority).
-  let pool = [...base.actions]
+  let pool = (PHASE_ACTIONS[phaseKey] || PHASE_ACTIONS.luteal)
+    .map(({ copyId, p }) => ({ text: getTipCopy(copyId).text, p }))
 
   for (const tag of tags) {
     pool = pool.concat(pickActions(tag, phase))
@@ -222,8 +209,9 @@ export function buildTip(phase, profile = {}) {
     id: `phase-${phase}`,
     category: 'care',
     phase,
+    origin: 'predicted-phase',
     headline: base.headline,
-    why: base.why,
+    text: merged[0]?.text || '',
     actions: merged.map((a) => a.text),
     tags,
     configVersion: RULE_CONFIG_VERSION,
@@ -234,8 +222,8 @@ export function buildTip(phase, profile = {}) {
 export function tipSms(phase, profile = {}) {
   const tip = buildTip(phase, profile)
   const first = tip.actions[0] || ''
-  let msg = `${tip.headline} Tap to see how to take care of yourself.`
+  let msg = `${tip.headline} ${renderTipCopy('message.sms.open')}`
   const smsLimit = ruleValue('tips.smsMaximumCharacters')
-  if (msg.length > smsLimit - 5 && first) msg = `${tip.headline.split('--')[0].trim()}. Tap for a quick self-care tip.`
+  if (msg.length > smsLimit - 5 && first) msg = `${tip.headline.split('--')[0].trim()}. ${renderTipCopy('message.sms.fallback')}`
   return msg.slice(0, smsLimit)
 }

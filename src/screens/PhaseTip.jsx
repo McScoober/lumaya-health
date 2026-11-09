@@ -1,5 +1,5 @@
 // Screen 8 — Phase tip detail (TRD Section 6.4)
-// Opens from a phase-tip notification. Headline, plain-language "why", and the
+// Opens from a phase-tip notification. Headline, predicted-phase context, and the
 // self-care action list. No clinical terminology (13.1).
 import { useParams, useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
@@ -25,8 +25,8 @@ export default function PhaseTip() {
       </Card>
 
       <Card style={{ marginTop: 14 }}>
-        <div className="card__label">Why this happens</div>
-        <p style={{ margin: 0, fontSize: 15 }}>{tip.why}</p>
+        <div className="card__label">Based on your estimated cycle phase</div>
+        <p style={{ margin: 0, fontSize: 15 }}>{tip.text}</p>
       </Card>
 
       <Card style={{ marginTop: 14 }}>

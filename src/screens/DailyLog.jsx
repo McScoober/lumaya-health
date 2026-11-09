@@ -21,6 +21,7 @@ import {
   foodSensitiveModeIsActive,
 } from '../lib/trackingPreferences.js'
 import { groupSymptomOptions, SYMPTOM_CLUSTERS } from '../content/symptomClusters.js'
+import { getTipCopy } from '../content/tipRegistry.js'
 import { TopBar, Chip } from '../components/ui.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
@@ -83,6 +84,13 @@ const FLOODING_OPTIONS = [
   { value: true, label: 'Yes' }, { value: false, label: 'No' },
   { value: 'not-sure', label: 'Not sure' }, { value: 'prefer-not', label: 'Prefer not to say' },
 ]
+
+function painTone(value) {
+  if (value <= ruleValue('pain.mildMaximum')) return 'var(--pain-mild)'
+  if (value <= ruleValue('pain.moderateMaximum')) return 'var(--pain-moderate)'
+  if (value <= ruleValue('pain.severeMaximum')) return 'var(--pain-severe)'
+  return 'var(--pain-extreme)'
+}
 
 const FLOW_OPTIONS = [
   { value: 'light', label: 'Light' },
@@ -165,43 +173,43 @@ function hasDailyAnswers(log = {}) {
 // ── Practical post-log guidance ───────────────────────────────────────────
 function getDailyTip({ symptoms, pain, impacts, vibe, foodEnabled }) {
   if (symptoms.includes('Cramps') || pain >= ruleValue('tips.pain.minimum')) {
-    return 'A heating pad on your lower abdomen or back may help with cramps. Rest and drink water if you can.'
+    return getTipCopy('daily-log.pain').text
   }
   if (symptoms.includes('Headache')) {
-    return 'Drink some water and lower your screen brightness. Rest in a quiet space if possible.'
+    return getTipCopy('daily-log.headache').text
   }
   if (symptoms.includes('Nausea')) {
-    return 'Try small sips of water and a plain snack. Eat slowly and stop if the nausea gets worse.'
+    return getTipCopy('daily-log.nausea').text
   }
   if (symptoms.includes('Bloating')) {
-    return 'A short walk or gentle stretch may help with bloating.'
+    return getTipCopy('daily-log.bloating').text
   }
   if (symptoms.includes('Back pain')) {
-    return 'Try lying down with a pillow under your knees to reduce pressure on your lower back.'
+    return getTipCopy('daily-log.back-pain').text
   }
   if (symptoms.includes('Fatigue')) {
     return foodEnabled
-      ? 'Rest if you can, and consider a snack with protein or iron.'
-      : 'Rest if you can, and notice whether the fatigue keeps returning.'
+      ? getTipCopy('daily-log.fatigue.food').text
+      : getTipCopy('daily-log.fatigue.no-food').text
   }
   if (symptoms.includes('Sleep trouble') || impacts.includes('sleep')) {
-    return 'Lower the lights, avoid late caffeine, and put your phone down a little earlier.'
+    return getTipCopy('daily-log.sleep').text
   }
   if (symptoms.includes('Mood changes') || vibe?.value <= ruleValue('tips.mood.dailyLowMaximum')) {
-    return 'Take things slowly today. If a low mood feels intense or lasts, talk to someone you trust.'
+    return getTipCopy('daily-log.mood').text
   }
   if (symptoms.includes('Skin breakout')) {
-    return 'Wash gently, moisturize, and avoid picking at breakouts.'
+    return getTipCopy('daily-log.skin').text
   }
   if (impacts.includes('school') || impacts.includes('activity') || impacts.includes('plans')) {
-    return 'Note what was affected today. This can help you explain the pattern later.'
+    return getTipCopy('daily-log.impact').text
   }
   if (vibe?.value >= ruleValue('signals.moodUpbeatMinimum')) {
     return foodEnabled
-      ? 'Think about what helped today, such as sleep, food, movement, or less stress.'
-      : 'Think about what helped today, such as sleep, movement, or less stress.'
+      ? getTipCopy('daily-log.positive.food').text
+      : getTipCopy('daily-log.positive.no-food').text
   }
-  return 'Your check-in is saved. Keep logging when you notice changes.'
+  return getTipCopy('daily-log.saved').text
 }
 
 // ── Main component ────────────────────────────────────────────────────────
@@ -550,11 +558,7 @@ export default function DailyLog() {
             const val = i
             const isSelected = pain === val
             const isUnder    = pain !== null && val <= pain
-            const dotColor =
-              val <= ruleValue('pain.mildMaximum') ? '#4E7554'
-              : val <= ruleValue('pain.moderateMaximum') ? '#713666'
-              : val <= ruleValue('pain.severeMaximum') ? '#B52F55'
-              : '#713666'
+            const dotColor = painTone(val)
             return (
               <button
                 key={val}
@@ -575,13 +579,7 @@ export default function DailyLog() {
         </div>
         {pain !== null && (
           <p
-            style={{
-              color:
-                pain <= ruleValue('pain.mildMaximum') ? '#4E7554'
-                : pain <= ruleValue('pain.moderateMaximum') ? '#713666'
-                : pain <= ruleValue('pain.severeMaximum') ? '#B52F55'
-                : '#713666',
-            }}
+            style={{ color: painTone(pain) }}
             className="pain-scale__status"
             role="status"
           >
@@ -853,7 +851,7 @@ function MoodPmsQuestions({ values, onChange, functionalImpact, onImpactChange, 
       />
       <button
         type="button"
-        className={`mood-safety-choice${safetyConcern ? ' mood-safety-choice--selected' : ''}`}
+        className={`daily-log-choice mood-safety-choice${safetyConcern ? ' mood-safety-choice--selected' : ''}`}
         aria-pressed={safetyConcern}
         onClick={() => onSafetyChange((current) => !current)}
       >
@@ -879,6 +877,7 @@ function VibeSelector({ vibe, onChange, isToday }) {
               key={key}
               id={`vibe-${key}`}
               type="button"
+              className="daily-log-choice"
               aria-label={label}
               aria-pressed={selected}
               onClick={() => onChange(selected ? null : { key, label, value })}
@@ -886,8 +885,7 @@ function VibeSelector({ vibe, onChange, isToday }) {
                 aspectRatio: '1', minHeight: 48, border: `1.5px solid ${selected ? color : 'rgba(44,24,16,0.08)'}`,
                 borderRadius: 12, background: selected ? `color-mix(in srgb, ${color} 14%, white)` : '#fff',
                 display: 'grid', placeItems: 'center', cursor: 'pointer',
-                transform: selected ? 'scale(0.95)' : 'scale(1)',
-                transition: 'transform 0.12s ease, background 0.12s ease, border 0.12s ease',
+                transition: 'background 0.12s ease, border 0.12s ease',
               }}
             >
               <Icon size={24} weight={selected ? 'fill' : 'duotone'} color={color} />
@@ -916,6 +914,7 @@ function ImpactSelector({ impacts, onToggle }) {
               key={id}
               id={`impact-${id}`}
               type="button"
+              className="daily-log-choice"
               aria-label={label}
               aria-pressed={selected}
               onClick={() => onToggle(id)}

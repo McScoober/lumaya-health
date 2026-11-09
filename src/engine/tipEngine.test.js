@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { selectDailyTips } from './tipEngine.js'
+import { buildTip, selectDailyTips } from './tipEngine.js'
 
 const profile = { foodModule: true, trackingModules: { core: true, sleep: true, food: true } }
 
@@ -34,6 +34,53 @@ test('a tip already selected today remains selected and food-sensitive mode remo
   })
   assert.equal(selected.primary.id, 'pain-comfort-01')
   assert.equal(selected.fuel, null)
+})
+
+test('fuel and water tips require at least two matching recent check-ins', () => {
+  const oneLowMealLog = {
+    '2026-10-22': { checkinCompleted: true, fuel: { meals: 'few' } },
+  }
+  const twoLowMealLogs = {
+    '2026-10-21': { checkinCompleted: true, fuel: { meals: 'few' } },
+    '2026-10-22': { checkinCompleted: true, fuel: { meals: 'few' } },
+  }
+  const oneLowWaterLog = {
+    '2026-10-22': { checkinCompleted: true, fuel: { water: 'A little' } },
+  }
+  const twoLowWaterLogs = {
+    '2026-10-21': { checkinCompleted: true, fuel: { water: 'A little' } },
+    '2026-10-22': { checkinCompleted: true, fuel: { water: 'A little' } },
+  }
+  const options = { phaseTips: false, profile, date: new Date('2026-10-22T12:00:00') }
+
+  assert.equal(selectDailyTips({ ...options, dailyLogs: oneLowMealLog }).fuel, null)
+  assert.equal(selectDailyTips({ ...options, dailyLogs: twoLowMealLogs }).fuel.id, 'fuel-regular-01')
+  assert.equal(selectDailyTips({ ...options, dailyLogs: oneLowWaterLog }).fuel, null)
+  assert.equal(selectDailyTips({ ...options, dailyLogs: twoLowWaterLogs }).fuel.id, 'water-check-01')
+})
+
+test('recent V2 tips use observation-first copy without a separate why line', () => {
+  const selected = selectDailyTips({
+    phaseTips: false,
+    profile,
+    dailyLogs: { '2026-10-22': { checkinCompleted: true, pain: 5 } },
+    date: new Date('2026-10-22T12:00:00'),
+  })
+
+  assert.equal(selected.primary.origin, 'recent-check-in')
+  assert.equal(selected.primary.headline, undefined)
+  assert.equal(selected.primary.why, undefined)
+  assert.match(selected.primary.text, /^You logged pain recently\./)
+  assert.match(selected.primary.text, /Route can help you organize what to bring up at a visit\.$/)
+})
+
+test('general phase tips use V2 framing and a predicted-phase action', () => {
+  const tip = buildTip('menstrual')
+
+  assert.equal(tip.origin, 'predicted-phase')
+  assert.equal(tip.headline, 'Comfort during your period')
+  assert.match(tip.text, /^If cramps are bothering you, warmth is one comfort option/)
+  assert.equal(tip.actions.length, 1)
 })
 
 test('turning phase tips off keeps recent-log tips and removes the phase fallback', () => {

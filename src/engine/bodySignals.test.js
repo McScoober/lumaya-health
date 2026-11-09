@@ -12,7 +12,7 @@ test('body signals describe observations as check-ins and prioritize repeated ch
   }, {}, { days: 8, today: now })
 
   assert.equal(signals.energy.status, 'changed')
-  assert.match(signals.energy.desc, /2 of 3 check-ins/)
+  assert.match(signals.energy.desc, /lower energy or fatigue showed up/i)
   assert.equal(signals.mood.status, 'changed')
 })
 
@@ -40,4 +40,20 @@ test('enabled modules collect at least three relevant check-ins before assigning
   assert.equal(grouped.changed.length, 0)
   assert.deepEqual(grouped.steady, [])
   assert.deepEqual(grouped.collecting.map((signal) => signal.id), ['energy', 'mood', 'sleep', 'skin'])
+  assert.equal(signals.mood.val, 'Just getting started')
+})
+
+test('signal card copy avoids averages and numeric summaries after evidence is sufficient', () => {
+  const signals = deriveBodySignals({
+    '2026-10-24': { checkinCompleted: true, energy: 2, mood: 'Good', rested: 'Not rested', skinBreakout: true },
+    '2026-10-25': { checkinCompleted: true, energy: 4, mood: 'Okay', rested: 'Rested', skinBreakout: false },
+    '2026-10-26': { checkinCompleted: true, energy: 3, mood: 'Good', rested: 'Rested', skinBreakout: false },
+  }, { trackingModules: { core: true, sleep: true, skinHair: true } }, { days: 8, today: now })
+
+  for (const signal of Object.values(signals)) {
+    assert.doesNotMatch(`${signal.val} ${signal.desc}`, /\d|average|\/5|\bof\b/i)
+  }
+  assert.equal(signals.mood.val, 'Steady')
+  assert.match(signals.mood.desc, /generally steady/i)
+  assert.match(signals.energy.desc, /recent check-ins/i)
 })
