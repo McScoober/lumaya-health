@@ -3,7 +3,7 @@ import registry from '../../config/thresholds.v1.json' with { type: 'json' }
 const REQUIRED_METADATA = ['source', 'reviewedBy', 'reviewedAt', 'reviewStatus']
 
 export const RULE_CONFIG_VERSION = registry.version
-export const RULE_CONFIG_STATUS = registry.status
+export const RULE_CONFIG_STATUS = registry.activationStatus
 
 export function ruleEntry(key) {
   const entry = registry.thresholds[key]
@@ -29,8 +29,11 @@ export function ruleDefinition(id) {
 export function validateRuleRegistry() {
   const errors = []
   if (!registry.version) errors.push('Registry version is required.')
-  if (!['pending-clinical-review', 'reviewed', 'changes-requested'].includes(registry.status)) {
-    errors.push('Registry status is invalid.')
+  if (!['active', 'paused'].includes(registry.activationStatus)) {
+    errors.push('Registry activationStatus is invalid.')
+  }
+  if (!['pending', 'reviewed', 'changes-requested'].includes(registry.clinicalReviewStatus)) {
+    errors.push('Registry clinicalReviewStatus is invalid.')
   }
   for (const [key, entry] of Object.entries(registry.thresholds)) {
     if (entry.value === undefined) errors.push(`${key} is missing a value.`)

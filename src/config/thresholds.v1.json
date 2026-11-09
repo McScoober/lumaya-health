@@ -1,6 +1,7 @@
 {
-  "version": "2026-11-07.1",
-  "status": "pending-clinical-review",
+  "version": "2026-11-09.1",
+  "activationStatus": "active",
+  "clinicalReviewStatus": "pending",
   "thresholds": {
     "cycle.defaultLengthDays": { "value": 28, "source": "Existing Maisie cycle model", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "cycle.defaultPeriodDays": { "value": 5, "source": "Existing Maisie cycle model", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
