@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, CheckCircle, Info, PencilSimple, X } from '@phosphor-icons/react'
 import { useStore } from '../state/store.jsx'
 import { Button, Chip, ChipGroup, ProgressBar } from '../components/ui.jsx'
+import InlineDropdown from '../components/InlineDropdown.jsx'
 import NativeDateField from '../components/NativeDateField.jsx'
 import { dateKeyLocal } from '../engine/cyclePredictor.js'
 import { PAIN_ANCHORS, painLabel } from '../data/questions.js'
@@ -255,19 +256,28 @@ function HealthQuestion({ question, number, value, onChange, detailValue, onDeta
       )}
 
       {question.type === 'multi' && (
-        <div className="chips">
-          {question.options.map((option) => (
-            <Chip
-              key={option}
-              selected={Array.isArray(value) && value.includes(option)}
-              onClick={() => {
-                if (option === question.exclusive) return onChange([option])
-                const current = Array.isArray(value) ? value.filter((item) => item !== question.exclusive) : []
-                onChange(current.includes(option) ? current.filter((item) => item !== option) : [...current, option])
-              }}
-            >{option}</Chip>
-          ))}
-        </div>
+        question.options.length > 4
+          ? <InlineDropdown
+              multiple
+              exclusiveValues={question.exclusive ? [question.exclusive] : []}
+              value={value}
+              options={question.options.map((option) => ({ value: option, label: option }))}
+              placeholder="Choose any that apply"
+              onChange={onChange}
+            />
+          : <div className="chips">
+              {question.options.map((option) => (
+                <Chip
+                  key={option}
+                  selected={Array.isArray(value) && value.includes(option)}
+                  onClick={() => {
+                    if (option === question.exclusive) return onChange([option])
+                    const current = Array.isArray(value) ? value.filter((item) => item !== question.exclusive) : []
+                    onChange(current.includes(option) ? current.filter((item) => item !== option) : [...current, option])
+                  }}
+                >{option}</Chip>
+              ))}
+            </div>
       )}
 
       {question.type === 'date' && (

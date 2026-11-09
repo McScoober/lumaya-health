@@ -23,6 +23,7 @@ import {
 import { groupSymptomOptions, SYMPTOM_CLUSTERS } from '../content/symptomClusters.js'
 import { getTipCopy } from '../content/tipRegistry.js'
 import { TopBar, Chip } from '../components/ui.jsx'
+import InlineDropdown from '../components/InlineDropdown.jsx'
 import MaisieLogo from '../components/MaisieLogo.jsx'
 import RedFlagCard from '../components/RedFlagCard.jsx'
 import MoodSafetyCard from '../components/MoodSafetyCard.jsx'
@@ -643,16 +644,31 @@ export default function DailyLog() {
                 )}
 
                 {cluster.symptomOptions.length > 0 && (
-                  <div className="chips" style={{ marginTop: cluster.id === 'mood-energy' ? 18 : 0 }}>
-                    {cluster.symptomOptions.map((symptom) => (
-                      <Chip
-                        key={symptom}
-                        selected={symptoms.includes(symptom)}
-                        onClick={() => toggleSymptom(symptom)}
-                      >
-                        {symptom}
-                      </Chip>
-                    ))}
+                  <div style={{ marginTop: cluster.id === 'mood-energy' ? 18 : 0 }}>
+                    {cluster.symptomOptions.length > 4
+                      ? <InlineDropdown
+                          multiple
+                          value={symptoms.filter((symptom) => cluster.symptomOptions.includes(symptom))}
+                          options={cluster.symptomOptions.map((symptom) => ({ value: symptom, label: symptom }))}
+                          placeholder="Choose any symptoms"
+                          onChange={(nextValues) => {
+                            setSymptoms((current) => [
+                              ...current.filter((symptom) => !cluster.symptomOptions.includes(symptom)),
+                              ...nextValues,
+                            ])
+                          }}
+                        />
+                      : <div className="chips">
+                          {cluster.symptomOptions.map((symptom) => (
+                            <Chip
+                              key={symptom}
+                              selected={symptoms.includes(symptom)}
+                              onClick={() => toggleSymptom(symptom)}
+                            >
+                              {symptom}
+                            </Chip>
+                          ))}
+                        </div>}
                   </div>
                 )}
 
@@ -711,7 +727,7 @@ export default function DailyLog() {
                 {cluster.id === 'food-fuel' && <>
                   <ValueChoice label="How many of your usual meals or snacks did you have?" options={MEAL_OPTIONS} value={fuel.meals} onChange={(value) => setFuel((current) => ({ ...current, meals: value === current.meals ? '' : value }))} />
                   <OptionalChoice label="How was your appetite?" options={APPETITE_OPTIONS} value={fuel.appetite} onChange={(value) => setFuel((current) => ({ ...current, appetite: value === current.appetite ? '' : value }))} />
-                  <OptionalChoice label="Any cravings?" options={CRAVING_OPTIONS} value={fuel.cravings} onChange={toggleCraving} multiple />
+                  <OptionalChoice label="Any cravings?" options={CRAVING_OPTIONS} value={fuel.cravings} onChange={toggleCraving} multiple exclusiveValues={[...EXCLUSIVE_CRAVING_OPTIONS]} />
                   {showIronFoodQuestion && <ValueChoice label="Did you have an iron-rich food today?" options={IRON_FOOD_OPTIONS} value={fuel.ironFood} onChange={(value) => setFuel((current) => ({ ...current, ironFood: value === current.ironFood ? null : value }))} />}
                   <OptionalChoice label="How was your water intake?" options={WATER_OPTIONS} value={fuel.water} onChange={(value) => setFuel((current) => ({ ...current, water: value === current.water ? '' : value }))} />
                 </>}
@@ -937,36 +953,59 @@ function ImpactSelector({ impacts, onToggle }) {
   )
 }
 
-function OptionalChoice({ label, options, value, onChange, multiple = false }) {
+function OptionalChoice({ label, options, value, onChange, multiple = false, exclusiveValues = [] }) {
+  const dropdownOptions = options.map((option) => ({ value: option, label: option }))
+  function handleMultiChange(nextValues) {
+    const previousValues = Array.isArray(value) ? value : []
+    const changedOption = nextValues.find((option) => !previousValues.includes(option)) || previousValues.find((option) => !nextValues.includes(option))
+    if (changedOption) onChange(changedOption)
+  }
   return (
     <div style={{ marginTop: 18 }}>
       <p style={{ margin: '0 0 9px', fontSize: 14, fontWeight: 700 }}>{label}</p>
-      <div className="chips">
-        {options.map((option) => (
-          <Chip
-            key={option}
-            selected={multiple ? value.includes(option) : value === option}
-            onClick={() => onChange(option)}
-          >
-            {option}
-          </Chip>
-        ))}
-      </div>
+      {options.length > 4
+        ? <InlineDropdown
+            multiple={multiple}
+            exclusiveValues={exclusiveValues}
+            value={value}
+            options={dropdownOptions}
+            placeholder={multiple ? 'Choose any that apply' : 'Choose an answer'}
+            onChange={multiple ? handleMultiChange : onChange}
+          />
+        : <div className="chips">
+            {options.map((option) => (
+              <Chip
+                key={option}
+                selected={multiple ? value.includes(option) : value === option}
+                onClick={() => onChange(option)}
+              >
+                {option}
+              </Chip>
+            ))}
+          </div>}
     </div>
   )
 }
 
 function ValueChoice({ label, options, value, onChange }) {
+  const dropdownOptions = options.map((option) => ({ value: option.value, label: option.label }))
   return (
     <div style={{ marginTop: 18 }}>
       <p style={{ margin: '0 0 9px', fontSize: 14, fontWeight: 700 }}>{label}</p>
-      <div className="chips">
-        {options.map((option) => (
-          <Chip key={String(option.value)} selected={value === option.value} onClick={() => onChange(option.value)}>
-            {option.label}
-          </Chip>
-        ))}
-      </div>
+      {options.length > 4
+        ? <InlineDropdown
+            value={value}
+            options={dropdownOptions}
+            placeholder="Choose an answer"
+            onChange={onChange}
+          />
+        : <div className="chips">
+            {options.map((option) => (
+              <Chip key={String(option.value)} selected={value === option.value} onClick={() => onChange(option.value)}>
+                {option.label}
+              </Chip>
+            ))}
+          </div>}
     </div>
   )
 }

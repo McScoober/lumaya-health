@@ -7,12 +7,13 @@ import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
 import { Button, ProgressBar, TopBar } from '../components/ui.jsx'
 import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
-import { ageBandFromBirthMonthYear } from '../lib/age.js'
+import { ageBandFromBirthDate } from '../lib/age.js'
 
 export default function AgeConsent() {
   const navigate = useNavigate()
   const { state, dispatch } = useStore()
   const [birthMonth, setBirthMonth] = useState(state.identity.birthMonth)
+  const [birthDay, setBirthDay] = useState(state.identity.birthDay)
   const [birthYear, setBirthYear] = useState(state.identity.birthYear)
   const [name, setName]     = useState(state.identity.name || '')
   const [consent, setConsent] = useState(false)
@@ -20,12 +21,12 @@ export default function AgeConsent() {
   const [submitted, setSubmitted] = useState(false)
   const [touched, setTouched] = useState({})
 
-  const ageBand = ageBandFromBirthMonthYear(birthMonth, birthYear)
+  const ageBand = ageBandFromBirthDate(birthMonth, birthDay, birthYear)
   const isMinor = ageBand && ageBand !== '18+'
   const is18    = ageBand === '18+'
 
-  const birthError = !birthMonth || !birthYear
-    ? 'Choose your birth month and year.'
+  const birthError = !birthMonth || !birthDay || !birthYear
+    ? 'Choose your birth month, day, and year.'
     : !ageBand ? 'Maisie is for people age 13 and up.' : ''
   const nameError    = name.trim() ? '' : "Enter your first name so Maisie knows what to call you."
   const consentError = isMinor && !consent ? "Please confirm you understand how Maisie uses your answers." : ''
@@ -45,6 +46,7 @@ export default function AgeConsent() {
     dispatch({
       type: 'SET_BIRTH_MONTH_YEAR',
       birthMonth,
+      birthDay,
       birthYear,
     })
     dispatch({
@@ -70,10 +72,12 @@ export default function AgeConsent() {
           <BirthMonthYearFields
             idPrefix="birth"
             birthMonth={birthMonth}
+            birthDay={birthDay}
             birthYear={birthYear}
             onBlur={() => setTouched((t) => ({ ...t, birth: true }))}
-            onChange={(month, year) => {
+            onChange={(month, day, year) => {
               setBirthMonth(month)
+              setBirthDay(day)
               setBirthYear(year)
             }}
           />

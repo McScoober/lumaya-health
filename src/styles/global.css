@@ -712,7 +712,7 @@ button {
 
 .birth-fields {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 .birth-field label {
@@ -725,7 +725,7 @@ button {
 .birth-field .inline-dropdown__trigger { min-height: 52px; font-size: 16px; }
 
 @media (max-width: 430px) {
-  .birth-fields { grid-template-columns: 1fr; }
+  .birth-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ---- Profile sharing ---- */
@@ -1125,7 +1125,7 @@ button {
 .profile-about-list span { margin-top: 2px; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
 .support-compact-intro { margin: 0 0 16px; color: var(--text-secondary); font-size: 13.5px; line-height: 1.5; }
 .profile-sheet .support-save-card { margin-top: 0; }
-.profile-sheet .birth-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.profile-sheet .birth-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 @media (min-width: 768px) {
   .profile-sheet { width: min(100% - 48px, 520px); border-radius: 20px 20px 0 0; }
@@ -1136,7 +1136,7 @@ button {
   .profile-row { grid-template-columns: 36px minmax(0, 1fr) 16px; }
   .profile-row__value { display: none; }
   .profile-row__icon { width: 36px; height: 36px; }
-  .profile-sheet .birth-fields { grid-template-columns: 1fr; }
+  .profile-sheet .birth-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (prefers-reduced-motion: reduce) {

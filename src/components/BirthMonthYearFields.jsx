@@ -10,6 +10,11 @@ const YEARS = Array.from({ length: 88 }, (_, index) => currentYear - 13 - index)
 const MONTH_OPTIONS = MONTHS.map((label, index) => ({ value: index + 1, label }))
 const YEAR_OPTIONS = YEARS.map((year) => ({ value: year, label: String(year) }))
 
+function daysInMonth(month, year) {
+  if (!month || !year) return 31
+  return new Date(Number(year), Number(month), 0).getDate()
+}
+
 function SelectField({ id, label, value, placeholder, options, onChange, onBlur }) {
   return (
     <div className="birth-field" onBlur={onBlur}>
@@ -19,9 +24,14 @@ function SelectField({ id, label, value, placeholder, options, onChange, onBlur 
   )
 }
 
-export default function BirthMonthYearFields({ idPrefix, birthMonth, birthYear, onChange, onBlur }) {
+export default function BirthMonthYearFields({ idPrefix, birthMonth, birthDay, birthYear, onChange, onBlur }) {
+  const dayOptions = Array.from({ length: daysInMonth(birthMonth, birthYear) }, (_, index) => ({
+    value: index + 1,
+    label: String(index + 1),
+  }))
+
   return (
-    <div className="birth-fields" role="group" aria-label="Birth month and year">
+    <div className="birth-fields" role="group" aria-label="Birth date">
       <SelectField
         id={`${idPrefix}-month`}
         label="Month"
@@ -29,7 +39,21 @@ export default function BirthMonthYearFields({ idPrefix, birthMonth, birthYear, 
         placeholder="Choose month"
         options={MONTH_OPTIONS}
         onBlur={onBlur}
-        onChange={(month) => onChange(Number(month), birthYear)}
+        onChange={(month) => {
+          const nextMonth = Number(month)
+          const nextDay = birthDay && birthDay > daysInMonth(nextMonth, birthYear) ? null : birthDay
+          onChange(nextMonth, nextDay, birthYear)
+        }}
+      />
+
+      <SelectField
+        id={`${idPrefix}-day`}
+        label="Day"
+        value={birthDay}
+        placeholder="Choose day"
+        options={dayOptions}
+        onBlur={onBlur}
+        onChange={(day) => onChange(birthMonth, Number(day), birthYear)}
       />
 
       <SelectField
@@ -39,7 +63,11 @@ export default function BirthMonthYearFields({ idPrefix, birthMonth, birthYear, 
         placeholder="Choose year"
         options={YEAR_OPTIONS}
         onBlur={onBlur}
-        onChange={(year) => onChange(birthMonth, Number(year))}
+        onChange={(year) => {
+          const nextYear = Number(year)
+          const nextDay = birthDay && birthDay > daysInMonth(birthMonth, nextYear) ? null : birthDay
+          onChange(birthMonth, nextDay, nextYear)
+        }}
       />
     </div>
   )

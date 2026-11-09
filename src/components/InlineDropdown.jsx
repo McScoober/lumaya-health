@@ -1,14 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { CaretDown } from '@phosphor-icons/react'
 
-export default function InlineDropdown({ id, value, options, placeholder, onChange, disabled = false }) {
+export default function InlineDropdown({ id, value, options, placeholder, onChange, disabled = false, multiple = false, exclusiveValues = [] }) {
+  const generatedId = useId()
+  const controlId = id || generatedId
   const [open, setOpen] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
   const dropdownRef = useRef(null)
   const triggerRef = useRef(null)
   const optionRefs = useRef([])
+  const selectedValues = multiple && Array.isArray(value) ? value : []
   const selected = options.find((option) => String(option.value) === String(value))
-  const selectedIndex = options.findIndex((option) => String(option.value) === String(value))
+  const selectedIndex = multiple
+    ? options.findIndex((option) => selectedValues.some((selectedValue) => String(selectedValue) === String(option.value)))
+    : options.findIndex((option) => String(option.value) === String(value))
 
   function openMenu(index = selectedIndex >= 0 ? selectedIndex : 0) {
     setActiveIndex(Math.max(0, index))
@@ -16,6 +21,23 @@ export default function InlineDropdown({ id, value, options, placeholder, onChan
   }
 
   function chooseOption(option, index) {
+    if (multiple) {
+      const isSelected = selectedValues.some((selectedValue) => String(selectedValue) === String(option.value))
+      let nextValues
+      if (isSelected) {
+        nextValues = selectedValues.filter((selectedValue) => String(selectedValue) !== String(option.value))
+      } else if (exclusiveValues.some((exclusiveValue) => String(exclusiveValue) === String(option.value))) {
+        nextValues = [option.value]
+      } else {
+        nextValues = [
+          ...selectedValues.filter((selectedValue) => !exclusiveValues.some((exclusiveValue) => String(exclusiveValue) === String(selectedValue))),
+          option.value,
+        ]
+      }
+      onChange(nextValues)
+      setActiveIndex(index)
+      return
+    }
     if (String(option.value) !== String(value)) onChange(option.value)
     setActiveIndex(index)
     setOpen(false)
@@ -79,30 +101,37 @@ export default function InlineDropdown({ id, value, options, placeholder, onChan
     <div className="inline-dropdown" ref={dropdownRef}>
       <button
         ref={triggerRef}
-        id={id}
+        id={controlId}
         type="button"
         className={`inline-dropdown__trigger ${selected ? '' : 'inline-dropdown__trigger--placeholder'}`}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-controls={`${id}-options`}
+        aria-controls={`${controlId}-options`}
         disabled={disabled}
         onKeyDown={handleTriggerKeyDown}
         onClick={() => (open ? setOpen(false) : openMenu())}
       >
-        <span className="inline-dropdown__label">{selected?.label || placeholder}</span>
+        <span className="inline-dropdown__label">
+          {multiple
+            ? selectedValues.length ? `${selectedValues.length} selected` : placeholder
+            : selected?.label || placeholder}
+        </span>
         <CaretDown className={open ? 'inline-dropdown__caret inline-dropdown__caret--open' : 'inline-dropdown__caret'} size={18} weight="bold" aria-hidden="true" />
       </button>
       {open && (
         <div
-          id={`${id}-options`}
+          id={`${controlId}-options`}
           className="inline-dropdown__options"
           role="listbox"
-          aria-labelledby={id}
+          aria-labelledby={controlId}
+          aria-multiselectable={multiple || undefined}
           tabIndex={-1}
           onKeyDown={handleMenuKeyDown}
         >
           {options.map((option, index) => {
-            const isSelected = String(option.value) === String(value)
+            const isSelected = multiple
+              ? selectedValues.some((selectedValue) => String(selectedValue) === String(option.value))
+              : String(option.value) === String(value)
             return (
               <button
                 key={option.value}

@@ -6,7 +6,7 @@ import { pullFromSupabase, pushToSupabase, clearSyncCache, loadHistoryPage, load
 import { clearLegacyHealthStorage, trackerRecords } from '../lib/trackerRecords.js'
 import { clearSignupDraft, readSignupDraft } from '../lib/signupDraft.js'
 import { bufferedMonthRange, monthCacheKey } from '../lib/historyWindow.js'
-import { ageBandFromBirthMonthYear } from '../lib/age.js'
+import { ageBandFromBirthDate, ageBandFromBirthMonthYear } from '../lib/age.js'
 import { birthControlContext, withBirthControlCompatibility } from '../data/questions.js'
 import { evaluateRules, ruleValue, serverRuleVersionStatus } from '../engine/rules/index.js'
 import { clearGuestTracker, readGuestTracker, saveGuestTracker } from '../lib/guestTracker.js'
@@ -45,6 +45,7 @@ export function freshState() {
       email: '',
       ageBand: null, // '13'..'17' | '18+'
       birthMonth: null,
+      birthDay: null,
       birthYear: null,
       isMinor: false,
       consentedAt: null,
@@ -361,14 +362,18 @@ export function reducer(state, action) {
 
     case 'SET_BIRTH_MONTH_YEAR': {
       const birthMonth = Number(action.birthMonth)
+      const birthDay = action.birthDay ? Number(action.birthDay) : null
       const birthYear = Number(action.birthYear)
-      const ageBand = ageBandFromBirthMonthYear(birthMonth, birthYear)
+      const ageBand = birthDay
+        ? ageBandFromBirthDate(birthMonth, birthDay, birthYear)
+        : ageBandFromBirthMonthYear(birthMonth, birthYear)
       if (!ageBand) return state
       return {
         ...state,
         identity: {
           ...state.identity,
           birthMonth,
+          birthDay,
           birthYear,
           ageBand,
           isMinor: ageBand !== '18+',

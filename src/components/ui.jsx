@@ -1,5 +1,6 @@
 // Shared UI primitives — thin wrappers over the design-system CSS (global.css).
 import { useNavigate } from 'react-router-dom'
+import InlineDropdown from './InlineDropdown.jsx'
 
 export function Button({ variant = 'primary', block, className = '', ...props }) {
   return (
@@ -24,6 +25,16 @@ export function Chip({ selected, children, stack, ...props }) {
 }
 
 export function ChipGroup({ options, value, onChange, stack, columns }) {
+  if (options.length > 4) {
+    return (
+      <InlineDropdown
+        value={value}
+        options={options.map((option) => ({ value: option, label: option }))}
+        placeholder="Choose an answer"
+        onChange={onChange}
+      />
+    )
+  }
   return (
     <div className="chips" style={columns ? { display: 'grid', gridTemplateColumns: `repeat(${columns}, 1fr)` } : undefined}>
       {options.map((opt) => (

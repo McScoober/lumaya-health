@@ -7,6 +7,7 @@ import {
 } from '@phosphor-icons/react'
 import { useStore } from '../state/store.jsx'
 import { Button, Chip, ChipGroup } from '../components/ui.jsx'
+import InlineDropdown from '../components/InlineDropdown.jsx'
 import FoodSupportCard from '../components/FoodSupportCard.jsx'
 import SupportAccess from '../components/SupportAccess.jsx'
 import BirthMonthYearFields from '../components/BirthMonthYearFields.jsx'
@@ -15,7 +16,7 @@ import { clearLegacyHealthStorage } from '../lib/trackerRecords.js'
 import { clearSignupDraft } from '../lib/signupDraft.js'
 import { clearGuestTracker } from '../lib/guestTracker.js'
 import { deleteCurrentAccount } from '../lib/sync.js'
-import { ageBandFromBirthMonthYear } from '../lib/age.js'
+import { ageBandFromBirthDate } from '../lib/age.js'
 import {
   profilePayloadForTrackingModules,
   DIET_PREFERENCES,
@@ -42,6 +43,7 @@ export default function Profile() {
   const [sheetClosing, setSheetClosing] = useState(false)
   const [toast, setToast] = useState('')
   const [birthMonth, setBirthMonth] = useState(identity.birthMonth)
+  const [birthDay, setBirthDay] = useState(identity.birthDay)
   const [birthYear, setBirthYear] = useState(identity.birthYear)
   const triggerRef = useRef(null)
   const closeTimerRef = useRef(null)
@@ -53,8 +55,10 @@ export default function Profile() {
     [state.answers, state.history],
   )
   const ageDisplay = identity.ageBand === '18+' ? '18+ years old' : identity.ageBand ? `${identity.ageBand} years old` : 'Teen account'
-  const birthLabel = birthMonth && birthYear ? `${MONTHS[birthMonth - 1].slice(0, 3)} ${birthYear}` : 'Add'
-  const birthError = (birthMonth || birthYear) && !ageBandFromBirthMonthYear(birthMonth, birthYear)
+  const birthLabel = birthMonth && birthYear
+    ? `${MONTHS[birthMonth - 1].slice(0, 3)}${birthDay ? ` ${birthDay},` : ''} ${birthYear}`
+    : 'Add'
+  const birthError = birthMonth && birthDay && birthYear && !ageBandFromBirthDate(birthMonth, birthDay, birthYear)
     ? 'Maisie is for people age 13 and up.'
     : ''
 
@@ -90,11 +94,12 @@ export default function Profile() {
     flash(message)
   }
 
-  function updateBirthMonthYear(month, year) {
+  function updateBirthDate(month, day, year) {
     setBirthMonth(month)
+    setBirthDay(day)
     setBirthYear(year)
-    if (!ageBandFromBirthMonthYear(month, year)) return
-    dispatch({ type: 'SET_BIRTH_MONTH_YEAR', birthMonth: month, birthYear: year })
+    if (!ageBandFromBirthDate(month, day, year)) return
+    dispatch({ type: 'SET_BIRTH_MONTH_YEAR', birthMonth: month, birthDay: day, birthYear: year })
     flash('Birthday saved')
   }
 
@@ -234,7 +239,7 @@ export default function Profile() {
               flash('Reminder preference saved')
             }} />
           )}
-          {activeSheet === 'birthday' && <BirthdayPanel birthMonth={birthMonth} birthYear={birthYear} birthError={birthError} onChange={updateBirthMonthYear} />}
+          {activeSheet === 'birthday' && <BirthdayPanel birthMonth={birthMonth} birthDay={birthDay} birthYear={birthYear} birthError={birthError} onChange={updateBirthDate} />}
           {activeSheet === 'support' && <SupportAccess compact />}
           {activeSheet === 'data' && <DataPanel hasSavedAccount={hasSavedAccount} onDownload={downloadData} onClear={clearDeviceData} onDelete={deleteSavedAccount} />}
           {activeSheet === 'about' && <AboutPanel />}
@@ -350,13 +355,17 @@ function TrackingPanel({ profile, dailyLogs, modules, hideFoodContent, onSave })
       {draft.food && !hideFood && !foodSensitive && (
         <div className="profile-panel__section">
           <h3>Diet preferences</h3>
-          <div className="chips">{DIET_PREFERENCES.map((option) => <Chip key={option} selected={dietPreferences.includes(option)} onClick={() => toggleContext(option, dietPreferences, setDietPreferences)}>{option}</Chip>)}</div>
+          {DIET_PREFERENCES.length > 4
+            ? <InlineDropdown multiple exclusiveValues={['No preference', 'Prefer not to say']} value={dietPreferences} options={DIET_PREFERENCES.map((option) => ({ value: option, label: option }))} placeholder="Choose any that apply" onChange={setDietPreferences} />
+            : <div className="chips">{DIET_PREFERENCES.map((option) => <Chip key={option} selected={dietPreferences.includes(option)} onClick={() => toggleContext(option, dietPreferences, setDietPreferences)}>{option}</Chip>)}</div>}
         </div>
       )}
       {draft.bleedingDetail && (
         <div className="profile-panel__section">
           <h3>Period products</h3>
-          <div className="chips">{PERIOD_PRODUCTS.map((option) => <Chip key={option} selected={periodProducts.includes(option)} onClick={() => toggleContext(option, periodProducts, setPeriodProducts)}>{option}</Chip>)}</div>
+          {PERIOD_PRODUCTS.length > 4
+            ? <InlineDropdown multiple exclusiveValues={['No preference', 'Prefer not to say']} value={periodProducts} options={PERIOD_PRODUCTS.map((option) => ({ value: option, label: option }))} placeholder="Choose any that apply" onChange={setPeriodProducts} />
+            : <div className="chips">{PERIOD_PRODUCTS.map((option) => <Chip key={option} selected={periodProducts.includes(option)} onClick={() => toggleContext(option, periodProducts, setPeriodProducts)}>{option}</Chip>)}</div>}
         </div>
       )}
       {foodSensitive && <FoodSupportCard compact />}
@@ -389,11 +398,11 @@ function RemindersPanel({ enabled, reminderTime, onChange }) {
   )
 }
 
-function BirthdayPanel({ birthMonth, birthYear, birthError, onChange }) {
+function BirthdayPanel({ birthMonth, birthDay, birthYear, birthError, onChange }) {
   return (
     <div className="profile-panel">
-      <p className="profile-panel__intro">Maisie uses month and year to keep age guidance current. An exact day is not needed.</p>
-      <BirthMonthYearFields idPrefix="profile-birth" birthMonth={birthMonth} birthYear={birthYear} onChange={onChange} />
+      <p className="profile-panel__intro">Maisie uses your birthday to keep age guidance current.</p>
+      <BirthMonthYearFields idPrefix="profile-birth" birthMonth={birthMonth} birthDay={birthDay} birthYear={birthYear} onChange={onChange} />
       {birthError && <p className="profile-panel__error" role="alert">{birthError}</p>}
     </div>
   )

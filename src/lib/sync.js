@@ -1,7 +1,7 @@
 import { getAuthRedirectUrl, supabase } from './supabase.js'
 import { diffRecords, trackerRecords } from './trackerRecords.js'
 import { historyPageRange, initialHistoryStart } from './historyWindow.js'
-import { ageBandFromBirthMonthYear } from './age.js'
+import { ageBandFromBirthDate, ageBandFromBirthMonthYear } from './age.js'
 import { stateFromSynchronizedPreferences } from '../state/storeMigration.js'
 import { evaluateRules, RULE_CONFIG_VERSION } from '../engine/rules/index.js'
 
@@ -86,14 +86,17 @@ export async function pullFromSupabase(userId) {
   if (!setting) { snapshots.delete(userId); return null }
   const result = screening[0]?.result || null
   const savedAnswers = Object.fromEntries(answers.map((row) => [row.question_key, row.answer]))
-  const currentAgeBand = ageBandFromBirthMonthYear(profile.birth_month, profile.birth_year) || profile.age_band
+  const currentAgeBand = (profile.birth_day
+    ? ageBandFromBirthDate(profile.birth_month, profile.birth_day, profile.birth_year)
+    : ageBandFromBirthMonthYear(profile.birth_month, profile.birth_year)) || profile.age_band
   const foundation = stateFromSynchronizedPreferences(setting.preferences, setting.profile)
   const state = {
     ...foundation,
     userId, onboarded: setting.onboarded, profile: foundation.profile,
     identity: {
       name: profile.name || '', email: profile.email || '', ageBand: currentAgeBand,
-      birthMonth: profile.birth_month || null, birthYear: profile.birth_year || null,
+      birthMonth: profile.birth_month || null, birthDay: profile.birth_day || null,
+      birthYear: profile.birth_year || null,
       isMinor: currentAgeBand ? currentAgeBand !== '18+' : !!profile.is_minor,
       privacyAckAt: profile.privacy_ack_at,
     },
@@ -121,7 +124,8 @@ export async function pushToSupabase(userId, state) {
   const { error: profileError, status: profileStatus } = await supabase.from('profiles').upsert({
     user_id: userId, name: identity.name?.trim().slice(0, 80) || null,
     email: data.user.email, age_band: identity.ageBand || null,
-    birth_month: identity.birthMonth || null, birth_year: identity.birthYear || null,
+    birth_month: identity.birthMonth || null, birth_day: identity.birthDay || null,
+    birth_year: identity.birthYear || null,
     is_minor: !!identity.isMinor, privacy_ack_at: identity.privacyAckAt || null,
   }, { onConflict: 'user_id' })
   if (profileError) {
