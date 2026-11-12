@@ -18,11 +18,11 @@ function observationProvenance(id) {
 
 export const PATTERN_OBSERVATION_META = Object.freeze({
   pain: Object.freeze({
-    title: 'Pain has repeated',
+    title: 'Pain was logged on several days',
     focusSection: 'pain',
     missing: 'Pain timing, what helped, and daily impact can make this summary clearer when you choose to log them.',
     next: 'Keep logging pain level, timing, what helped, and any effect on your day.',
-    visitScript: 'I logged pain of 4 or higher on more than one day, and I would like to understand what I should track or discuss next.',
+    visitScript: 'I logged pain of 4 or higher on several days, and I would like to understand what I should track or discuss next.',
   }),
   impact: Object.freeze({
     title: 'Daily life was affected',
@@ -32,14 +32,14 @@ export const PATTERN_OBSERVATION_META = Object.freeze({
     visitScript: 'I logged that symptoms affected my daily life on more than one day, and I would like to talk about what support may help.',
   }),
   'bleeding-fatigue': Object.freeze({
-    title: 'Fatigue and bleeding appeared together',
+    title: 'Fatigue showed up more often on bleeding days',
     focusSection: 'symptoms',
     missing: 'Flow, protection fullness, soaking, dizziness, and daily impact can add context when you choose to log them.',
     next: 'Keep logging fatigue, bleeding details, and any effect on your day when they apply.',
-    visitScript: 'I logged fatigue on more than one day when I was bleeding, and I would like to understand what information would be useful to review.',
+    visitScript: 'I logged fatigue more often on bleeding days in this view, and I would like to understand what information would be useful to review.',
   }),
   fatigue: Object.freeze({
-    title: 'Fatigue has repeated',
+    title: 'Fatigue was logged on several days',
     focusSection: 'symptoms',
     missing: 'Sleep, bleeding, meals, movement, and daily impact can add context when you choose to track them.',
     next: 'Keep logging fatigue and any other changes that happen on the same day.',
@@ -79,52 +79,69 @@ export function buildPatternEvidence(dailyLogs = {}, periodLogs = {}, now = new 
   const painRows = rows.filter(({ log }) => typeof log.pain === 'number' && log.pain >= ruleValue('observations.painMinimum'))
   const impactRows = rows.filter(({ log }) => (log.impact || []).some((impact) => impact !== 'fine'))
   const fatigueRows = rows.filter(({ log }) => (log.symptoms || []).some((item) => String(item).toLowerCase() === 'fatigue'))
-  const bleedingFatigueRows = rows.filter(({ date, log }) => {
-    const fatigue = (log.symptoms || []).some((item) => String(item).toLowerCase() === 'fatigue')
-    return fatigue && (log.period === true || periodLogs[date]?.period === true)
-  })
+  const periodStatus = ({ date, log }) => typeof log.period === 'boolean' ? log.period : periodLogs[date]?.period
+  const bleedingRows = rows.filter((row) => periodStatus(row) === true)
+  const nonBleedingRows = rows.filter((row) => periodStatus(row) === false)
+  const bleedingFatigueRows = fatigueRows.filter((row) => periodStatus(row) === true)
+  const nonBleedingFatigueRows = fatigueRows.filter((row) => periodStatus(row) === false)
   const painDays = painRows.length
   const impactDays = impactRows.length
   const fatigueDays = fatigueRows.length
   const bleedingFatigueDays = bleedingFatigueRows.length
+  const minimumCheckIns = ruleValue('observations.minimumCheckIns')
+  const repeatedDays = ruleValue('observations.minimumRepeatedDays')
+  const minimumEventShare = ruleValue('observations.minimumEventShare')
+  const enoughRepeatedEvidence = (count) => (
+    rows.length >= minimumCheckIns && count >= repeatedDays && count / rows.length >= minimumEventShare
+  )
+  const bleedingFatigueRate = bleedingRows.length ? bleedingFatigueDays / bleedingRows.length : 0
+  const nonBleedingFatigueRate = nonBleedingRows.length ? nonBleedingFatigueRows.length / nonBleedingRows.length : 0
+  const bleedingFatigueRateDifference = bleedingFatigueRate - nonBleedingFatigueRate
+  const enoughBleedingFatigueEvidence = (
+    rows.length >= minimumCheckIns &&
+    bleedingRows.length >= ruleValue('observations.minimumExposureDays') &&
+    nonBleedingRows.length >= ruleValue('observations.minimumExposureDays') &&
+    bleedingFatigueDays >= repeatedDays &&
+    bleedingFatigueRateDifference >= ruleValue('observations.minimumRateDifference')
+  )
 
   const recurring = []
   const moodPattern = analyzeMoodPattern(Object.fromEntries(rows.map(({ date, log }) => [date, log])), periodLogs)
-  if (painDays >= ruleValue('observations.repeatedDays')) {
+  if (enoughRepeatedEvidence(painDays)) {
     recurring.push({
       id: 'pain',
       ...observationProvenance('pain'),
       ...PATTERN_OBSERVATION_META.pain,
-      body: `Pain of ${ruleValue('observations.painMinimum')} or higher was logged on ${plural(painDays, 'day')} in this view.`,
+      body: `Pain of ${ruleValue('observations.painMinimum')} or higher was logged on ${painDays} of ${rows.length} check-in days.`,
       dates: painRows.map(({ date }) => date),
       impactDays: painRows.filter(({ log }) => (log.impact || []).some((impact) => impact !== 'fine')).length,
     })
   }
-  if (impactDays >= ruleValue('observations.repeatedDays')) {
+  if (enoughRepeatedEvidence(impactDays)) {
     recurring.push({
       id: 'impact',
       ...observationProvenance('impact'),
       ...PATTERN_OBSERVATION_META.impact,
-      body: `School, sleep, movement, or plans were affected on ${plural(impactDays, 'day')}.`,
+      body: `School, sleep, movement, or plans were affected on ${impactDays} of ${rows.length} check-in days.`,
       dates: impactRows.map(({ date }) => date),
       impactDays,
     })
   }
-  if (bleedingFatigueDays >= ruleValue('observations.repeatedDays')) {
+  if (enoughBleedingFatigueEvidence) {
     recurring.push({
       id: 'bleeding-fatigue',
       ...observationProvenance('bleeding-fatigue'),
       ...PATTERN_OBSERVATION_META['bleeding-fatigue'],
-      body: `Both were logged on ${plural(bleedingFatigueDays, 'day')}.`,
+      body: `Fatigue was logged on ${bleedingFatigueDays} of ${bleedingRows.length} bleeding check-in days and ${nonBleedingFatigueRows.length} of ${nonBleedingRows.length} non-bleeding check-in days.`,
       dates: bleedingFatigueRows.map(({ date }) => date),
       impactDays: bleedingFatigueRows.filter(({ log }) => (log.impact || []).some((impact) => impact !== 'fine')).length,
     })
-  } else if (fatigueDays >= ruleValue('observations.repeatedDays')) {
+  } else if (enoughRepeatedEvidence(fatigueDays)) {
     recurring.push({
       id: 'fatigue',
       ...observationProvenance('fatigue'),
       ...PATTERN_OBSERVATION_META.fatigue,
-      body: `Fatigue was logged on ${plural(fatigueDays, 'day')} in this view.`,
+      body: `Fatigue was logged on ${fatigueDays} of ${rows.length} check-in days.`,
       dates: fatigueRows.map(({ date }) => date),
       impactDays: fatigueRows.filter(({ log }) => (log.impact || []).some((impact) => impact !== 'fine')).length,
     })
@@ -230,7 +247,7 @@ export function buildCarePreparationState(result, evidence, routeSignals = []) {
   } else if (evidence.fullCycleCount < ruleValue('gates.defaultFullCycles')) {
     note = `Maisie waits for ${ruleValue('gates.defaultFullCycles')} completed cycles before showing repeated care signals. You can still prepare or seek care now.`
   } else if (result?.authoritative) {
-    note = 'No additional care signal was identified from your available answers. This is not a medical assessment.'
+    note = 'No repeat showed up in these logs. This is not an all-clear; Maisie can only reflect what you log.'
   } else {
     note = 'Care signals will update after your saved answers are checked.'
   }

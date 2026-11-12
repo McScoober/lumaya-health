@@ -1,13 +1,13 @@
 // Bottom navigation for the ongoing app (post-onboarding).
 import { useLocation, useNavigate } from 'react-router-dom'
-import { House, CalendarBlank, Books, FirstAid, UserCircle } from '@phosphor-icons/react'
+import { House, CalendarBlank, FlowerLotus, FirstAid, UserCircle } from '@phosphor-icons/react'
 import { features } from '../config/features.js'
 
 const TABS = [
   { to: '/home', label: 'Home', Icon: House },
   { to: '/patterns', label: 'Patterns', Icon: CalendarBlank },
   ...(features.routeSummary ? [{ to: '/route', label: 'Route', Icon: FirstAid }] : []),
-  { to: '/learn', label: 'Learn', Icon: Books },
+  { to: '/learn', label: 'Wellbeing', Icon: FlowerLotus },
   { to: '/me', label: 'Me', Icon: UserCircle },
 ]
 

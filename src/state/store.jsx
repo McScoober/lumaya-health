@@ -962,7 +962,9 @@ export function StoreProvider({ children }) {
           if (currentFingerprint === fingerprint) dispatch({ type: 'SERVER_RESULT', result })
         } catch (error) {
           if (revision !== epoch.current) return
-          const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+          // A server response is not an offline failure, even if the browser's
+          // connectivity hint is stale or inaccurate.
+          const offline = error?.status == null && typeof navigator !== 'undefined' && navigator.onLine === false
           const permanent = error?.retryable === false
           if (import.meta.env.DEV) {
             console.error('Tracker sync failed', {

@@ -9,7 +9,7 @@ import InlineDropdown from './InlineDropdown.jsx'
 export const SHARING_MODES = [
   { id: 'flags', label: 'Support signals only', description: 'Signals that may need support, without check-in dates or individual answers.' },
   { id: 'digest', label: 'Summary counts', description: 'Check-in and signal totals from the last 30 days, without dates or urgency details.' },
-  { id: 'full', label: 'Overview and check-ins', description: 'Overall signal level, latest check-in date, and check-in count. Individual answers stay private.' },
+  { id: 'full', label: 'Overview and check-ins', description: 'Overall signal level, latest check-in date, and check-in count. Individual answers and pain ratings are not included.' },
 ]
 
 function sharingMode(mode) {
@@ -77,12 +77,12 @@ export default function SupportAccess({ compact = false }) {
   return (
     <section className="trusted-access">
       {compact ? (
-        <p className="support-compact-intro">You choose what each person can see. Daily answers and pain ratings stay private.</p>
+        <p className="support-compact-intro">You choose what each invited person can see. Daily answers and pain ratings are not included in supporter summaries.</p>
       ) : (
         <header className="trusted-access__header">
           <p className="eyebrow">Private sharing</p>
           <h2>People you trust</h2>
-          <p className="muted">You choose what each person can see. Your answers and daily pain ratings stay private.</p>
+          <p className="muted">You choose what each invited person can see. Daily answers and pain ratings are not included in supporter summaries.</p>
         </header>
       )}
 

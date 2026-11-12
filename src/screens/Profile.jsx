@@ -206,7 +206,7 @@ export default function Profile() {
 
       <aside className="profile-privacy-note">
         <span aria-hidden="true"><ShieldCheck size={19} weight="duotone" /></span>
-        <p><strong>Your daily answers stay private.</strong> Supporters only see the access level you choose.</p>
+        <p><strong>Invited supporters do not see daily answers or pain ratings.</strong> You choose whether to share a summary and can change access later.</p>
       </aside>
 
       {activeSheet && createPortal(

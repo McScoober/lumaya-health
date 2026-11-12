@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-09.1",
+  "version": "2026-11-11.1",
   "activationStatus": "active",
   "clinicalReviewStatus": "pending",
   "thresholds": {
@@ -36,8 +36,13 @@
 
     "observations.windowDays": { "value": 90, "source": "Maisie product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "observations.homeWindowDays": { "value": 30, "source": "Maisie product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
-    "observations.repeatedDays": { "value": 2, "source": "Maisie product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "observations.repeatedDays": { "value": 2, "source": "Existing Learn high-pain card repeat gate", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "observations.minimumRepeatedDays": { "value": 4, "source": "Maisie evidence gate update; non-diagnostic product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "observations.painMinimum": { "value": 4, "source": "Maisie product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "observations.minimumCheckIns": { "value": 7, "source": "Maisie minimum evidence gate; non-diagnostic product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "observations.minimumEventShare": { "value": 0.15, "source": "Maisie base-rate guard; non-diagnostic product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "observations.minimumExposureDays": { "value": 5, "source": "Maisie co-occurrence evidence gate; non-diagnostic product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "observations.minimumRateDifference": { "value": 0.25, "source": "Maisie co-occurrence base-rate guard; non-diagnostic product design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "home.recentLoggingWindowDays": { "value": 5, "source": "Maisie Home engagement display window", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "reports.doctorSummaryWindowDays": { "value": 30, "source": "Maisie visit-preparation design choice", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "gates.defaultCheckIns": { "value": 7, "source": "Maisie product confidence gate", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
@@ -139,9 +144,9 @@
     "SIG-SKIN": { "source": "TRD body-signal specification and existing Maisie skin logic", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "SIG-SLEEP": { "source": "TRD body-signal specification and existing Maisie sleep logic", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "SIG-MOOD": { "source": "TRD body-signal specification and existing Maisie mood logic", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
-    "OBS-PAIN": { "source": "TRD repeated-observation flow", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "OBS-PAIN": { "source": "TRD repeated-observation flow; minimum evidence and logged-day share guards", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "OBS-IMPACT": { "source": "TRD repeated-observation flow", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
-    "OBS-BLEEDING-FATIGUE": { "source": "TRD repeated-observation flow", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
+    "OBS-BLEEDING-FATIGUE": { "source": "TRD repeated-observation flow; minimum exposure and base-rate comparison guards", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "OBS-FATIGUE": { "source": "TRD repeated-observation flow", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "OBS-MOOD-TIMING": { "source": "TRD mood and PMS module", "evaluationStatus": "active", "presentationStatus": "active", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },
     "PRIM-01": { "source": "ACOG menstrual cycle as a vital sign guidance", "evaluationStatus": "active", "presentationStatus": "gated-by-default-evidence", "reviewedBy": null, "reviewedAt": null, "reviewStatus": "pending" },

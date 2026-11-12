@@ -769,7 +769,11 @@ export default function DailyLog() {
           {isEditing ? 'Save changes' : 'Log it'}
         </button>
         <p className="muted center" style={{ fontSize: 11.5, marginTop: 8 }}>
-          {isEditing ? 'Only this day will be updated' : 'Your data stays private'}
+          {isEditing
+            ? 'Only this day will be updated'
+            : state.accountId
+              ? 'Saved to your account. People you invite see only the summary access you choose.'
+              : 'Saved on this device. Sign in to back it up and choose whether to share a summary.'}
         </p>
       </div>
     </div>

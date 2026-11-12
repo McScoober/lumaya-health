@@ -1,33 +1,68 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildCarePreparationState, buildPatternEvidence, buildRouteSignals } from './patternInsights.js'
+import {
+  bleedingFatigueContrastFixture,
+  highBleedingPrevalenceStressFixture,
+  makePatternScenario,
+  patternFixtureNow,
+  repeatedPainFixture,
+} from './fixtures/patternScenarios.js'
 
 const now = new Date(2026, 9, 17)
 
-test('recurring evidence requires at least two observed days', () => {
-  const evidence = buildPatternEvidence({
-    '2026-10-14': { checkinCompleted: true, pain: 5, impact: ['school'], symptoms: ['Fatigue'] },
-    '2026-10-15': { checkinCompleted: true, pain: 6, impact: ['sleep'], symptoms: ['Fatigue'] },
-    '2026-10-16': { checkinCompleted: true, pain: 0, impact: ['fine'] },
-  }, {}, now)
+test('repeated observations require minimum check-ins, event count, and logged-day share', () => {
+  const fixture = makePatternScenario({ days: 10, painDays: [0, 1, 2, 3], impactDays: [0, 1, 2, 3], fatigueDays: [0, 1, 2, 3] })
+  const evidence = buildPatternEvidence(fixture.dailyLogs, fixture.periodLogs, fixture.now)
 
-  assert.equal(evidence.checkInCount, 3)
+  assert.equal(evidence.checkInCount, 10)
   assert.deepEqual(evidence.recurring.map((item) => item.id), ['pain', 'impact', 'fatigue'])
-  assert.deepEqual(evidence.recurring[0].dates, ['2026-10-14', '2026-10-15'])
-  assert.equal(evidence.recurring[0].impactDays, 2)
+  assert.equal(evidence.recurring[0].body, 'Pain of 4 or higher was logged on 4 of 10 check-in days.')
+  assert.equal(evidence.recurring[0].impactDays, 4)
   assert.equal(evidence.recurring[0].focusSection, 'pain')
 })
 
-test('fatigue and bleeding are grouped only when both were logged together twice', () => {
-  const evidence = buildPatternEvidence({
-    '2026-10-14': { checkinCompleted: true, symptoms: ['Fatigue'] },
-    '2026-10-15': { checkinCompleted: true, symptoms: ['Fatigue'] },
-  }, {
-    '2026-10-14': { period: true },
-    '2026-10-15': { period: true },
-  }, now)
+test('three intermittent pain days in a large log do not create a repeated observation', () => {
+  const fixture = makePatternScenario({ days: 60, painDays: [0, 20, 40] })
+  const evidence = buildPatternEvidence(fixture.dailyLogs, fixture.periodLogs, fixture.now)
+  assert.equal(evidence.recurring.some((item) => item.id === 'pain'), false)
+})
 
-  assert.equal(evidence.recurring.at(-1).id, 'bleeding-fatigue')
+test('high bleeding prevalence alone does not make fatigue appear associated with bleeding', () => {
+  const evidence = buildPatternEvidence(
+    highBleedingPrevalenceStressFixture.dailyLogs,
+    highBleedingPrevalenceStressFixture.periodLogs,
+    highBleedingPrevalenceStressFixture.now,
+  )
+  assert.equal(evidence.checkInCount, 60)
+  assert.equal(Object.values(highBleedingPrevalenceStressFixture.periodLogs).filter((item) => item.period).length, 48)
+  assert.equal(evidence.recurring.some((item) => item.id === 'bleeding-fatigue'), false)
+  assert.equal(evidence.recurring.some((item) => item.id === 'pain'), false)
+})
+
+test('bleeding and fatigue are shown only with enough exposure and a clear rate difference', () => {
+  const evidence = buildPatternEvidence(
+    bleedingFatigueContrastFixture.dailyLogs,
+    bleedingFatigueContrastFixture.periodLogs,
+    bleedingFatigueContrastFixture.now,
+  )
+  const observation = evidence.recurring.find((item) => item.id === 'bleeding-fatigue')
+  assert.ok(observation)
+  assert.match(observation.body, /6 of 12 bleeding check-in days/)
+  assert.match(observation.body, /1 of 18 non-bleeding check-in days/)
+})
+
+test('a repeated pain observation includes its denominator', () => {
+  const evidence = buildPatternEvidence(repeatedPainFixture.dailyLogs, repeatedPainFixture.periodLogs, repeatedPainFixture.now)
+  const observation = evidence.recurring.find((item) => item.id === 'pain')
+  assert.ok(observation)
+  assert.match(observation.body, /6 of 30 check-in days/)
+})
+
+test('a high share still needs the minimum number of logged days', () => {
+  const fixture = makePatternScenario({ days: 5, painDays: [0, 1, 2, 3] })
+  const evidence = buildPatternEvidence(fixture.dailyLogs, fixture.periodLogs, patternFixtureNow)
+  assert.equal(evidence.recurring.some((item) => item.id === 'pain'), false)
 })
 
 test('unconfirmed tier two signals remain watch items without a visit claim', () => {
@@ -105,7 +140,7 @@ test('care preparation stays available when no care signal was identified', () =
 
   assert.equal(state.stage, 'available')
   assert.match(state.body, /do not need to wait/i)
-  assert.match(state.note, /not a medical assessment/i)
+  assert.match(state.note, /not an all-clear/i)
 })
 
 test('discussion signals take precedence over descriptive observations', () => {

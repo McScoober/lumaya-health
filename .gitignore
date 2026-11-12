@@ -21,3 +21,5 @@ dist-artifact
 /outputs/
 /supabase/setup/
 /supabase/tests/
+/supabase/generated/
+/supabase/schema.sql

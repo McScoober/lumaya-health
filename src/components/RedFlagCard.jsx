@@ -42,7 +42,7 @@ export default function RedFlagCard({ onDismiss }) {
             lineHeight: 1.3,
           }}
         >
-          This is heavier than normal
+          You logged high pain
         </p>
       </div>
 
@@ -54,7 +54,7 @@ export default function RedFlagCard({ onDismiss }) {
           lineHeight: 1.55,
         }}
       >
-        Pain at this level means your body is asking for support. It's worth letting a parent or doctor know today — you don't have to deal with this alone.
+        Maisie cannot tell what is causing the pain. If it is hard to manage or worries you, tell someone you trust or contact a health professional.
       </p>
 
       {/* Actions */}

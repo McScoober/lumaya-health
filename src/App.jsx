@@ -82,6 +82,7 @@ import DailyLog from './screens/DailyLog.jsx'
 import Patterns from './screens/Patterns.jsx'
 
 import { LearnArticle, LearnCategory, LearnHome, LegacyLearnRedirect } from './screens/Learn.jsx'
+import { WellbeingHome, WellbeingTool } from './screens/Wellbeing.jsx'
 import Profile from './screens/Profile.jsx'
 import HealthBackground from './screens/HealthBackground.jsx'
 
@@ -113,10 +114,12 @@ export default function App() {
           <Route path="/home" element={<RequireOnboarded><Home /></RequireOnboarded>} />
           <Route path="/signals" element={<Navigate to="/patterns?tab=signals" replace />} />
           <Route path="/patterns" element={<RequireOnboarded><Patterns /></RequireOnboarded>} />
-          <Route path="/learn" element={<RequireOnboarded><LearnHome /></RequireOnboarded>} />
+          <Route path="/learn" element={<RequireOnboarded><WellbeingHome /></RequireOnboarded>} />
+          <Route path="/learn/library" element={<RequireOnboarded><LearnHome /></RequireOnboarded>} />
+          <Route path="/learn/tools/:tool" element={<RequireOnboarded><WellbeingTool /></RequireOnboarded>} />
           <Route path="/learn/c/:category" element={<RequireOnboarded><LearnCategory /></RequireOnboarded>} />
           <Route path="/learn/:slug" element={<RequireOnboarded><LearnArticle /></RequireOnboarded>} />
-          <Route path="/library" element={<Navigate to="/learn" replace />} />
+          <Route path="/library" element={<Navigate to="/learn/library" replace />} />
           <Route path="/library/:slug" element={<RequireOnboarded><LegacyLearnRedirect /></RequireOnboarded>} />
           <Route path="/me" element={<RequireOnboarded><Profile /></RequireOnboarded>} />
           <Route path="/me/health-background" element={<RequireOnboarded><HealthBackground /></RequireOnboarded>} />

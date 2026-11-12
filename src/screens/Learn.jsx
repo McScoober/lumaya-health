@@ -182,7 +182,8 @@ export function LearnHome() {
 
   return (
     <div className="screen screen--pad-bottom">
-      <TopBar title="Learn" onBack={false} />
+      <TopBar title="Learn library" onBack={false} />
+      <Link to="/learn" className="wellbeing-back-link"><ArrowRight size={17} className="wellbeing-back-link__icon" /> Wellbeing tools</Link>
       <p style={{ margin: '2px 0 18px', color: colors.textSecondary, fontSize: 14, lineHeight: 1.5 }}>
         Clear health information for understanding changes and asking better questions.
       </p>
@@ -315,7 +316,7 @@ export function LearnCategory() {
   const { state } = useStore()
   const { saved, toggle } = useSavedArticles()
   const category = categoryFor(categoryId)
-  if (!category) return <Navigate to="/learn" replace />
+  if (!category) return <Navigate to="/learn/library" replace />
   const articles = visibleLearnArticles(state).filter((item) => item.category === categoryId)
   const tone = categoryColors(categoryId)
 
@@ -404,7 +405,7 @@ export function LearnArticle() {
   }, [article])
 
   if (!article || !article.launch || !visibleArticles.some((item) => item.slug === article.slug)) {
-    return <Navigate to="/learn" replace />
+    return <Navigate to="/learn/library" replace />
   }
   if (rawSlug !== slug) return <Navigate to={`/learn/${slug}`} replace />
 
@@ -474,7 +475,7 @@ export function LearnArticle() {
 export function LegacyLearnRedirect() {
   const { slug } = useParams()
   const target = LEGACY_ARTICLE_SLUGS[slug] || slug
-  return <Navigate to={target ? `/learn/${target}` : '/learn'} replace />
+  return <Navigate to={target ? `/learn/${target}` : '/learn/library'} replace />
 }
 
 export default LearnHome

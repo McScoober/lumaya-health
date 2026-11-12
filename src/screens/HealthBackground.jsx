@@ -33,7 +33,7 @@ export default function HealthBackground() {
   const returnTo = location.state?.from === 'home'
     ? '/home'
     : location.state?.from === 'learn'
-      ? '/learn'
+      ? '/learn/library'
       : location.state?.from === 'route'
         ? '/route/talk'
         : '/me'
