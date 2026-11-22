@@ -8,25 +8,24 @@
 // in-app "Messages" inbox so the cadence is visible and testable.
 // ============================================================
 
-import { predictPeriod, phaseForDate, addDays, diffDays, startOfDay } from './cyclePredictor.js'
+import { phaseForDate, addDays, startOfDay } from './cyclePredictor.js'
+import { isInForecastRange } from './periodForecast.js'
 import { tipSms } from './tipEngine.js'
 import { ruleValue } from './rules/config.js'
 
 // Build the upcoming notification schedule for the next `days` days.
-export function buildSchedule(model, profile, { days = ruleValue('notifications.defaultScheduleDays'), from = new Date(), phaseTips = true } = {}) {
+export function buildSchedule(model, profile, { days = ruleValue('notifications.defaultScheduleDays'), from = new Date(), phaseTips = true, periodForecast = null } = {}) {
   const out = []
   if (!model.hasData) return out
-  if (!model.predictionsReady) return out
   const today = startOfDay(from)
 
   let lastPhaseSeen = null
   for (let i = 0; i < days; i++) {
     const date = addDays(today, i)
-    const p = predictPeriod(model, date)
     const { phase, dayOfCycle } = phaseForDate(model, date)
 
     // 1. Period check-in — daily, only inside the learned window.
-    if (p && diffDays(date, p.windowStart) >= 0 && diffDays(date, p.windowEnd) <= 0) {
+    if (isInForecastRange(periodForecast, date)) {
       out.push({
         date,
         type: 'period_checkin',
@@ -35,7 +34,7 @@ export function buildSchedule(model, profile, { days = ruleValue('notifications.
       })
     }
 
-    if (phaseTips && !model.onBirthControl) {
+    if (model.predictionsReady && phaseTips && !model.onBirthControl) {
       // 2. Weekly phase check-in — fire on the first day of a new phase.
       if (phase && phase !== lastPhaseSeen && phase !== 'menstrual') {
         out.push({
@@ -60,7 +59,7 @@ export function buildSchedule(model, profile, { days = ruleValue('notifications.
         }
       }
       lastPhaseSeen = phase
-    } else if (phaseTips) {
+    } else if (model.predictionsReady && phaseTips) {
       // BC users: a lighter weekly steady-state touch.
       if (i % ruleValue('notifications.birthControlCadenceDays') === 0 && i > 0) {
         out.push({

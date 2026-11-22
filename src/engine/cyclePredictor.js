@@ -46,7 +46,9 @@ function parseDateLocal(value) {
 }
 
 function addDays(d, n) {
-  return new Date(startOfDay(d).getTime() + n * MS_DAY)
+  const result = startOfDay(d)
+  result.setDate(result.getDate() + n)
+  return result
 }
 function diffDays(a, b) {
   return Math.round((startOfDay(a) - startOfDay(b)) / MS_DAY)
@@ -66,7 +68,7 @@ export function buildCycleModel(opts = {}) {
     ruleValue('cycle.minimumPredictionDays'),
     ruleValue('cycle.maximumPredictionDays'),
   )
-  const periodLen = PERIOD_LEN
+  const periodLen = opts.periodLength || PERIOD_LEN
   const lastStart = opts.lastStart ? startOfDay(parseDateLocal(opts.lastStart)) : null
 
   return {

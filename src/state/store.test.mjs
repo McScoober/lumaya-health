@@ -25,6 +25,57 @@ test('marking a period automatically derives the first day and backfilling moves
   state = reducer(state, { type: 'UPDATE_PERIOD_STATUS', dateKey: '2026-09-11', period: false })
   assert.deepEqual(periodStartKeys(state.periodLogs), ['2026-09-12'])
 })
+test('answering not-period on an estimated day clears the rest of that generated estimate', () => {
+  const historicalRun = Array.from({ length: 6 }, (_, index) => {
+    const day = String(index + 1).padStart(2, '0')
+    return [`2026-08-${day}`, { period: true, status: 'confirmed' }]
+  })
+  let state = {
+    ...freshState(),
+    periodLogs: Object.fromEntries([
+      ...historicalRun,
+      ['2026-08-20', { period: true, status: 'confirmed' }],
+    ]),
+  }
+
+  state = reducer(state, { type: 'UPDATE_PERIOD_STATUS', dateKey: '2026-08-20', period: true })
+  assert.deepEqual(
+    Object.entries(state.periodLogs)
+      .filter(([, log]) => log.status === 'possible' && log.estimatedFrom === '2026-08-20')
+      .map(([date]) => date),
+    ['2026-08-21', '2026-08-22', '2026-08-23'],
+  )
+
+  state = reducer(state, {
+    type: 'UPDATE_PERIOD_STATUS',
+    dateKey: '2026-08-22',
+    period: false,
+    periodPromptAnswered: true,
+  })
+
+  assert.equal(state.periodLogs['2026-08-22'].status, 'not_period')
+  assert.equal(Object.values(state.periodLogs).some((log) => log.status === 'possible' && log.estimatedFrom === '2026-08-20'), false)
+})
+test('hydrating saved data removes a stale estimate split by a not-period answer', () => {
+  const historicalRun = Array.from({ length: 6 }, (_, index) => {
+    const day = String(index + 1).padStart(2, '0')
+    return [`2026-08-${day}`, { period: true, status: 'confirmed' }]
+  })
+  const periodLogs = Object.fromEntries([
+    ...historicalRun,
+    ['2026-08-20', { period: true, status: 'confirmed' }],
+    ['2026-08-21', { period: false, status: 'possible', source: 'estimated', estimatedFrom: '2026-08-20' }],
+    ['2026-08-22', { period: false, status: 'not_period', source: 'manual', periodPromptAnswered: true }],
+    ['2026-08-23', { period: false, status: 'possible', source: 'estimated', estimatedFrom: '2026-08-20' }],
+  ])
+
+  const state = reducer(freshState(), {
+    type: 'HYDRATE',
+    payload: { userId: 'account-a', periodLogs },
+  })
+
+  assert.equal(Object.values(state.periodLogs).some((log) => log.status === 'possible' && log.estimatedFrom === '2026-08-20'), false)
+})
 test('hydrating another account never merges the previous account health data', () => {
   const a = { ...freshState(), accountId: 'a', dailyLogs: { '2026-09-11': { pain: 8 } } }
   const b = reducer(a, { type: 'HYDRATE', payload: { userId: 'b', onboarded: true, dailyLogs: {} } })

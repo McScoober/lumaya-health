@@ -1,6 +1,7 @@
 // In-memory tracker state. Signed-in observations are saved through authenticated RPCs.
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { addDays, buildCycleModel, dateKeyLocal, diffDays, periodStartKeys } from '../engine/cyclePredictor.js'
+import { buildPeriodForecast } from '../engine/periodForecast.js'
 import { isSupabaseConfigured, supabase } from '../lib/supabase.js'
 import { pullFromSupabase, pushToSupabase, clearSyncCache, loadHistoryPage, loadHistoryRange } from '../lib/sync.js'
 import { clearLegacyHealthStorage, trackerRecords } from '../lib/trackerRecords.js'
@@ -209,6 +210,12 @@ function addPossiblePeriodDays(periodLogs = {}, startKey) {
 
   const next = { ...periodLogs }
   const possibleLength = estimatedPeriodLength(next)
+  const hasNotPeriodOverride = Object.entries(next).some(([key, log]) => {
+    const daysAfterStart = diffDays(parseCheckinDate(key), startDate)
+    return log?.status === 'not_period' && daysAfterStart > 0 && daysAfterStart < possibleLength
+  })
+  if (hasNotPeriodOverride) return clearPossibleDaysFromStart(next, startKey)
+
   for (let i = 1; i < possibleLength; i++) {
     const key = dateKeyLocal(addDays(startDate, i))
     const existing = next[key] || {}
@@ -599,7 +606,8 @@ export function reducer(state, action) {
       const savedEditedAt = editedAt || (Object.keys(prev).length > 0 || dateKey !== dateKeyLocal() ? new Date().toISOString() : undefined)
       const { status: _status, estimatedFrom: _estimatedFrom, ...cleanPrev } = prev
       const source = action.source || 'manual'
-      let periodLogs = clearPossibleDaysFromStart(state.periodLogs, dateKey)
+      const estimateStartKey = prev.status === 'possible' ? prev.estimatedFrom : dateKey
+      let periodLogs = clearPossibleDaysFromStart(state.periodLogs, estimateStartKey)
 
       const updatedPeriodLog = {
         ...(period === undefined ? prev : cleanPrev),
@@ -995,21 +1003,30 @@ export function StoreProvider({ children }) {
     return () => clearTimeout(timer)
   }, [fingerprint, state.accountId, authLoading])
 
+  const periodForecast = useMemo(() => buildPeriodForecast({
+    periodLogs: state.periodLogs,
+    additionalStartDates: (state.cycles || []).map((cycle) => cycle.start_date).filter(Boolean),
+    today: new Date(),
+    onBirthControl: state.profile.onBirthControl,
+  }), [state.periodLogs, state.cycles, state.profile.onBirthControl])
+
   const cycleModel = useMemo(() => {
     const summarizedStart = state.cycles?.at(-1)?.start_date
     const lastStart = latestPeriodStartFromLogs(state.periodLogs) || summarizedStart || state.answers.lastStart
     return buildCycleModel({
       lastStart: lastStart && lastStart !== 'unknown' ? lastStart : null,
-      cycleLength: state.result?.cycleLength,
+      cycleLength: periodForecast.cycleLength || state.result?.cycleLength,
+      periodLength: periodForecast.periodLength,
       onBirthControl: state.profile.onBirthControl,
       predictionsReady: state.result?.authoritative === true && state.result.patternsReady === true,
     })
-  }, [state.periodLogs, state.cycles, state.answers.lastStart, state.result, state.profile.onBirthControl])
+  }, [state.periodLogs, state.cycles, state.answers.lastStart, state.result, state.profile.onBirthControl, periodForecast])
 
   const value = useMemo(() => ({
     state,
     dispatch,
     cycleModel,
+    periodForecast,
     authLoading,
     accountError,
     syncStatus,
@@ -1017,7 +1034,7 @@ export function StoreProvider({ children }) {
     historyStatus,
     loadHistoryMonth,
     loadOlderHistory,
-  }), [state, cycleModel, authLoading, accountError, syncStatus, retryAccountSync, historyStatus, loadHistoryMonth, loadOlderHistory])
+  }), [state, cycleModel, periodForecast, authLoading, accountError, syncStatus, retryAccountSync, historyStatus, loadHistoryMonth, loadOlderHistory])
   return <StoreCtx.Provider value={value}>{children}</StoreCtx.Provider>
 }
 

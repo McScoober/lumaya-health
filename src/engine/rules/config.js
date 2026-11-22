@@ -73,7 +73,7 @@ export function withRuleVersion(value) {
 }
 
 export function serverRuleVersionStatus(result) {
-  if (!result?.ruleVersion || !result?.configVersion || !result?.configStatus) return 'missing'
+  if (!result?.ruleVersion || !result?.configVersion || !result?.configStatus || result.authoritative !== true) return 'missing'
   return result.ruleVersion === RULE_CONFIG_VERSION &&
     result.configVersion === RULE_CONFIG_VERSION &&
     result.configStatus === RULE_CONFIG_STATUS

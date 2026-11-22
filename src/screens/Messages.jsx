@@ -24,7 +24,7 @@ function MessageIcon({ type, size = 20 }) {
 
 export default function Messages() {
   const navigate = useNavigate()
-  const { state, dispatch, cycleModel } = useStore()
+  const { state, dispatch, cycleModel, periodForecast } = useStore()
 
   useEffect(() => {
     if (state.messages.some((m) => !m.read)) dispatch({ type: 'MARK_MESSAGES_READ' })
@@ -32,8 +32,8 @@ export default function Messages() {
   }, [])
 
   const schedule = useMemo(
-    () => buildSchedule(cycleModel, state.profile, { days: 21, phaseTips: state.notifyPrefs.phaseTips }),
-    [cycleModel, state.notifyPrefs.phaseTips, state.profile],
+    () => buildSchedule(cycleModel, state.profile, { days: 21, phaseTips: state.notifyPrefs.phaseTips, periodForecast }),
+    [cycleModel, periodForecast, state.notifyPrefs.phaseTips, state.profile],
   )
 
   return (

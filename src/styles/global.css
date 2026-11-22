@@ -1932,6 +1932,7 @@ button {
 .wellbeing-section-heading > span { color: var(--text-muted); font-size: 12px; }
 .wellbeing-tool-list { display: grid; gap: 8px; }
 .wellbeing-all-tools { margin-top: 16px; }
+.wellbeing-library-section { margin-bottom: 14px; }
 .wellbeing-tool-row { min-width: 0; min-height: 68px; display: grid; grid-template-columns: minmax(0, 1fr) 42px; align-items: stretch; gap: 2px; padding-right: 5px; border: 1px solid transparent; border-radius: 12px; transition: filter 140ms ease; }
 .wellbeing-tool-row:hover { filter: saturate(1.08); }
 .wellbeing-tool-row--sage { border-color: var(--sage-400); background: var(--sage-100); }
@@ -1951,18 +1952,20 @@ button {
 .wellbeing-favorite { width: 38px; min-height: 42px; align-self: center; display: grid; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--plum-700); }
 .wellbeing-favorite:hover { background: rgba(255, 255, 255, .56); }
 .wellbeing-favorite[aria-pressed="true"] { background: rgba(255, 255, 255, .7); color: var(--sage-700); }
-.wellbeing-tool__icon, .wellbeing-library-link__icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 11px; }
+.wellbeing-tool__icon, .wellbeing-library-link__icon { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; }
 .wellbeing-tool__copy { min-width: 0; display: grid; gap: 3px; }
-.wellbeing-tool__copy strong, .wellbeing-library-link strong { font-size: 15px; }
-.wellbeing-tool__copy small, .wellbeing-library-link small { color: var(--text-secondary); font-size: 12.5px; line-height: 1.35; }
+.wellbeing-tool__copy strong { font-size: 15px; }
+.wellbeing-tool__copy small { color: var(--text-secondary); font-size: 12.5px; line-height: 1.35; }
 .wellbeing-tool > svg, .wellbeing-library-link > svg { color: var(--plum-700); }
 .wellbeing-library-link {
-  display: grid; grid-template-columns: 42px minmax(0, 1fr) 20px; align-items: center; gap: 12px;
-  margin-top: 24px; padding: 15px 12px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) 20px; align-items: center; gap: 11px;
+  width: 100%; min-height: 62px; padding: 9px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
   color: var(--ink); text-decoration: none;
 }
-.wellbeing-library-link > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
 .wellbeing-library-link__icon { color: var(--plum-700); background: var(--lavender-100); }
+.wellbeing-library-link > span:nth-child(2) { min-width: 0; display: grid; gap: 3px; }
+.wellbeing-library-link strong { font-size: 14px; }
+.wellbeing-library-link small { color: var(--text-secondary); font-size: 12px; line-height: 1.35; }
 .wellbeing-tool-screen { gap: 16px; }
 .wellbeing-tool-screen--sage { --tool-accent: var(--sage-700); --tool-soft: var(--sage-100); --tool-border: var(--sage-400); }
 .wellbeing-tool-screen--lavender { --tool-accent: var(--plum-700); --tool-soft: var(--lavender-100); --tool-border: #DCC9E5; }
@@ -2033,7 +2036,7 @@ button {
 .wellbeing-reset-start { width: 100%; min-height: 50px; margin-top: 5px; }
 .wellbeing-reset-start:disabled { opacity: 1; border-color: var(--tool-border); background: var(--tool-soft); color: var(--tool-accent); box-shadow: none; }
 .wellbeing-reset-footnote { margin: 9px 0 0; color: var(--text-muted); font-size: 12px; text-align: center; }
-.wellbeing-reset-change { width: fit-content; min-height: 40px; padding: 5px 0; border: 0; background: transparent; color: var(--plum-700); font-size: 13px; font-weight: 700; text-align: left; }
+.wellbeing-reset-change { width: fit-content; min-height: 40px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 0; border: 0; background: transparent; color: var(--plum-700); font-size: 13px; font-weight: 700; text-align: left; }
 .wellbeing-reset-progress { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; color: var(--text-muted); font-size: 12px; }
 .wellbeing-reset-progress span:first-child { min-width: 0; color: var(--plum-700); font-weight: 700; }
 .wellbeing-reset-prompt { min-height: 168px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 15px; padding: 23px; border: 1px solid var(--line); border-left: 3px solid var(--sage-400); border-radius: 12px; background: var(--surface); color: var(--sage-700); animation: rise 240ms ease both; }

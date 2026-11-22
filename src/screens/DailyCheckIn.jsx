@@ -4,17 +4,17 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { isInPeriodWindow } from '../engine/cyclePredictor.js'
+import { isInForecastRange } from '../engine/periodForecast.js'
 import { Button, Card, TopBar } from '../components/ui.jsx'
 
 const MOODS = ['😄', '🙂', '😐', '😣', '😢', '😴']
 
 export default function DailyCheckIn() {
   const navigate = useNavigate()
-  const { state, dispatch, cycleModel } = useStore()
+  const { state, dispatch, periodForecast } = useStore()
   const now = new Date()
   const dateKey = now.toISOString().slice(0, 10)
-  const inWindow = isInPeriodWindow(cycleModel, now)
+  const inWindow = isInForecastRange(periodForecast, now)
 
   const [period, setPeriod] = useState(null) // true / false
   const [mood, setMood] = useState(null)

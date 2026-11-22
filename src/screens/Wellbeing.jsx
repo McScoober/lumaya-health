@@ -192,6 +192,18 @@ export function WellbeingHome() {
       <TopBar title="Wellbeing" onBack={false} />
       <p className="wellbeing-intro">Small tools for whatever today brings.</p>
 
+      <section className="wellbeing-library-section" aria-labelledby="wellbeing-library-title">
+        <div className="wellbeing-section-heading">
+          <h2 id="wellbeing-library-title">Learn library</h2>
+          <span>Guides and articles</span>
+        </div>
+        <Link to="/learn/library" className="wellbeing-library-link">
+          <span className="wellbeing-library-link__icon" aria-hidden="true"><BookOpenText size={21} weight="duotone" /></span>
+          <span><strong>Browse health guides</strong><small>Periods, body changes, and saved articles.</small></span>
+          <ArrowRight size={19} aria-hidden="true" />
+        </Link>
+      </section>
+
       {favoriteTools.length > 0 && <section aria-labelledby="wellbeing-favorites-title">
         <div className="wellbeing-section-heading">
           <h2 id="wellbeing-favorites-title">Your go-tos</h2>
@@ -211,12 +223,6 @@ export function WellbeingHome() {
       </section>}
 
       {favoriteTools.length > 0 && <p className="wellbeing-device-note">Go-to choices are saved on this device. They are not health data.</p>}
-
-      <Link to="/learn/library" className="wellbeing-library-link">
-        <span className="wellbeing-library-link__icon" aria-hidden="true"><BookOpenText size={22} weight="duotone" /></span>
-        <span><strong>Learn library</strong><small>Browse health guides and saved articles.</small></span>
-        <ArrowRight size={19} aria-hidden="true" />
-      </Link>
     </div>
   )
 }
@@ -329,10 +335,14 @@ function ResetTool() {
           <span>Done for now</span>
           <p>Hope that gave you a little room to breathe. You can leave it there.</p>
         </div>
+        <button type="button" className="wellbeing-reset-change" onClick={() => { setFinished(false); if (timer.complete) timer.reset() }}><ArrowLeft size={16} /> Back to last step</button>
         <button type="button" className="wellbeing-reset-change" onClick={() => { setStarted(false); setNeed(''); setStepIndex(0); setFinished(false); timer.reset() }}>Choose another pause</button>
         <DidThisHelp />
       </> : <>
-        <button type="button" className="wellbeing-reset-change" onClick={() => { setStarted(false); setNeed(''); timer.reset() }}>‹ Change pause</button>
+        <button type="button" className="wellbeing-reset-change" onClick={() => {
+          if (stepIndex > 0) { setStepIndex((step) => step - 1); setRepeated(false) }
+          else { setStarted(false); timer.setRunning(false) }
+        }}><ArrowLeft size={16} /> {stepIndex > 0 ? 'Previous step' : 'Change pause'}</button>
         <div className="wellbeing-reset-progress">
           <span>{selectedMode.label}</span>
           <span>Step {stepIndex + 1} of {steps.length}</span>
@@ -401,6 +411,7 @@ function FocusTool() {
         <p className="wellbeing-reset-footnote">You can pause or stop whenever you need.</p>
       </> : complete ? <>
         {!outcome ? <>
+          <button type="button" className="wellbeing-reset-change" onClick={() => { setStarted(false); setFinishedEarly(false); timer.reset(minutes * 60) }}><ArrowLeft size={16} /> Back to setup</button>
           <div className="wellbeing-reset-done" role="status">
             <span>{timer.complete ? 'Time is up' : 'Session finished'}</span>
             <p>{task.trim() ? `You made some space for ${task.trim()}.` : 'You made some space for one thing.'}</p>
@@ -411,9 +422,9 @@ function FocusTool() {
             <button type="button" className="btn btn--ghost" onClick={() => { setFinishedEarly(false); timer.reset(minutes * 60); timer.setRunning(true) }}>Another session</button>
             <button type="button" className="btn btn--primary" onClick={() => setOutcome('done')}>Done</button>
           </div>
-        </> : <><p className="wellbeing-finish-note" role="status">{outcome === 'break' ? 'Take the break you need.' : 'Nice work showing up for yourself.'}</p><DidThisHelp /></>}
+        </> : <><button type="button" className="wellbeing-reset-change" onClick={() => setOutcome('')}><ArrowLeft size={16} /> Back</button><p className="wellbeing-finish-note" role="status">{outcome === 'break' ? 'Take the break you need.' : 'Nice work showing up for yourself.'}</p><DidThisHelp /></>}
       </> : <>
-        <button type="button" className="wellbeing-reset-change" onClick={() => { timer.setRunning(false); setStarted(false); timer.reset(minutes * 60) }}>‹ Change setup</button>
+        <button type="button" className="wellbeing-reset-change" onClick={() => { timer.setRunning(false); setStarted(false) }}><ArrowLeft size={16} /> Back to setup</button>
         <div className="wellbeing-focus-active">
           <span>One thing at a time</span>
           <p>{task.trim() || 'A few minutes for yourself.'}</p>
@@ -448,7 +459,6 @@ function WindDownTool() {
 
   function finish() {
     setFinished(true)
-    setNote('')
   }
 
   function advance() {
@@ -469,7 +479,10 @@ function WindDownTool() {
         <button type="button" className="btn btn--primary wellbeing-reset-start" disabled={!mode} onClick={() => { setStepIndex(0); setFinished(false); setStarted(true) }}>Continue</button>
         <p className="wellbeing-reset-footnote">No need to fall asleep on a schedule. Skip anything that does not fit.</p>
       </> : !complete ? <>
-        <button type="button" className="wellbeing-reset-change" onClick={() => { setStarted(false); setStepIndex(0); setNote('') }}>‹ Change what’s up</button>
+        <button type="button" className="wellbeing-reset-change" onClick={() => {
+          if (stepIndex > 0) setStepIndex((step) => step - 1)
+          else setStarted(false)
+        }}><ArrowLeft size={16} /> {stepIndex > 0 ? 'Previous step' : 'Change what’s up'}</button>
         <div className="wellbeing-reset-progress"><span>{mode.label}</span><span>Step {stepIndex + 1} of {steps.length}</span></div>
         <ActivityProgress value={stepIndex + 1} max={steps.length} label="Wind-down activity progress" />
         <div className="wellbeing-reset-prompt" key={`${choice}-${stepIndex}`} aria-live="polite">
@@ -487,6 +500,7 @@ function WindDownTool() {
           <button type="button" className="btn btn--primary" onClick={advance}>{stepIndex === steps.length - 1 ? 'Done for tonight' : 'Next'}</button>
         </div>
       </> : <>
+        <button type="button" className="wellbeing-reset-change" onClick={() => setFinished(false)}><ArrowLeft size={16} /> Back to last step</button>
         <div className="wellbeing-reset-done" role="status"><span>That is enough for now</span><p>You can leave the rest for another time. No need to force sleep.</p></div>
         <button type="button" className="wellbeing-reset-change" onClick={() => { setStarted(false); setFinished(false); setChoice(''); setStepIndex(0) }}>Choose something else</button>
         <DidThisHelp />
@@ -529,7 +543,7 @@ function MoveTool() {
         <button type="button" className="btn btn--primary wellbeing-reset-start" disabled={!intent} onClick={() => setSetupReady(true)}>Continue</button>
         <p className="wellbeing-reset-footnote">No check-in needed. Just pick what suits you.</p>
       </> : !started ? <>
-        <button type="button" className="wellbeing-reset-change" onClick={() => setSetupReady(false)}>‹ Change goal</button>
+        <button type="button" className="wellbeing-reset-change" onClick={() => setSetupReady(false)}><ArrowLeft size={16} /> Change goal</button>
         <div className="wellbeing-setup-heading"><h2 className="wellbeing-reset-question">Make it fit your space.</h2><span>Choose what feels doable</span></div>
         <p className="wellbeing-tool-intro">Choose what feels doable right now.</p>
         <div className="wellbeing-move-settings">
@@ -553,7 +567,10 @@ function MoveTool() {
         <button type="button" className="btn btn--primary wellbeing-reset-start" onClick={() => { setStepIndex(0); setFinished(false); timer.reset(duration); setStarted(true) }}>Start {MOVE_INTENTS[intent].label.toLowerCase()}</button>
         <p className="wellbeing-reset-footnote">Skip anything that does not feel comfortable.</p>
       </> : !complete ? <>
-        <button type="button" className="wellbeing-reset-change" onClick={() => { timer.setRunning(false); setStarted(false); timer.reset(duration) }}>‹ Change setup</button>
+        <button type="button" className="wellbeing-reset-change" onClick={() => {
+          if (stepIndex > 0) setStepIndex((step) => step - 1)
+          else { timer.setRunning(false); setStarted(false); timer.reset(duration) }
+        }}><ArrowLeft size={16} /> {stepIndex > 0 ? 'Previous move' : 'Change setup'}</button>
         <div className="wellbeing-reset-progress"><span>{MOVE_INTENTS[intent].label} · {position === 'seated' ? 'Seated' : 'Standing'}{quiet ? ' · Low-key' : ''}</span><span>Move {stepIndex + 1} of {steps.length}</span></div>
         <ActivityProgress value={stepIndex + 1} max={steps.length} label="Movement steps" />
         <div className="wellbeing-reset-prompt" key={`${position}-${stepIndex}`} aria-live="polite"><PersonSimple size={24} weight="duotone" aria-hidden="true" /><p>{steps[stepIndex]}</p></div>
@@ -577,6 +594,7 @@ function MoveTool() {
           }}>{timer.running ? <Pause size={17} weight="fill" /> : <Play size={17} weight="fill" />}</button>
         </div>
       </> : <>
+        <button type="button" className="wellbeing-reset-change" onClick={() => setFinished(false)}><ArrowLeft size={16} /> Back to last move</button>
         <div className="wellbeing-reset-done" role="status"><span>That was your movement pause</span><p>You can try a different goal or setup next time.</p></div>
         <button type="button" className="wellbeing-reset-change" onClick={() => { setStepIndex(0); setFinished(false); setStarted(false); timer.reset(duration) }}>Try this setup again</button>
         <button type="button" className="wellbeing-reset-change" onClick={() => { setStepIndex(0); setFinished(false); setStarted(false); setSetupReady(false); setIntent(''); timer.reset(30) }}>Choose a different break</button>

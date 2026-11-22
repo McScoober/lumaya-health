@@ -5,6 +5,7 @@ import {
   observedPeriodForDate,
   phaseForDate,
   phaseForDateWithObservations,
+  isInPeriodWindow,
   periodStartKeys,
 } from './cyclePredictor.js'
 
@@ -49,4 +50,13 @@ test('an unlogged day still uses the predicted phase', () => {
 
   assert.equal(actual.phase, 'follicular')
   assert.equal(actual.observed, false)
+})
+
+test('predicted period window marks only the estimated days', () => {
+  const model = buildCycleModel({ lastStart: '2026-10-10', cycleLength: 28 })
+
+  assert.equal(isInPeriodWindow(model, new Date('2026-11-06T12:00:00')), false)
+  assert.equal(isInPeriodWindow(model, new Date('2026-11-07T12:00:00')), true)
+  assert.equal(isInPeriodWindow(model, new Date('2026-11-11T12:00:00')), true)
+  assert.equal(isInPeriodWindow(model, new Date('2026-11-12T12:00:00')), false)
 })

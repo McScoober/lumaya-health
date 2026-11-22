@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../state/store.jsx'
-import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, predictPeriod, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
+import { addDays, dateKeyLocal, diffDays, phaseForDateWithObservations, PHASE_META, periodStartKeys } from '../engine/cyclePredictor.js'
 import { selectDailyTips } from '../engine/tipEngine.js'
 import { deriveBodySignals, groupBodySignals } from '../engine/bodySignals.js'
 import { buildPatternEvidence } from '../engine/patternInsights.js'
@@ -34,7 +34,7 @@ function recentCheckInCount(dailyLogs = {}, today = new Date(), days = ruleValue
 
 export default function Home() {
   const navigate = useNavigate()
-  const { state, dispatch, cycleModel } = useStore()
+  const { state, dispatch, cycleModel, periodForecast } = useStore()
   const [periodPromptChoice, setPeriodPromptChoice] = useState(null)
   const [periodPromptSaved, setPeriodPromptSaved] = useState(false)
   const now = new Date()
@@ -53,15 +53,15 @@ export default function Home() {
     : { phase: null, dayOfCycle: null }
   const { phase, dayOfCycle } = phaseInfo
   const meta = phase ? PHASE_META[phase] : null
-  const prediction = predictionsReady ? predictPeriod(cycleModel, now) : null
+  const prediction = periodForecast.displayable ? periodForecast : null
   const latestPeriodStartKey = periodStarts[periodStarts.length - 1]
   const daysSinceLatestPeriod = latestPeriodStartKey
     ? diffDays(now, new Date(`${latestPeriodStartKey}T00:00:00`))
     : null
-  const isPeriodAskWindow = predictionsReady && prediction
-    ? diffDays(now, addDays(prediction.windowStart, -ruleValue('cycle.periodPromptLeadDays'))) >= 0 && diffDays(now, prediction.windowEnd) <= 0
+  const isPeriodAskWindow = prediction
+    ? diffDays(now, addDays(prediction.earliestStart, -ruleValue('cycle.periodPromptLeadDays'))) >= 0 && diffDays(now, prediction.latestStart) <= 0
     : false
-  const isEarlyPeriodAskWindow = !predictionsReady &&
+  const isEarlyPeriodAskWindow = !periodForecast.eligible &&
     daysSinceLatestPeriod !== null &&
     daysSinceLatestPeriod >= ruleValue('cycle.earlyPromptMinimumDays') &&
     daysSinceLatestPeriod <= ruleValue('cycle.earlyPromptMaximumDays')
@@ -82,9 +82,15 @@ export default function Home() {
       : baselineTitle
   const phaseDetail = phaseInfo.observed
     ? 'View or edit period details'
-    : prediction
-      ? `Next period in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}`
-      : 'Keep logging to build your cycle context'
+    : !prediction
+      ? periodForecast.status === 'too-variable'
+        ? `Rough timing: week of ${periodForecast.estimateWeekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}. Your recent dates vary, so this may be off.`
+        : 'Keep logging to build your cycle context'
+      : prediction.status === 'later-than-range'
+        ? 'Later than this estimate? Dates can shift from cycle to cycle.'
+        : prediction.status === 'within-range'
+          ? 'Your estimated start range is around now'
+          : `Estimated start in about ${Math.max(0, prediction.daysUntil)} day${prediction.daysUntil === 1 ? '' : 's'}`
 
   const tipSelection = useMemo(() => selectDailyTips({
     phase: supportPhase,
@@ -292,7 +298,7 @@ export default function Home() {
               <p style={{ margin: '0 0 10px', color: '#3F0824', fontSize: 15, fontWeight: 700 }}>
                 {possiblePeriodToday
                   ? 'Still on your period today?'
-                  : predictionsReady
+                  : prediction
                     ? 'Did your period start today?'
                     : 'Are you on your period today?'}
               </p>

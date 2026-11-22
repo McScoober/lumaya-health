@@ -15,11 +15,18 @@ test('rule registry rejects unknown keys and identifies stale server results', (
     ruleVersion: RULE_CONFIG_VERSION,
     configVersion: RULE_CONFIG_VERSION,
     configStatus: RULE_CONFIG_STATUS,
+    authoritative: true,
   }), 'current')
+  assert.equal(serverRuleVersionStatus({
+    ruleVersion: RULE_CONFIG_VERSION,
+    configVersion: RULE_CONFIG_VERSION,
+    configStatus: RULE_CONFIG_STATUS,
+  }), 'missing')
   assert.equal(serverRuleVersionStatus({ ruleVersion: 'legacy' }), 'missing')
   assert.equal(serverRuleVersionStatus({
     ruleVersion: 'legacy',
     configVersion: 'legacy',
     configStatus: 'active',
+    authoritative: true,
   }), 'stale')
 })

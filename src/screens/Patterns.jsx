@@ -22,7 +22,6 @@ import MetabolicCard from '../components/MetabolicCard.jsx'
 import SignalDetailSheet from '../components/SignalDetailSheet.jsx'
 import ObservationDetailSheet from '../components/ObservationDetailSheet.jsx'
 import {
-  buildCycleModel,
   phaseForDate,
   phaseForDateWithObservations,
   PHASE_META,
@@ -30,8 +29,8 @@ import {
   addDays,
   diffDays,
   startOfDay,
-  periodStartKeys,
 } from '../engine/cyclePredictor.js'
+import { isInForecastRange } from '../engine/periodForecast.js'
 
 const PHASE_LABELS = {
   menstrual: 'Period',
@@ -58,7 +57,7 @@ function addMonths(date, months) {
 export default function Patterns({ initialTab }) {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { state, dispatch, historyStatus, loadHistoryMonth } = useStore()
+  const { state, dispatch, historyStatus, loadHistoryMonth, cycleModel, periodForecast } = useStore()
 
   // Tab State: 'calendar' | 'signals'
   const tabFromUrl = searchParams.get('tab')
@@ -87,18 +86,6 @@ export default function Patterns({ initialTab }) {
     setSearchParams({ tab: newTab }, { replace: true })
   }
 
-  // Compute Cycle Model
-  const cycleModel = useMemo(() => {
-    const starts = periodStartKeys(state.periodLogs)
-    const summarizedStart = state.cycles?.at(-1)?.start_date
-    return buildCycleModel({
-      lastStart: starts[starts.length - 1] || summarizedStart || state.answers.lastStart || state.answers.periodStart,
-      cycleLength: state.result?.cycleLength,
-      predictionsReady: state.result?.patternsReady === true,
-      onBirthControl: state.profile.onBirthControl,
-    })
-  }, [state.answers, state.profile, state.periodLogs, state.cycles, state.result])
-
   // Current Phase Info for Signals View
   const now = new Date()
   const predictionsReady = state.result?.authoritative === true && state.result.patternsReady === true
@@ -118,7 +105,9 @@ export default function Patterns({ initialTab }) {
   // Calendar cells for the selected month.
   const today = startOfDay(now)
   const currentMonth = startOfMonth(today)
-  const canGoNextMonth = visibleMonth < currentMonth
+  const forecastMonth = periodForecast.latestStart ? startOfMonth(periodForecast.latestStart) : currentMonth
+  const latestNavigableMonth = forecastMonth > addMonths(currentMonth, 1) ? forecastMonth : addMonths(currentMonth, 1)
+  const canGoNextMonth = visibleMonth < latestNavigableMonth
   const monthLabel = visibleMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
   const visibleMonthKey = state.accountId ? monthCacheKey(state.accountId, visibleMonth) : null
   const isLoadingVisibleMonth = historyStatus.key === visibleMonthKey
@@ -134,6 +123,7 @@ export default function Patterns({ initialTab }) {
       const phaseResult = predictionsReady ? phaseForDate(cycleModel, date) : { phase: null, dayOfCycle: null }
       const { phase, dayOfCycle } = phaseResult
       const isToday = diffDays(date, today) === 0
+      const isFuture = date > today
 
       // Pain and impact stay in the day detail; the calendar grid only marks
       // whether something was logged.
@@ -146,8 +136,13 @@ export default function Patterns({ initialTab }) {
         log?.pain !== undefined ||
         log?.impact !== undefined
       const isPeriodDay = periodLog?.period === true || log?.period === true
-      const isPossiblePeriodDay = !isPeriodDay && periodLog?.status === 'possible'
-      const isPredictedPeriodDay = predictionsReady && phase === 'menstrual' && dayOfCycle !== null && dayOfCycle < ruleValue('cycle.defaultPeriodDays')
+      const isPossiblePeriodDay = !isFuture && !isPeriodDay && periodLog?.status === 'possible'
+      const isInRoughEstimateWeek = periodForecast.status === 'too-variable' &&
+        periodForecast.estimateWeekStart && periodForecast.estimateWeekEnd &&
+        date >= periodForecast.estimateWeekStart && date <= periodForecast.estimateWeekEnd
+      const isPredictedPeriodDay = !isPeriodDay && date >= today && (
+        isInForecastRange(periodForecast, date) || isInRoughEstimateWeek
+      )
 
       cells.push({
         date,
@@ -161,13 +156,14 @@ export default function Patterns({ initialTab }) {
         isPeriodDay,
         isPossiblePeriodDay,
         isPredictedPeriodDay,
+        isFuture,
         isToday,
         log,
         periodLog,
       })
     }
     return cells
-  }, [visibleMonth, today, activeLogs, state.periodLogs, cycleModel, predictionsReady])
+  }, [visibleMonth, today, activeLogs, state.periodLogs, cycleModel, periodForecast, predictionsReady])
 
   const calendarGridCells = useMemo(() => {
     const leadingBlanks = calendarDays[0]?.date.getDay() || 0
@@ -442,6 +438,65 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
             </div>
           )}
 
+          {periodForecast.displayable && (
+            <div role="note" style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 14, background: '#F3EDF7', color: '#5E3A55', fontSize: 12.5, lineHeight: 1.5 }}>
+              <strong style={{ display: 'block', color: '#3F0824', marginBottom: 2 }}>
+                Estimated start range: {periodForecast.earliestStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}–{periodForecast.latestStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </strong>
+              Based on {periodForecast.intervalCount} logged interval{periodForecast.intervalCount === 1 ? '' : 's'}. This is an estimate; timing can vary.
+              {periodForecast.confidence === 'low' && <span> Maisie is still learning from your dates, so this range may be wide.</span>}
+              {periodForecast.status === 'later-than-range' && <span> This range has passed, but a late estimate alone does not tell us why.</span>}
+              <p style={{ margin: '6px 0 0' }}>
+                {periodForecast.periodLength
+                  ? `Usual logged length: about ${periodForecast.periodLength} day${periodForecast.periodLength === 1 ? '' : 's'}, based on ${periodForecast.completedPeriodCount} completed periods. This does not set an end date.`
+                  : 'Log each day for as long as your period lasts. Maisie will not assume when it ends.'}
+              </p>
+            </div>
+          )}
+
+          {!periodForecast.eligible && (
+            <div role="note" style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 14, background: '#F3EDF7', color: '#5E3A55', fontSize: 12.5, lineHeight: 1.5 }}>
+              <strong style={{ display: 'block', color: '#3F0824', marginBottom: 2 }}>
+                {periodForecast.reason === 'birth-control-schedule' ? 'No cycle-based estimate' : 'Building your estimate'}
+              </strong>
+              {periodForecast.reason === 'birth-control-schedule'
+                ? 'Maisie does not estimate period timing from cycle dates while birth-control tracking is on.'
+                : `Maisie needs at least ${ruleValue('forecast.minimumStarts')} logged period starts to estimate timing. ${periodForecast.startCount} ${periodForecast.startCount === 1 ? 'start is' : 'starts are'} available so far.`}
+            </div>
+          )}
+
+          {periodForecast.status === 'too-variable' && (
+            <div role="note" style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 14, background: '#F3EDF7', color: '#5E3A55', fontSize: 12.5, lineHeight: 1.5 }}>
+              <strong style={{ display: 'block', color: '#3F0824', marginBottom: 2 }}>
+                Rough timing: week of {periodForecast.estimateWeekStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </strong>
+              Your recent dates vary, so this is only a rough midpoint and your period could start earlier or later. We are not marking predicted days on the calendar.
+              <p style={{ margin: '6px 0 0' }}>
+                {periodForecast.periodLength
+                  ? `Usual logged length: about ${periodForecast.periodLength} day${periodForecast.periodLength === 1 ? '' : 's'}, based on ${periodForecast.completedPeriodCount} completed periods. This does not set an end date.`
+                  : 'Log each day for as long as your period lasts. Maisie will not assume when it ends.'}
+              </p>
+            </div>
+          )}
+
+          {periodForecast.possibleMissedLog && (
+            <div role="status" style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 14, border: '1px solid #DCC9D9', background: '#FCF8FC', color: '#5E3A55', fontSize: 12.5, lineHeight: 1.5 }}>
+              <strong style={{ display: 'block', color: '#3F0824', marginBottom: 2 }}>Check a longer gap in your history</strong>
+              There is a longer-than-usual gap between two starts you logged. If you had a period in between, adding its first day can improve this estimate. We have not guessed a missing date.
+              <button
+                type="button"
+                onClick={() => {
+                  const date = periodForecast.possibleMissedLog.suggestedStart
+                  setVisibleMonth(startOfMonth(date))
+                  setSelectedDateKey(dateKeyLocal(date))
+                }}
+                style={{ display: 'block', marginTop: 8, padding: 0, border: 0, background: 'transparent', color: '#713666', fontSize: 12.5, fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+              >
+                Review around {periodForecast.possibleMissedLog.suggestedStart.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+              </button>
+            </div>
+          )}
+
           {/* Calendar Grid Card */}
           <Card style={{ padding: '16px 14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -480,7 +535,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     if (!canGoNextMonth) return
                     const nextMonth = addMonths(visibleMonth, 1)
                     setVisibleMonth(nextMonth)
-                    setSelectedDateKey(dateKeyLocal(nextMonth < currentMonth ? nextMonth : today))
+                    setSelectedDateKey(dateKeyLocal(nextMonth > currentMonth ? nextMonth : today))
                   }}
                   style={{
                     width: 30,
@@ -532,7 +587,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 if (cell.isPeriodDay) {
                   cellBg = '#F4A5B8'
                   textColor = '#3F0824'
-                } else if (cell.isPossiblePeriodDay) {
+                } else if (cell.isPossiblePeriodDay || cell.isPredictedPeriodDay) {
                   cellBg = '#F3EDF7'
                   textColor = '#713666'
                   borderStyle = '1.5px dashed #EB587B'
@@ -611,7 +666,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#F4A5B8', border: '1px solid #EB587B' }} /> Period
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#F3EDF7', border: '1px dashed #EB587B' }} /> Possible period
+                <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#F3EDF7', border: '1px dashed #EB587B' }} /> {periodForecast.status === 'too-variable' ? 'Rough estimate week' : 'Estimated start range'}
               </span>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <i style={{ width: 8, height: 8, borderRadius: '50%', background: '#E9F1EA', border: '1px solid #4E7554' }} /> Logged
@@ -661,9 +716,13 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                   <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'capitalize' }}>
                     {selectedCell.isPossiblePeriodDay
                       ? 'Possible period'
-                      : predictionsReady && selectedCell.phase
-                        ? `${selectedCell.phase} phase`
-                        : 'No log'}
+                      : selectedCell.isPredictedPeriodDay
+                      ? periodForecast.status === 'too-variable' ? 'Rough estimate week' : 'Estimated start range'
+                        : predictionsReady && selectedCell.phase && Number.isInteger(selectedCell.dayOfCycle)
+                          ? `Day ${selectedCell.dayOfCycle + 1} of cycle · ${selectedCell.phase} phase`
+                          : predictionsReady && selectedCell.phase
+                            ? `${selectedCell.phase} phase`
+                          : 'No log'}
                   </span>
                 )}
               </div>
@@ -758,13 +817,19 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                   This is marked as a possible period day until you confirm it.
                 </p>
+              ) : selectedCell.isPredictedPeriodDay ? (
+                <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  {periodForecast.status === 'too-variable'
+                    ? 'A rough timing estimate based on your logged period dates. The actual start could be earlier or later.'
+                    : 'Estimated start range based on your logged period dates. Timing can vary.'}
+                </p>
               ) : (
                 <p style={{ margin: '6px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
                   No check-in recorded for this day.
                 </p>
               )}
 
-              {selectedCell.isPossiblePeriodDay ? (
+              {selectedCell.isPossiblePeriodDay && !selectedCell.isFuture ? (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12 }}>
                   <button
                     type="button"
@@ -809,7 +874,7 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                     Not today
                   </button>
                 </div>
-              ) : !selectedCell.isPeriodDay ? (
+              ) : !selectedCell.isFuture && !selectedCell.isPeriodDay && !selectedCell.isPredictedPeriodDay ? (
                 <button
                   type="button"
                   onClick={() => dispatch({
@@ -833,6 +898,10 @@ Maisie does not diagnose. This summary reflects reported information, not a medi
                 >
                   Mark as period day
                 </button>
+              ) : selectedCell.isFuture && !selectedCell.isPeriodDay ? (
+                <p style={{ margin: '10px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>
+                  Future dates are estimates only. You can log a period day once it happens.
+                </p>
               ) : null}
             </Card>
           )}
